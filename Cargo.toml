@@ -1,0 +1,17 @@
+[package]
+name = "sqlite-containers"
+version = "1.0.0"
+edition = "2024"
+rust-version = "1.88.0"
+license = "Unlicense"
+
+[features]
+default = ["bundled"]
+bundled = ["rusqlite/bundled"]
+
+[dependencies]
+rand = "0.10.3"
+rusqlite = "0.40.2"
+
+[dev-dependencies]
+des = "0.9.0"
