@@ -249,7 +249,7 @@ fn test_sqlite_set_stresstest() {
         for i in 0u64..COUNT {
             let mut block = Block::<Des>::from(i.to_be_bytes());
             cipher.encrypt_block_inplace(&mut block);
-            let key = format!("{:016X}", u64::from_be_bytes(*block.as_array().unwrap()));
+            let key = format!("{:016X}", u64::from_be_bytes(block.into()));
             assert!(tx.insert(&key).unwrap());
         }
     }
@@ -259,13 +259,13 @@ fn test_sqlite_set_stresstest() {
         for i in 0u64..COUNT {
             let mut block = Block::<Des>::from(i.to_be_bytes());
             cipher.encrypt_block_inplace(&mut block);
-            let key = format!("{:016X}", u64::from_be_bytes(*block.as_array().unwrap()));
+            let key = format!("{:016X}", u64::from_be_bytes(block.into()));
             assert!(tx.contains(&key).unwrap());
         }
         for i in 0u64..COUNT {
             let mut block = Block::<Des>::from(i.checked_add(COUNT).unwrap().to_be_bytes());
             cipher.encrypt_block_inplace(&mut block);
-            let key = format!("{:016X}", u64::from_be_bytes(*block.as_array().unwrap()));
+            let key = format!("{:016X}", u64::from_be_bytes(block.into()));
             assert!(!tx.contains(&key).unwrap());
         }
     }
