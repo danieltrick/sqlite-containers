@@ -28,7 +28,7 @@ test:
 	cargo test --release --tests --locked
 
 bench:
-	cargo bench
+	cargo bench --bench sqlite_set-bench -- --quick
 
 doc:
 	cargo doc --locked

@@ -4,7 +4,7 @@
 SQLite-based containers for Rust
 ================================
 
-**`sqlite-containers`** provides [*hash set*](https://doc.rust-lang.org/std/collections/struct.HashSet.html) and [*hash map*](https://doc.rust-lang.org/std/collections/struct.HashMap.html) implementations that are backed by **SQLite** in-memory databases.
+**`sqlite-containers`** provides [*hash set*](https://doc.rust-lang.org/std/collections/struct.HashSet.html) and [*hash map*](https://doc.rust-lang.org/std/collections/struct.HashMap.html) implementations backed by in-memory **SQLite** databases.
 
 Leveraging the power of the SQLite engine, these containers can efficiently store billions of elements.
 

@@ -34,6 +34,11 @@
 //! ---------------
 //!
 //! This project is based on the [**SQLite**](https://www.sqlite.org/) library and the [**Rusqlite**](https://crates.io/crates/rusqlite) wrapper for Rust &#128571;
+//!
+//! License
+//! -------
+//!
+//! The “SQLite-based Containers for Rust” project is released under the [Unlicense](https://unlicense.org/).
 
 mod common;
 mod sqlite_set;
