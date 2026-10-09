@@ -23,14 +23,23 @@ jobs:
         rust: ["1.88.0", "1.99.0"]
         platform:
           - host: ubuntu-26.04
-            multilib: false
             target: x86_64-unknown-linux-gnu
-          - host: ubuntu-26.04
-            multilib: true
-            target: i686-unknown-linux-gnu
-          - host: ubuntu-26.04-arm
             multilib: false
+          - host: ubuntu-26.04
+            target: i686-unknown-linux-gnu
+            multilib: true
+          - host: ubuntu-26.04-arm
             target: aarch64-unknown-linux-gnu
+            multilib: false
+          - host: windows-latest
+            target: x86_64-pc-windows-msvc
+            multilib: false
+          - host: windows-latest
+            target: i686-pc-windows-msvc
+            multilib: false
+          - host: windows-11-arm
+            target: aarch64-pc-windows-msvc
+            multilib: false
 
     runs-on: ${{ matrix.platform.host }}
     steps:
@@ -61,14 +70,23 @@ jobs:
         rust: ["1.88.0", "1.99.0"]
         platform:
           - host: ubuntu-26.04
-            multilib: false
             target: x86_64-unknown-linux-gnu
-          - host: ubuntu-26.04
-            multilib: true
-            target: i686-unknown-linux-gnu
-          - host: ubuntu-26.04-arm
             multilib: false
+          - host: ubuntu-26.04
+            target: i686-unknown-linux-gnu
+            multilib: true
+          - host: ubuntu-26.04-arm
             target: aarch64-unknown-linux-gnu
+            multilib: false
+          - host: windows-latest
+            target: x86_64-pc-windows-msvc
+            multilib: false
+          - host: windows-latest
+            target: i686-pc-windows-msvc
+            multilib: false
+          - host: windows-11-arm
+            target: aarch64-pc-windows-msvc
+            multilib: false
 
     runs-on: ${{ matrix.platform.host }}
     steps:
