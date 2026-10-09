@@ -193,7 +193,7 @@ impl SQLiteMap {
 
     /// Searches the map for the first key-value pair that satisfies the given `predicate`.
     ///
-    /// Returns the first key-value pair that satisfies the given predicate, or `None` if **no** key-value pair satisfies the predicate or the map is empty.
+    /// Returns the first key-value pair that satisfies the given predicate, or `None` if none satisfies the predicate or the map is empty.
     ///
     /// This function does **not** guarantee a specific iteration order.
     ///

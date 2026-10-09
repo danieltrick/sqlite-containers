@@ -18,5 +18,5 @@ criterion = { version = "0.8.2", default-features = false }
 hex = "0.4.3"
 
 [[bench]]
-name = "sqlite_set-bench"
+name = "sqlite_containers-bench"
 harness = false
