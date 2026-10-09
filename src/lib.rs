@@ -41,9 +41,11 @@
 //! The “SQLite-based Containers for Rust” project is released under the [Unlicense](https://unlicense.org/).
 
 mod common;
+mod sqlite_map;
 mod sqlite_set;
 
 pub use crate::common::{Error, SizeT};
+pub use crate::sqlite_map::{SQLiteMap, SQLiteMapTransaction};
 pub use crate::sqlite_set::{SQLiteSet, SQLiteSetTransaction};
 
 pub use rusqlite;
