@@ -17,10 +17,11 @@ const TARGET_ITEM_COUNT: u64 = 25_000_000u64;
 // ---------------------------------------------------------------------------
 
 fn bench_sqlite_map(c: &mut Criterion) {
+    let mut g = c.benchmark_group("sqlite_map");
     let mut hexstr_1 = [0; 16usize];
     let mut hexstr_2 = [0; 16usize];
 
-    c.bench_function("insert_directly", |b| {
+    g.bench_function("insert_directly", |b| {
         b.iter(|| {
             let mut sqlite_map = SQLiteMap::new().unwrap();
             for n in 0..TARGET_ITEM_COUNT {
@@ -29,7 +30,7 @@ fn bench_sqlite_map(c: &mut Criterion) {
         });
     });
 
-    c.bench_function("insert_transact", |b| {
+    g.bench_function("insert_transact", |b| {
         b.iter(|| {
             let mut sqlite_map = SQLiteMap::new().unwrap();
             let mut tx = sqlite_map.transaction().unwrap();
@@ -40,7 +41,7 @@ fn bench_sqlite_map(c: &mut Criterion) {
         });
     });
 
-    c.bench_function("lookup_directly", |b| {
+    g.bench_function("lookup_directly", |b| {
         let mut sqlite_map = SQLiteMap::new().unwrap();
         for n in 0..TARGET_ITEM_COUNT {
             assert!(black_box(sqlite_map.insert(hex_enc(black_box(mix64(n)), &mut hexstr_1), hex_enc(black_box(mix64(!n)), &mut hexstr_2)).unwrap()));
@@ -53,7 +54,7 @@ fn bench_sqlite_map(c: &mut Criterion) {
         });
     });
 
-    c.bench_function("lookup_transact", |b| {
+    g.bench_function("lookup_transact", |b| {
         let mut sqlite_map = SQLiteMap::new().unwrap();
         let mut tx = sqlite_map.transaction().unwrap();
         for n in 0..TARGET_ITEM_COUNT {
@@ -69,7 +70,7 @@ fn bench_sqlite_map(c: &mut Criterion) {
         });
     });
 
-    c.bench_function("length_directly", |b| {
+    g.bench_function("length_directly", |b| {
         let mut sqlite_map = SQLiteMap::new().unwrap();
         let mut tx = sqlite_map.transaction().unwrap();
         for n in 0..TARGET_ITEM_COUNT {
@@ -82,7 +83,7 @@ fn bench_sqlite_map(c: &mut Criterion) {
         });
     });
 
-    c.bench_function("length_transact", |b| {
+    g.bench_function("length_transact", |b| {
         let mut sqlite_map = SQLiteMap::new().unwrap();
         let mut tx = sqlite_map.transaction().unwrap();
         for n in 0..TARGET_ITEM_COUNT {
@@ -100,9 +101,10 @@ fn bench_sqlite_map(c: &mut Criterion) {
 // ---------------------------------------------------------------------------
 
 fn bench_sqlite_set(c: &mut Criterion) {
+    let mut g = c.benchmark_group("sqlite_set");
     let mut hexstr = [0; 16usize];
 
-    c.bench_function("insert_directly", |b| {
+    g.bench_function("insert_directly", |b| {
         b.iter(|| {
             let mut sqlite_set = SQLiteSet::new().unwrap();
             for n in 0..TARGET_ITEM_COUNT {
@@ -111,7 +113,7 @@ fn bench_sqlite_set(c: &mut Criterion) {
         });
     });
 
-    c.bench_function("insert_transact", |b| {
+    g.bench_function("insert_transact", |b| {
         b.iter(|| {
             let mut sqlite_set = SQLiteSet::new().unwrap();
             let mut tx = sqlite_set.transaction().unwrap();
@@ -122,7 +124,7 @@ fn bench_sqlite_set(c: &mut Criterion) {
         });
     });
 
-    c.bench_function("lookup_directly", |b| {
+    g.bench_function("lookup_directly", |b| {
         let mut sqlite_set = SQLiteSet::new().unwrap();
         for n in 0..TARGET_ITEM_COUNT {
             assert!(black_box(sqlite_set.insert(hex_enc(black_box(mix64(n)), &mut hexstr)).unwrap()));
@@ -135,7 +137,7 @@ fn bench_sqlite_set(c: &mut Criterion) {
         });
     });
 
-    c.bench_function("lookup_transact", |b| {
+    g.bench_function("lookup_transact", |b| {
         let mut sqlite_set = SQLiteSet::new().unwrap();
         let mut tx = sqlite_set.transaction().unwrap();
         for n in 0..TARGET_ITEM_COUNT {
@@ -151,7 +153,7 @@ fn bench_sqlite_set(c: &mut Criterion) {
         });
     });
 
-    c.bench_function("length_directly", |b| {
+    g.bench_function("length_directly", |b| {
         let mut sqlite_set = SQLiteSet::new().unwrap();
         let mut tx = sqlite_set.transaction().unwrap();
         for n in 0..TARGET_ITEM_COUNT {
@@ -164,7 +166,7 @@ fn bench_sqlite_set(c: &mut Criterion) {
         });
     });
 
-    c.bench_function("length_transact", |b| {
+    g.bench_function("length_transact", |b| {
         let mut sqlite_set = SQLiteSet::new().unwrap();
         let mut tx = sqlite_set.transaction().unwrap();
         for n in 0..TARGET_ITEM_COUNT {
