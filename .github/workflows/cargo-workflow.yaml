@@ -24,21 +24,27 @@ jobs:
           - host: ubuntu-26.04
             target: x86_64-unknown-linux-gnu
             multilib: false
+            add_make: false
           - host: ubuntu-26.04
             target: i686-unknown-linux-gnu
             multilib: true
+            add_make: false
           - host: ubuntu-26.04-arm
             target: aarch64-unknown-linux-gnu
             multilib: false
+            add_make: false
           - host: windows-latest
             target: x86_64-pc-windows-msvc
             multilib: false
+            add_make: true
           - host: windows-latest
             target: i686-pc-windows-msvc
             multilib: false
+            add_make: true
           - host: windows-11-arm
             target: aarch64-pc-windows-msvc
             multilib: false
+            add_make: true
 
     runs-on: ${{ matrix.platform.host }}
     steps:
@@ -53,6 +59,10 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y gcc-multilib libc6-dev-i386
+      - if: ${{ matrix.platform.add_make }}
+        run: |
+          choco install make --yes --no-progress
+          Remove-Item "C:\mingw64\bin\make.exe" -Force
       - run: make clippy
         env:
           CARGO_BUILD_TARGET: ${{ matrix.platform.target }}
@@ -72,21 +82,27 @@ jobs:
           - host: ubuntu-26.04
             target: x86_64-unknown-linux-gnu
             multilib: false
+            add_make: false
           - host: ubuntu-26.04
             target: i686-unknown-linux-gnu
             multilib: true
+            add_make: false
           - host: ubuntu-26.04-arm
             target: aarch64-unknown-linux-gnu
             multilib: false
+            add_make: false
           - host: windows-latest
             target: x86_64-pc-windows-msvc
             multilib: false
+            add_make: true
           - host: windows-latest
             target: i686-pc-windows-msvc
             multilib: false
+            add_make: true
           - host: windows-11-arm
             target: aarch64-pc-windows-msvc
             multilib: false
+            add_make: true
 
     runs-on: ${{ matrix.platform.host }}
     steps:
@@ -95,12 +111,15 @@ jobs:
         with:
           toolchain: ${{ matrix.rust }}
           target: ${{ matrix.platform.target }}
-          components: rustfmt clippy
           cache: false
       - if: ${{ matrix.platform.multilib }}
         run: |
           sudo apt-get update
           sudo apt-get install -y gcc-multilib libc6-dev-i386
+      - if: ${{ matrix.platform.add_make }}
+        run: |
+          choco install make --yes --no-progress
+          Remove-Item "C:\mingw64\bin\make.exe" -Force
       - run: make test
         env:
           CARGO_BUILD_TARGET: ${{ matrix.platform.target }}
