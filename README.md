@@ -1,4 +1,7 @@
-[![MSRV](https://img.shields.io/badge/MSRV-1.88.0-orange.svg)](https://www.rust-lang.org/) [![License: Unlicense](https://img.shields.io/badge/license-Unlicense-blue.svg)](https://unlicense.org/)
+[![MSRV](https://img.shields.io/badge/MSRV-1.88.0-orange.svg)](https://www.rust-lang.org/)
+[![License: Unlicense](https://img.shields.io/badge/license-Unlicense-blue.svg)](https://unlicense.org/)
+[![CI Workflow](https://github.com/danieltrick/sqlite-containers/actions/workflows/cargo-workflow.yaml/badge.svg)](https://github.com/danieltrick/sqlite-containers/actions/workflows/cargo-workflow.yaml)
+[![codecov](https://codecov.io/gh/danieltrick/sqlite-containers/graph/badge.svg?token=xrHYAQWW0J)](https://codecov.io/gh/danieltrick/sqlite-containers)
 
 
 SQLite-based containers for Rust

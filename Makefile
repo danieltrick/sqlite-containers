@@ -24,7 +24,6 @@ upgrade:
 	cargo update
 
 test:
-	CARGO_PROFILE_RELEASE_DEBUG=true RUST_BACKTRACE=1 \
 	cargo test --release --tests --locked
 
 bench:
@@ -34,7 +33,7 @@ doc:
 	cargo doc --locked
 
 codecov:
-	cargo llvm-cov --html
+	cargo llvm-cov --release --locked --cobertura --output-path target/codecov-output.xml
 
 clean:
 	cargo clean

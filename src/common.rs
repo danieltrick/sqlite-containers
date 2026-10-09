@@ -26,7 +26,13 @@ pub type SizeT = u64;
 /// Wraps the underlying [`RusqliteError`](crate::rusqlite::Error).
 #[allow(dead_code)]
 #[derive(Debug)]
-pub struct Error(pub RusqliteError);
+pub struct Error(RusqliteError);
+
+impl Error {
+    pub fn into_inner(self) -> RusqliteError {
+        self.0
+    }
+}
 
 impl From<RusqliteError> for Error {
     #[inline]
@@ -55,19 +61,13 @@ mod test {
     #[test]
     fn test_error() {
         let error_1 = Error::from(RusqliteError::InvalidQuery);
-        assert_eq!(error_1.0, RusqliteError::InvalidQuery);
+        assert_eq!(error_1.into_inner(), RusqliteError::InvalidQuery);
 
-        let error_2 = Error::from(RusqliteError::InvalidPath(PathBuf::from("filename")));
-        assert!(matches!(error_2.0, RusqliteError::InvalidPath(..)));
+        let error_2 = Error::from(RusqliteError::InvalidPath(PathBuf::from("filename.txt")));
+        assert!(matches!(error_2.into_inner(), RusqliteError::InvalidPath(_)));
 
-        let error_3 = Error::from(RusqliteError::SqliteFailure(FfiError::new(SQLITE_NOMEM), Some("allocation failed!".to_owned())));
-        match error_3.0 {
-            RusqliteError::SqliteFailure(sqlite_error, Some(message)) => {
-                assert!(!message.is_empty());
-                assert_eq!(sqlite_error.code, FfiErrorCode::OutOfMemory);
-            }
-            _ => panic!("Unexpected error code!"),
-        }
+        let error_3 = Error::from(RusqliteError::SqliteFailure(FfiError::new(SQLITE_NOMEM), Some("Memory allocation fail!".to_owned())));
+        assert!(matches!(error_3.into_inner(), RusqliteError::SqliteFailure(FfiError { code: FfiErrorCode::OutOfMemory, .. }, Some(_))));
     }
 
     #[test]

@@ -2,7 +2,7 @@
 // This file is part of the 'SQLite-based containers for Rust' project (sqlite-containers)
 // SPDX-License-Identifier: Unlicense
 
-#[path = "../tests/common/utilities.rs"]
+#[path = "../tests/utilities/mod.rs"]
 mod utilities;
 
 use crate::utilities::{hex_encode, mix64};

@@ -1,4 +1,4 @@
-name: Cargo Workflow
+name: CI/CD
 
 permissions:
   contents: read
@@ -16,8 +16,7 @@ jobs:
   # Code checks
   # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   clippy:
-    name: cargo clippy
-
+    name: Checks
     strategy:
       matrix:
         rust: ["1.88.0", "1.99.0"]
@@ -57,14 +56,15 @@ jobs:
       - run: make clippy
         env:
           CARGO_BUILD_TARGET: ${{ matrix.platform.target }}
+          CARGO_PROFILE_RELEASE_DEBUG: true
+          RUST_BACKTRACE: 1
 
   # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  # Unit tests
+  # Regression tests
   # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   tests:
-    name: cargo test
+    name: Tests
     needs: clippy
-
     strategy:
       matrix:
         rust: ["1.88.0", "1.99.0"]
@@ -104,3 +104,33 @@ jobs:
       - run: make test
         env:
           CARGO_BUILD_TARGET: ${{ matrix.platform.target }}
+          CARGO_PROFILE_RELEASE_DEBUG: true
+          RUST_BACKTRACE: 1
+
+  # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  # Code coverage
+  # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  codecov:
+    name: Codecov
+    needs: clippy
+
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions-rust-lang/setup-rust-toolchain@v2
+        with:
+          toolchain: 1.99.0
+          target: x86_64-unknown-linux-gnu
+          components: llvm-tools-preview
+          cache: false
+      - uses: taiki-e/install-action@cargo-llvm-cov
+      - run: make codecov
+        env:
+          CARGO_BUILD_TARGET: x86_64-unknown-linux-gnu
+          CARGO_PROFILE_RELEASE_DEBUG: true
+          RUST_BACKTRACE: 1
+      - uses: codecov/codecov-action@v7
+        with:
+          files: target/codecov-output.xml
+          verbose: true
+          token: ${{ secrets.CODECOV_TOKEN }}
