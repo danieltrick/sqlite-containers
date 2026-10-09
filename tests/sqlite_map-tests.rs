@@ -4,7 +4,7 @@
 
 mod utilities;
 
-use crate::utilities::{hex_encode, mix64};
+use crate::utilities::{hex_enc, mix64};
 use sqlite_containers::SQLiteMap;
 use std::collections::HashMap;
 
@@ -374,40 +374,40 @@ fn test_sqlite_map_stresstest() {
     {
         let mut tx = set.transaction().unwrap();
         for i in 0u64..MAX_ITEMS {
-            let key = hex_encode(mix64(i), &mut hexstr_1);
-            let value = hex_encode(mix64(u64::MAX - i), &mut hexstr_2);
+            let key = hex_enc(mix64(i), &mut hexstr_1);
+            let value = hex_enc(mix64(u64::MAX - i), &mut hexstr_2);
             assert!(tx.insert(key, value).unwrap());
         }
         for i in 0u64..MAX_ITEMS {
-            let key = hex_encode(mix64(i), &mut hexstr_1);
-            let value = hex_encode(mix64(!(u64::MAX - i)), &mut hexstr_2);
+            let key = hex_enc(mix64(i), &mut hexstr_1);
+            let value = hex_enc(mix64(!(u64::MAX - i)), &mut hexstr_2);
             tx.update(key, value).unwrap();
         }
     }
     {
         let tx = set.transaction().unwrap();
         for i in 0u64..MAX_ITEMS {
-            let key = hex_encode(mix64(i), &mut hexstr_1);
+            let key = hex_enc(mix64(i), &mut hexstr_1);
             assert!(tx.contains(key).unwrap());
         }
         for i in 0u64..MAX_ITEMS {
-            let key = hex_encode(mix64(MAX_ITEMS.checked_add(i).unwrap()), &mut hexstr_1);
+            let key = hex_enc(mix64(MAX_ITEMS.checked_add(i).unwrap()), &mut hexstr_1);
             assert!(!tx.contains(key).unwrap());
         }
         for i in 0u64..MAX_ITEMS {
-            let key = hex_encode(mix64(i), &mut hexstr_1);
-            let value = hex_encode(mix64(!(u64::MAX - i)), &mut hexstr_2);
+            let key = hex_enc(mix64(i), &mut hexstr_1);
+            let value = hex_enc(mix64(!(u64::MAX - i)), &mut hexstr_2);
             assert_eq!(tx.get(key).unwrap().unwrap(), value);
         }
     }
     {
         let mut tx = set.transaction().unwrap();
         for i in 0u64..MAX_ITEMS {
-            let key = hex_encode(mix64(i), &mut hexstr_1);
+            let key = hex_enc(mix64(i), &mut hexstr_1);
             assert!(tx.remove(key).unwrap());
         }
         for i in 0u64..MAX_ITEMS {
-            let key = hex_encode(mix64(i), &mut hexstr_1);
+            let key = hex_enc(mix64(i), &mut hexstr_1);
             assert!(!tx.remove(key).unwrap());
         }
     }

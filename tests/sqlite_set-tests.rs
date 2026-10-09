@@ -4,7 +4,7 @@
 
 mod utilities;
 
-use crate::utilities::{hex_encode, mix64};
+use crate::utilities::{hex_enc, mix64};
 use sqlite_containers::SQLiteSet;
 use std::collections::HashSet;
 
@@ -247,29 +247,29 @@ fn test_sqlite_set_stresstest() {
     {
         let mut tx = set.transaction().unwrap();
         for i in 0u64..MAX_ITEMS {
-            let key = hex_encode(mix64(i), &mut hexstr);
+            let key = hex_enc(mix64(i), &mut hexstr);
             assert!(tx.insert(key).unwrap());
         }
     }
     {
         let tx = set.transaction().unwrap();
         for i in 0u64..MAX_ITEMS {
-            let key = hex_encode(mix64(i), &mut hexstr);
+            let key = hex_enc(mix64(i), &mut hexstr);
             assert!(tx.contains(key).unwrap());
         }
         for i in 0u64..MAX_ITEMS {
-            let key = hex_encode(mix64(MAX_ITEMS.checked_add(i).unwrap()), &mut hexstr);
+            let key = hex_enc(mix64(MAX_ITEMS.checked_add(i).unwrap()), &mut hexstr);
             assert!(!tx.contains(key).unwrap());
         }
     }
     {
         let mut tx = set.transaction().unwrap();
         for i in 0u64..MAX_ITEMS {
-            let key = hex_encode(mix64(i), &mut hexstr);
+            let key = hex_enc(mix64(i), &mut hexstr);
             assert!(tx.remove(key).unwrap());
         }
         for i in 0u64..MAX_ITEMS {
-            let key = hex_encode(mix64(i), &mut hexstr);
+            let key = hex_enc(mix64(i), &mut hexstr);
             assert!(!tx.remove(key).unwrap());
         }
     }

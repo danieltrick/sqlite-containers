@@ -17,7 +17,7 @@ pub fn mix64(mut z: u64) -> u64 {
 }
 
 #[inline]
-pub fn hex_encode(value: u64, buffer: &mut [u8; 16usize]) -> &str {
+pub fn hex_enc(value: u64, buffer: &mut [u8; 16usize]) -> &str {
     unsafe {
         encode_to_slice(slice::from_raw_parts(&value as *const u64 as *const u8, 8usize), buffer).unwrap();
         str::from_utf8_unchecked(buffer)
