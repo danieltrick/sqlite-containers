@@ -166,6 +166,6 @@ jobs:
           RUST_BACKTRACE: 1
       - uses: codecov/codecov-action@v7
         with:
-          files: target/codecov-output.xml
+          files: target/codecov-output.info
           verbose: true
           token: ${{ secrets.CODECOV_TOKEN }}

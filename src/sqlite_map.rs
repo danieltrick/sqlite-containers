@@ -44,15 +44,18 @@ pub struct SQLiteMap {
 
 impl SQLiteMap {
     /// Creates a new, empty SQLite-backed hash map with case-sensitive keys.
+    #[inline]
     pub fn new() -> Result<Self, Error> {
         Ok(Self { connection: Self::initialize_connection(false)? })
     }
 
     /// Creates a new, empty SQLite-backed hash map with case-insensitive keys.
+    #[inline]
     pub fn with_nocase() -> Result<Self, Error> {
         Ok(Self { connection: Self::initialize_connection(true)? })
     }
 
+    #[inline]
     fn initialize_connection(no_case: bool) -> Result<Connection, Error> {
         let connection = Connection::open_in_memory()?;
         connection.pragma_update(None, "journal_mode", "OFF")?;
@@ -71,6 +74,7 @@ impl SQLiteMap {
     /// Please note that using an explicit SQLite transaction allows for much more efficient bulk inserts &#x1F680;
     ///
     /// Returns the new [`SQLiteMapTransaction`] instance.
+    #[inline]
     pub fn transaction(&mut self) -> Result<SQLiteMapTransaction<'_>, Error> {
         SQLiteMapTransaction::from(&mut self.connection)
     }
@@ -240,6 +244,7 @@ impl Default for SQLiteMap {
     /// # Panics
     ///
     /// Panics if a new `SQLiteMap` instance could **not** be created, e.g., because of an SQLite error.
+    #[inline]
     fn default() -> Self {
         Self::new().expect("Failed to create SQLiteMap instance!")
     }
@@ -259,6 +264,7 @@ pub struct SQLiteMapTransaction<'a> {
 }
 
 impl<'a> SQLiteMapTransaction<'a> {
+    #[inline]
     fn from(connection: &'a mut Connection) -> Result<Self, Error> {
         let mut transaction = connection.transaction()?;
         transaction.set_drop_behavior(rusqlite::DropBehavior::Commit);
@@ -266,6 +272,7 @@ impl<'a> SQLiteMapTransaction<'a> {
     }
 
     /// Drops the `SQLiteMapTransaction`, thereby committing the SQLite transaction.
+    #[inline]
     pub fn commit(self) {}
 
     /// This function is equivalent to [`SQLiteMap::insert()`].

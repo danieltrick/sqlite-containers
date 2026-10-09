@@ -34,7 +34,7 @@ doc:
 	cargo doc --locked
 
 codecov:
-	cargo llvm-cov --locked --cobertura --output-path target/codecov-output.xml
+	cargo llvm-cov --locked --lcov --output-path target/codecov-output.info
 
 clean:
 	cargo clean

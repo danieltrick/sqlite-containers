@@ -39,15 +39,18 @@ pub struct SQLiteSet {
 
 impl SQLiteSet {
     /// Creates a new, empty SQLite-backed hash set with case-sensitive keys.
+    #[inline]
     pub fn new() -> Result<Self, Error> {
         Ok(Self { connection: Self::initialize_connection(false)? })
     }
 
     /// Creates a new, empty SQLite-backed hash set with case-insensitive keys.
+    #[inline]
     pub fn with_nocase() -> Result<Self, Error> {
         Ok(Self { connection: Self::initialize_connection(true)? })
     }
 
+    #[inline]
     fn initialize_connection(no_case: bool) -> Result<Connection, Error> {
         let connection = Connection::open_in_memory()?;
         connection.pragma_update(None, "journal_mode", "OFF")?;
@@ -195,6 +198,7 @@ impl Default for SQLiteSet {
     /// # Panics
     ///
     /// Panics if a new `SQLiteSet` instance could **not** be created, e.g., because of an SQLite error.
+    #[inline]
     fn default() -> Self {
         Self::new().expect("Failed to create SQLiteSet instance!")
     }
@@ -214,6 +218,7 @@ pub struct SQLiteSetTransaction<'a> {
 }
 
 impl<'a> SQLiteSetTransaction<'a> {
+    #[inline]
     fn from(connection: &'a mut Connection) -> Result<Self, Error> {
         let mut transaction = connection.transaction()?;
         transaction.set_drop_behavior(rusqlite::DropBehavior::Commit);
@@ -221,6 +226,7 @@ impl<'a> SQLiteSetTransaction<'a> {
     }
 
     /// Drops the `SQLiteSetTransaction`, thereby committing the SQLite transaction.
+    #[inline]
     pub fn commit(self) {}
 
     /// This function is equivalent to [`SQLiteSet::insert()`].
