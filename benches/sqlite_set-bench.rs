@@ -7,7 +7,7 @@ mod utilities;
 
 use crate::utilities::{hex_encode, mix64};
 use criterion::{Criterion, criterion_group, criterion_main};
-use sqlite_containers::SQLiteSet;
+use sqlite_containers::{SQLiteSet, SizeT};
 use std::hint::black_box;
 
 // ---------------------------------------------------------------------------
@@ -65,6 +65,31 @@ fn bench_sqlite_set(c: &mut Criterion) {
             for n in 0..TARGET_ITEM_COUNT {
                 assert!(black_box(tx.contains(hex_encode(black_box(mix64(n)), &mut hexstr)).unwrap()));
             }
+        });
+    });
+
+    c.bench_function("length_directly", |b| {
+        let mut sqlite_set = SQLiteSet::new().unwrap();
+        let mut tx = sqlite_set.transaction().unwrap();
+        for n in 0..TARGET_ITEM_COUNT {
+            assert!(black_box(tx.insert(hex_encode(black_box(mix64(n)), &mut hexstr)).unwrap()));
+        }
+        tx.commit();
+
+        b.iter(|| {
+            assert_eq!(black_box(sqlite_set.len().unwrap()), TARGET_ITEM_COUNT as SizeT);
+        });
+    });
+
+    c.bench_function("length_transact", |b| {
+        let mut sqlite_set = SQLiteSet::new().unwrap();
+        let mut tx = sqlite_set.transaction().unwrap();
+        for n in 0..TARGET_ITEM_COUNT {
+            assert!(black_box(tx.insert(hex_encode(black_box(mix64(n)), &mut hexstr)).unwrap()));
+        }
+
+        b.iter(|| {
+            assert_eq!(black_box(tx.len().unwrap()), TARGET_ITEM_COUNT as SizeT);
         });
     });
 }
