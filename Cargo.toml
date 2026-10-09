@@ -14,8 +14,8 @@ rand = "0.10.3"
 rusqlite = "0.40.2"
 
 [dev-dependencies]
-des = "0.9.0"
 criterion = { version = "0.8.2", default-features = false }
+hex = "0.4.3"
 
 [[bench]]
 name = "sqlite_set-bench"

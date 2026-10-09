@@ -2,10 +2,10 @@
 // This file is part of the 'SQLite-based containers for Rust' project (sqlite-containers)
 // SPDX-License-Identifier: Unlicense
 
-use des::{
-    Des,
-    cipher::{Block, BlockCipherEncBackend, KeyInit},
-};
+#[path = "common/utilities.rs"]
+mod utilities;
+
+use crate::utilities::{hex_encode, mix64};
 use sqlite_containers::SQLiteSet;
 use std::collections::HashSet;
 
@@ -242,31 +242,36 @@ fn test_sqlite_set_ignorecase() {
 #[test]
 fn test_sqlite_set_stresstest() {
     let mut set = SQLiteSet::new().unwrap();
-    const COUNT: u64 = 1_000_003u64;
+    let mut hexstr = [0; 16usize];
+    const MAX_ITEMS: u64 = 1_000_000u64;
+
     {
         let mut tx = set.transaction().unwrap();
-        let cipher = Des::new_from_slice(b"12345678").unwrap();
-        for i in 0u64..COUNT {
-            let mut block = Block::<Des>::from(i.to_be_bytes());
-            cipher.encrypt_block_inplace(&mut block);
-            let key = format!("{:016X}", u64::from_be_bytes(block.into()));
-            assert!(tx.insert(&key).unwrap());
+        for i in 0u64..MAX_ITEMS {
+            let key = hex_encode(mix64(i), &mut hexstr);
+            assert!(tx.insert(key).unwrap());
         }
     }
     {
         let tx = set.transaction().unwrap();
-        let cipher = Des::new_from_slice(b"12345678").unwrap();
-        for i in 0u64..COUNT {
-            let mut block = Block::<Des>::from(i.to_be_bytes());
-            cipher.encrypt_block_inplace(&mut block);
-            let key = format!("{:016X}", u64::from_be_bytes(block.into()));
-            assert!(tx.contains(&key).unwrap());
+        for i in 0u64..MAX_ITEMS {
+            let key = hex_encode(mix64(i), &mut hexstr);
+            assert!(tx.contains(key).unwrap());
         }
-        for i in 0u64..COUNT {
-            let mut block = Block::<Des>::from(i.checked_add(COUNT).unwrap().to_be_bytes());
-            cipher.encrypt_block_inplace(&mut block);
-            let key = format!("{:016X}", u64::from_be_bytes(block.into()));
-            assert!(!tx.contains(&key).unwrap());
+        for i in 0u64..MAX_ITEMS {
+            let key = hex_encode(mix64(MAX_ITEMS.checked_add(i).unwrap()), &mut hexstr);
+            assert!(!tx.contains(key).unwrap());
+        }
+    }
+    {
+        let mut tx = set.transaction().unwrap();
+        for i in 0u64..MAX_ITEMS {
+            let key = hex_encode(mix64(i), &mut hexstr);
+            assert!(tx.remove(key).unwrap());
+        }
+        for i in 0u64..MAX_ITEMS {
+            let key = hex_encode(mix64(i), &mut hexstr);
+            assert!(!tx.remove(key).unwrap());
         }
     }
 }

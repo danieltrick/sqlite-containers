@@ -2,24 +2,29 @@
 // This file is part of the 'SQLite-based containers for Rust' project (sqlite-containers)
 // SPDX-License-Identifier: Unlicense
 
+#[path = "../tests/common/utilities.rs"]
+mod utilities;
+
+use crate::utilities::{hex_encode, mix64};
 use criterion::{Criterion, criterion_group, criterion_main};
-use sqlite_containers::{SQLiteSet, SizeT};
+use sqlite_containers::SQLiteSet;
 use std::hint::black_box;
 
 // ---------------------------------------------------------------------------
 // SQLiteSet Benchmark
 // ---------------------------------------------------------------------------
 
-const TARGET_ITEM_COUNT: SizeT = 25_000_000;
+const TARGET_ITEM_COUNT: u64 = 25_000_000u64;
 
 fn bench_sqlite_set(c: &mut Criterion) {
+    let mut hexstr = [0; 16usize];
+
     c.bench_function("insert_directly", |b| {
         b.iter(|| {
             let mut sqlite_set = SQLiteSet::new().unwrap();
             for n in 0..TARGET_ITEM_COUNT {
-                assert!(black_box(sqlite_set.insert(&format!("{:016X}", black_box(mix64(to_u64(n))))).unwrap()));
+                assert!(black_box(sqlite_set.insert(hex_encode(black_box(mix64(n)), &mut hexstr)).unwrap()));
             }
-            // assert_eq!(sqlite_set.len().unwrap(), TARGET_ITEM_COUNT);
         });
     });
 
@@ -28,22 +33,21 @@ fn bench_sqlite_set(c: &mut Criterion) {
             let mut sqlite_set = SQLiteSet::new().unwrap();
             let mut tx = sqlite_set.transaction().unwrap();
             for n in 0..TARGET_ITEM_COUNT {
-                assert!(black_box(tx.insert(&format!("{:016X}", black_box(mix64(to_u64(n))))).unwrap()));
+                assert!(black_box(tx.insert(hex_encode(black_box(mix64(n)), &mut hexstr)).unwrap()));
             }
             tx.commit();
-            // assert_eq!(sqlite_set.len().unwrap(), TARGET_ITEM_COUNT);
         });
     });
 
     c.bench_function("lookup_directly", |b| {
         let mut sqlite_set = SQLiteSet::new().unwrap();
         for n in 0..TARGET_ITEM_COUNT {
-            assert!(black_box(sqlite_set.insert(&format!("{:016X}", black_box(mix64(to_u64(n))))).unwrap()));
+            assert!(black_box(sqlite_set.insert(hex_encode(black_box(mix64(n)), &mut hexstr)).unwrap()));
         }
-        assert_eq!(sqlite_set.len().unwrap(), TARGET_ITEM_COUNT);
+
         b.iter(|| {
             for n in 0..TARGET_ITEM_COUNT {
-                assert!(black_box(sqlite_set.contains(&format!("{:016X}", black_box(mix64(to_u64(n))))).unwrap()));
+                assert!(black_box(sqlite_set.contains(hex_encode(black_box(mix64(n)), &mut hexstr)).unwrap()));
             }
         });
     });
@@ -52,36 +56,17 @@ fn bench_sqlite_set(c: &mut Criterion) {
         let mut sqlite_set = SQLiteSet::new().unwrap();
         let mut tx = sqlite_set.transaction().unwrap();
         for n in 0..TARGET_ITEM_COUNT {
-            assert!(black_box(tx.insert(&format!("{:016X}", black_box(mix64(to_u64(n))))).unwrap()));
+            assert!(black_box(tx.insert(hex_encode(black_box(mix64(n)), &mut hexstr)).unwrap()));
         }
         tx.commit();
-        assert_eq!(sqlite_set.len().unwrap(), TARGET_ITEM_COUNT);
+
         b.iter(|| {
             let tx = sqlite_set.transaction().unwrap();
             for n in 0..TARGET_ITEM_COUNT {
-                assert!(black_box(tx.contains(&format!("{:016X}", black_box(mix64(to_u64(n))))).unwrap()));
+                assert!(black_box(tx.contains(hex_encode(black_box(mix64(n)), &mut hexstr)).unwrap()));
             }
         });
     });
-}
-
-// ---------------------------------------------------------------------------
-// Utilities
-// ---------------------------------------------------------------------------
-
-#[inline]
-fn to_u64(value: SizeT) -> u64 {
-    #[cfg(target_pointer_width = "64")]
-    return value as u64;
-    #[cfg(not(target_pointer_width = "64"))]
-    return value;
-}
-
-#[inline]
-fn mix64(mut z: u64) -> u64 {
-    z = (z ^ (z >> 30)).wrapping_mul(0xBF58476D1CE4E5B9);
-    z = (z ^ (z >> 27)).wrapping_mul(0x94D049BB133111EB);
-    z ^ (z >> 31)
 }
 
 // ---------------------------------------------------------------------------
