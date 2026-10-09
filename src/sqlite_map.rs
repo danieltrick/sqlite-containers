@@ -15,11 +15,12 @@ const SQL_CREATE_TBL: &str = "CREATE TABLE data (key TEXT PRIMARY KEY NOT NULL, 
 const SQL_CREATE_NOC: &str = "CREATE TABLE data (key TEXT PRIMARY KEY NOT NULL COLLATE NOCASE, value TEXT NOT NULL) WITHOUT ROWID;";
 const SQL_COUNT_KEYS: &str = "SELECT COUNT(*) FROM data;";
 const SQL_INSERT_KEY: &str = "INSERT INTO data (key, value) VALUES (?1, ?2);";
+const SQL_UPSERT_KEY: &str = "INSERT INTO data (key, value) VALUES (?1, ?2) ON CONFLICT(key) DO UPDATE SET value = excluded.value;";
 const SQL_EXISTS_KEY: &str = "SELECT 1 FROM data WHERE key = ? LIMIT 1;";
 const SQL_EXISTS_NOC: &str = "SELECT 1 FROM data WHERE key COLLATE NOCASE = ? LIMIT 1;";
 const SQL_LOOKUP_KEY: &str = "SELECT value FROM data WHERE key = ? LIMIT 1;";
 const SQL_LOOKUP_NOC: &str = "SELECT value FROM data WHERE key COLLATE NOCASE = ? LIMIT 1;";
-const SQL_QUERY_KEYS: &str = "SELECT (key, value) FROM data;";
+const SQL_QUERY_KEYS: &str = "SELECT key, value FROM data;";
 const SQL_DELETE_KEY: &str = "DELETE FROM data WHERE key = ?;";
 const SQL_DELETE_NOC: &str = "DELETE FROM data WHERE key COLLATE NOCASE = ?;";
 const SQL_DELETE_ALL: &str = "DELETE FROM data;";
@@ -28,13 +29,13 @@ const SQL_DELETE_ALL: &str = "DELETE FROM data;";
 // SQLiteMap
 // ---------------------------------------------------------------------------
 
-/// A [hash map](https://doc.rust-lang.org/std/collections/struct.HashMap.html) with [string](https://doc.rust-lang.org/beta/std/string/struct.String.html) keys and values that is backed by an SQLite in-memory database.
+/// A [hash map](https://doc.rust-lang.org/std/collections/struct.HashMap.html) with [string](https://doc.rust-lang.org/beta/std/string/struct.String.html) keys and values, backed by an SQLite in-memory database.
 ///
 /// By default, `SQLiteMap` treats its keys as case-sensitive, but a case-insensitive variant is available. Even when using the case-sensitive map variant, for some operations a dedicated "case-insensitive" version is provided.
 ///
 /// <div class="warning">
 ///
-/// **Important:** If you need to perform a large number of inserts, it is *highly recommended* to start an explicit [transaction](Self::transaction) and use it for the bulk insert. Otherwise, SQLite handles each insert as a separate transaction, which can be very slow!
+/// **Important:** For bulk inserts or updates, it is **strongly recommended** to use an explicit [transaction](Self::transaction). Without one, SQLite executes each insert or update in its own transaction, which can significantly degrade performance.
 ///
 /// </div>
 pub struct SQLiteMap {
@@ -74,9 +75,13 @@ impl SQLiteMap {
         SQLiteMapTransaction::from(&mut self.connection)
     }
 
-    /// Inserts the given key-value pair into the map.
+    /// Tries to insert the given key-value pair into the map.
     ///
-    /// Returns `true`, if the map did not already contain the key; otherwise returns `false`.
+    /// If the map already contains the specified key, then its associated value is **not** updated to the new value!
+    ///
+    /// Returns `true`, if the key-value pair was inserted; otherwise returns `false`.
+    ///
+    /// Please use the [`update()`](Self::update) function to update the value associated with a key that may already exist.
     #[inline]
     pub fn insert(&mut self, key: &str, value: &str) -> Result<bool, Error> {
         let mut insert = self.connection.prepare_cached(SQL_INSERT_KEY)?;
@@ -84,6 +89,18 @@ impl SQLiteMap {
             Ok(_) => Ok(true),
             Err(error) => check_constraint_violation(error),
         }
+    }
+
+    /// Associates the specified value with the specified key.
+    ///
+    /// If the map does *not* already contain the specified key, then the key is inserted automatically.
+    ///
+    /// Due to limitations in SQLite, it is *not* possible to determine whether the key-value pair was inserted or updated.
+    #[inline]
+    pub fn update(&mut self, key: &str, value: &str) -> Result<(), Error> {
+        let mut update = self.connection.prepare_cached(SQL_UPSERT_KEY)?;
+        update.execute([key, value])?;
+        Ok(())
     }
 
     /// Checks whether the map contains the specified key.
@@ -108,7 +125,7 @@ impl SQLiteMap {
         Ok(contains.exists([key])?)
     }
 
-    /// Tries to retriece the value for the specified key.
+    /// Tries to retrieve the value for the specified key.
     ///
     /// For case-sensitive maps, the key is treated as case-sensitive; for case-insensitive maps, it is treated as case-insensitive.
     ///
@@ -119,7 +136,7 @@ impl SQLiteMap {
         Ok(get.query_one([key], |row| row.get(0)).optional()?)
     }
 
-    /// This is the "case-insensitive" version of the [`contains()`](Self::get) function.
+    /// This is the "case-insensitive" version of the [`get()`](Self::get) function.
     ///
     /// The key is *always* treated as case-insensitive.
     ///
@@ -236,13 +253,7 @@ impl Default for SQLiteMap {
 ///
 /// Most functions provided by this struct mirror the corresponding functions of the `SQLiteMap` struct.
 ///
-/// The transaction is committed automatically when the `SQLiteMapTransaction` is dropped.
-///
-/// <div class="warning">
-///
-/// **Important:** If you need to perform a large number of inserts, it is *highly recommended* to start an explicit [transaction](SQLiteMap::transaction) and use it for the bulk insert. Otherwise, SQLite handles each insert as a separate transaction, which can be very slow!
-///
-/// </div>
+/// The transaction is committed when the `SQLiteMapTransaction` is dropped.
 pub struct SQLiteMapTransaction<'a> {
     transaction: Transaction<'a>,
 }
@@ -265,6 +276,14 @@ impl<'a> SQLiteMapTransaction<'a> {
             Ok(_) => Ok(true),
             Err(error) => check_constraint_violation(error),
         }
+    }
+
+    /// This function is equivalent to [`SQLiteMap::update()`].
+    #[inline]
+    pub fn update(&mut self, key: &str, value: &str) -> Result<(), Error> {
+        let mut update = self.transaction.prepare_cached(SQL_UPSERT_KEY)?;
+        update.execute([key, value])?;
+        Ok(())
     }
 
     /// This function is equivalent to [`SQLiteMap::contains()`].

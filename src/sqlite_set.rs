@@ -24,13 +24,13 @@ const SQL_DELETE_ALL: &str = "DELETE FROM data;";
 // SQLiteSet
 // ---------------------------------------------------------------------------
 
-/// A [hash set](https://doc.rust-lang.org/std/collections/struct.HashSet.html) with [string](https://doc.rust-lang.org/beta/std/string/struct.String.html) keys that is backed by an SQLite in-memory database.
+/// A [hash set](https://doc.rust-lang.org/std/collections/struct.HashSet.html) with [string](https://doc.rust-lang.org/beta/std/string/struct.String.html) keys, backed by an SQLite in-memory database.
 ///
 /// By default, `SQLiteSet` treats its keys as case-sensitive, but a case-insensitive variant is available. Even when using the case-sensitive set variant, for some operations a dedicated "case-insensitive" version is provided.
 ///
 /// <div class="warning">
 ///
-/// **Important:** If you need to perform a large number of inserts, it is *highly recommended* to start an explicit [transaction](Self::transaction) and use it for the bulk insert. Otherwise, SQLite handles each insert as a separate transaction, which can be very slow!
+/// **Important:** For bulk inserts or updates, it is **strongly recommended** to use an explicit [transaction](Self::transaction). Without one, SQLite executes each insert or update in its own transaction, which can significantly degrade performance.
 ///
 /// </div>
 pub struct SQLiteSet {
@@ -208,13 +208,7 @@ impl Default for SQLiteSet {
 ///
 /// Most functions provided by this struct mirror the corresponding functions of the `SQLiteSet` struct.
 ///
-/// The transaction is committed automatically when the `SQLiteSetTransaction` is dropped.
-///
-/// <div class="warning">
-///
-/// **Important:** If you need to perform a large number of inserts, it is *highly recommended* to start an explicit [transaction](SQLiteSet::transaction) and use it for the bulk insert. Otherwise, SQLite handles each insert as a separate transaction, which can be very slow!
-///
-/// </div>
+/// The transaction is committed when the `SQLiteSetTransaction` is dropped.
 pub struct SQLiteSetTransaction<'a> {
     transaction: Transaction<'a>,
 }
