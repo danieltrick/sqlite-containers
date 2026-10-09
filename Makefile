@@ -24,7 +24,8 @@ upgrade:
 	cargo update
 
 test:
-	cargo test --release --tests --locked
+	cargo test --locked
+	cargo test --release --locked
 
 bench:
 	cargo bench --bench sqlite_set-bench -- --quick
@@ -33,7 +34,7 @@ doc:
 	cargo doc --locked
 
 codecov:
-	cargo llvm-cov --release --locked --cobertura --output-path target/codecov-output.xml
+	cargo llvm-cov --locked --cobertura --output-path target/codecov-output.xml
 
 clean:
 	cargo clean

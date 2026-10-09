@@ -22,7 +22,7 @@
 //!
 //! println!("Inserting elements, please wait...");
 //!
-//! for n in 0..100_000_000u64 {
+//! for n in 0..1_000_000u64 {
 //!     tx.insert(&format!("{:016X}", n)).expect("Insertion failed!");
 //! }
 //!
