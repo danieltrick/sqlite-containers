@@ -1,6 +1,6 @@
 .SHELLFLAGS = -e -c
 
-.PHONY: all bench build check clean clippy codecov doc fmt test upgrade
+.PHONY: all bench build check clean clippy codecov doc fmt publish test upgrade
 
 all: clean check build
 
@@ -35,6 +35,9 @@ doc:
 
 codecov:
 	cargo llvm-cov --locked --lcov --output-path target/codecov-output.info
+
+publish:
+	cargo publish --locked
 
 clean:
 	cargo clean

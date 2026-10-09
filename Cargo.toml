@@ -1,9 +1,12 @@
 [package]
 name = "sqlite-containers"
+description = "SQLite-based containers for Rust"
 version = "1.0.0"
 edition = "2024"
 rust-version = "1.88.0"
+authors = ["Daniel Trick <daniel.trick@sit.fraunhofer.de>"]
 license = "Unlicense"
+repository = "https://github.com/danieltrick/sqlite-containers/"
 
 [features]
 default = ["bundled"]
