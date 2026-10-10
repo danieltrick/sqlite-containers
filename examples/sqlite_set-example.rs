@@ -5,7 +5,7 @@
 #[path = "../tests/utilities/mod.rs"]
 mod utilities;
 
-use crate::utilities::{hex_enc, mix64};
+use crate::utilities::{HexEncoder, mix64};
 use sqlite_containers::SQLiteSet;
 
 // ---------------------------------------------------------------------------
@@ -13,7 +13,9 @@ use sqlite_containers::SQLiteSet;
 // ---------------------------------------------------------------------------
 
 fn main() {
-    let mut hexstr = [0; 16usize];
+    println!("SQLiteSet Example [{}]", env!("CARGO_PKG_VERSION"));
+
+    let mut hex = HexEncoder::default();
 
     let mut sqlite_set = SQLiteSet::new().expect("Failed to create SQLiteSet!");
     let mut tx = sqlite_set.transaction().expect("Failed to init transaction!");
@@ -21,7 +23,7 @@ fn main() {
     println!("Inserting elements, please wait...");
 
     for n in 0..100_000_000u64 {
-        tx.insert(hex_enc(mix64(n), &mut hexstr)).expect("Insertion failed!");
+        tx.insert(hex.encode(mix64(n))).expect("Insertion failed!");
     }
 
     tx.commit();

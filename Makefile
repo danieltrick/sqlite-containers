@@ -1,16 +1,16 @@
-.SHELLFLAGS = -e -c
+# This file is part of the 'SQLite-based containers for Rust' project (sqlite-containers)
+# SPDX-License-Identifier: Unlicense
 
-.PHONY: all bench build check clean clippy codecov doc fmt publish test upgrade
+EXAMPLES := $(addprefix run-,$(basename $(notdir $(wildcard examples/*.rs))))
 
-all: clean check build
+.PHONY: all bench build check clean clippy codecov doc fmt publish run test upgrade $(EXAMPLES)
 
-build:
-	cargo build --release --locked
+all: clean clippy build test doc
 
 check:
 	cargo fmt --all --check
-	cargo check --no-default-features
-	cargo check --release --all-features --all-targets
+	cargo check
+	cargo check --release --all-targets
 
 clippy: check
 	cargo clippy --no-default-features -- -D warnings
@@ -19,19 +19,27 @@ clippy: check
 fmt:
 	cargo fmt --all
 
-upgrade:
-	cargo upgrade -i
-	cargo update
+build:
+	cargo build
+	cargo build --release
 
 test:
 	cargo test --locked
-	cargo test --release --locked
+	cargo test --locked --release
+
+run: $(EXAMPLES)
+$(EXAMPLES):
+	cargo run --locked --release --example $(patsubst run-%,%,$@)
 
 bench:
 	cargo bench --bench sqlite_containers-bench -- --quick
 
 doc:
 	cargo doc --locked
+
+upgrade:
+	cargo upgrade -i
+	cargo update
 
 codecov:
 	cargo llvm-cov --locked --lcov --output-path target/codecov-output.info

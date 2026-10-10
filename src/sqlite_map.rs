@@ -4,7 +4,7 @@
 
 use rusqlite::OptionalExtension;
 
-use crate::common::{Error, SizeT, check_constraint_violation};
+use crate::common::{Error, Size, SizeExt, check_constraint_violation};
 use crate::rusqlite::{Connection, Transaction};
 
 // ---------------------------------------------------------------------------
@@ -217,10 +217,10 @@ impl SQLiteMap {
 
     /// Returns the number of unique keys in the map.
     #[inline]
-    pub fn len(&self) -> Result<SizeT, Error> {
+    pub fn len(&self) -> Result<Size, Error> {
         let mut query_count = self.connection.prepare_cached(SQL_COUNT_KEYS)?;
         let count: i64 = query_count.query_one([], |row| row.get(0))?;
-        Ok(count.try_into().unwrap_or_default())
+        Ok(Size::from_i64(count))
     }
 
     /// Returns `true` if the map contains **no** keys; otherwise returns `false`.
@@ -371,10 +371,10 @@ impl<'a> SQLiteMapTransaction<'a> {
 
     /// This function is equivalent to [`SQLiteMap::len()`].
     #[inline]
-    pub fn len(&self) -> Result<SizeT, Error> {
+    pub fn len(&self) -> Result<Size, Error> {
         let mut query_count = self.transaction.prepare_cached(SQL_COUNT_KEYS)?;
         let count: i64 = query_count.query_one([], |row| row.get(0))?;
-        Ok(count.try_into().unwrap_or_default())
+        Ok(Size::from_i64(count))
     }
 
     /// This function is equivalent to [`SQLiteMap::is_empty()`].

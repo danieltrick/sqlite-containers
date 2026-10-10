@@ -44,7 +44,7 @@ mod common;
 mod sqlite_map;
 mod sqlite_set;
 
-pub use crate::common::{Error, SizeT};
+pub use crate::common::{Size, SizeExt};
 pub use crate::sqlite_map::{SQLiteMap, SQLiteMapTransaction};
 pub use crate::sqlite_set::{SQLiteSet, SQLiteSetTransaction};
 

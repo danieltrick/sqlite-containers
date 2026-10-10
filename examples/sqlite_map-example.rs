@@ -5,27 +5,29 @@
 #[path = "../tests/utilities/mod.rs"]
 mod utilities;
 
-use crate::utilities::{hex_enc, mix64};
+use crate::utilities::{HexEncoder, mix64};
 use sqlite_containers::SQLiteMap;
 
 // ---------------------------------------------------------------------------
-// SQLiteSet Example
+// SQLiteMap Example
 // ---------------------------------------------------------------------------
 
 fn main() {
-    let mut hexstr_1 = [0; 16usize];
-    let mut hexstr_2 = [0; 16usize];
+    println!("SQLiteMap Example [{}]", env!("CARGO_PKG_VERSION"));
+
+    let mut hex_1 = HexEncoder::default();
+    let mut hex_2 = HexEncoder::default();
 
     let mut sqlite_set = SQLiteMap::new().expect("Failed to create SQLiteSet!");
     let mut tx = sqlite_set.transaction().expect("Failed to init transaction!");
 
-    println!("Inserting elements, please wait...");
+    println!("Inserting key-value pairs, please wait...");
 
     for n in 0..100_000_000u64 {
-        let (key, value) = (hex_enc(mix64(n), &mut hexstr_1), hex_enc(mix64(!n), &mut hexstr_2));
+        let (key, value) = (hex_1.encode(mix64(n)), hex_2.encode(mix64(u64::MAX - n)));
         tx.insert(key, value).expect("Insertion failed!");
     }
 
     tx.commit();
-    println!("{} element(s) successfully inserted.", sqlite_set.len().unwrap());
+    println!("{} key-value pair(s) successfully inserted.", sqlite_set.len().unwrap());
 }

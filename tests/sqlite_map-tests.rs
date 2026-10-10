@@ -4,8 +4,8 @@
 
 mod utilities;
 
-use crate::utilities::{hex_enc, mix64};
-use sqlite_containers::SQLiteMap;
+use crate::utilities::{HexEncoder, mix64};
+use sqlite_containers::{SQLiteMap, SizeExt};
 use std::collections::HashMap;
 
 // ---------------------------------------------------------------------------
@@ -367,48 +367,48 @@ fn test_sqlite_map_ignorecase() {
 #[test]
 fn test_sqlite_map_stresstest() {
     let mut set = SQLiteMap::new().unwrap();
-    let mut hexstr_1 = [0; 16usize];
-    let mut hexstr_2 = [0; 16usize];
+    let (mut hex_1, mut hex_2) = (HexEncoder::default(), HexEncoder::default());
     const MAX_ITEMS: u64 = 1_000_000u64;
 
     {
         let mut tx = set.transaction().unwrap();
         for i in 0u64..MAX_ITEMS {
-            let key = hex_enc(mix64(i), &mut hexstr_1);
-            let value = hex_enc(mix64(u64::MAX - i), &mut hexstr_2);
+            let (key, value) = (hex_1.encode(mix64(i)), hex_2.encode(mix64(u64::MAX - i)));
             assert!(tx.insert(key, value).unwrap());
         }
         for i in 0u64..MAX_ITEMS {
-            let key = hex_enc(mix64(i), &mut hexstr_1);
-            let value = hex_enc(mix64(!(u64::MAX - i)), &mut hexstr_2);
+            let (key, value) = (hex_1.encode(mix64(i)), hex_2.encode(!mix64(u64::MAX - i)));
             tx.update(key, value).unwrap();
         }
     }
+
+    assert!(!set.is_empty().unwrap());
+    assert_eq!(set.len().unwrap().to_u64(), MAX_ITEMS);
+
     {
         let tx = set.transaction().unwrap();
         for i in 0u64..MAX_ITEMS {
-            let key = hex_enc(mix64(i), &mut hexstr_1);
-            assert!(tx.contains(key).unwrap());
+            assert!(tx.contains(hex_1.encode(mix64(i))).unwrap());
+            assert!(!tx.contains(hex_1.encode(mix64(MAX_ITEMS.checked_add(i).unwrap()))).unwrap());
         }
         for i in 0u64..MAX_ITEMS {
-            let key = hex_enc(mix64(MAX_ITEMS.checked_add(i).unwrap()), &mut hexstr_1);
-            assert!(!tx.contains(key).unwrap());
-        }
-        for i in 0u64..MAX_ITEMS {
-            let key = hex_enc(mix64(i), &mut hexstr_1);
-            let value = hex_enc(mix64(!(u64::MAX - i)), &mut hexstr_2);
+            let (key, value) = (hex_1.encode(mix64(i)), hex_2.encode(!mix64(u64::MAX - i)));
             assert_eq!(tx.get(key).unwrap().unwrap(), value);
         }
     }
+
+    assert!(!set.is_empty().unwrap());
+    assert_eq!(set.len().unwrap().to_u64(), MAX_ITEMS);
+
     {
         let mut tx = set.transaction().unwrap();
         for i in 0u64..MAX_ITEMS {
-            let key = hex_enc(mix64(i), &mut hexstr_1);
-            assert!(tx.remove(key).unwrap());
+            assert!(tx.remove(hex_1.encode(mix64(i))).unwrap());
         }
         for i in 0u64..MAX_ITEMS {
-            let key = hex_enc(mix64(i), &mut hexstr_1);
-            assert!(!tx.remove(key).unwrap());
+            assert!(!tx.remove(hex_1.encode(mix64(i))).unwrap());
         }
     }
+
+    assert!(set.is_empty().unwrap());
 }

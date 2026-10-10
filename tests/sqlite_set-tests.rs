@@ -4,8 +4,8 @@
 
 mod utilities;
 
-use crate::utilities::{hex_enc, mix64};
-use sqlite_containers::SQLiteSet;
+use crate::utilities::{HexEncoder, mix64};
+use sqlite_containers::{SQLiteSet, SizeExt};
 use std::collections::HashSet;
 
 // ---------------------------------------------------------------------------
@@ -241,36 +241,39 @@ fn test_sqlite_set_ignorecase() {
 #[test]
 fn test_sqlite_set_stresstest() {
     let mut set = SQLiteSet::new().unwrap();
-    let mut hexstr = [0; 16usize];
+    let mut hex = HexEncoder::default();
     const MAX_ITEMS: u64 = 1_000_000u64;
 
     {
         let mut tx = set.transaction().unwrap();
         for i in 0u64..MAX_ITEMS {
-            let key = hex_enc(mix64(i), &mut hexstr);
-            assert!(tx.insert(key).unwrap());
+            assert!(tx.insert(hex.encode(mix64(i))).unwrap());
         }
     }
+
+    assert!(!set.is_empty().unwrap());
+    assert_eq!(set.len().unwrap().to_u64(), MAX_ITEMS);
+
     {
         let tx = set.transaction().unwrap();
         for i in 0u64..MAX_ITEMS {
-            let key = hex_enc(mix64(i), &mut hexstr);
-            assert!(tx.contains(key).unwrap());
-        }
-        for i in 0u64..MAX_ITEMS {
-            let key = hex_enc(mix64(MAX_ITEMS.checked_add(i).unwrap()), &mut hexstr);
-            assert!(!tx.contains(key).unwrap());
+            assert!(tx.contains(hex.encode(mix64(i))).unwrap());
+            assert!(!tx.contains(hex.encode(mix64(MAX_ITEMS.checked_add(i).unwrap()))).unwrap());
         }
     }
+
+    assert!(!set.is_empty().unwrap());
+    assert_eq!(set.len().unwrap().to_u64(), MAX_ITEMS);
+
     {
         let mut tx = set.transaction().unwrap();
         for i in 0u64..MAX_ITEMS {
-            let key = hex_enc(mix64(i), &mut hexstr);
-            assert!(tx.remove(key).unwrap());
+            assert!(tx.remove(hex.encode(mix64(i))).unwrap());
         }
         for i in 0u64..MAX_ITEMS {
-            let key = hex_enc(mix64(i), &mut hexstr);
-            assert!(!tx.remove(key).unwrap());
+            assert!(!tx.remove(hex.encode(mix64(i))).unwrap());
         }
     }
+
+    assert!(set.is_empty().unwrap());
 }

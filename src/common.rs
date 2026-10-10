@@ -10,10 +10,47 @@ use crate::rusqlite::{Error as RusqliteError, ErrorCode};
 
 /// The "size" type used by [`len()`](crate::SQLiteSet::len), equal to `usize` on this platform.
 #[cfg(target_pointer_width = "64")]
-pub type SizeT = usize;
+pub type Size = usize;
 /// The "size" type used by [`len()`](crate::SQLiteSet::len), equal to `u64` on this platform.
 #[cfg(not(target_pointer_width = "64"))]
-pub type SizeT = u64;
+pub type Size = u64;
+
+pub trait SizeExt {
+    fn from_i64(value: i64) -> Self;
+    fn from_u64(value: u64) -> Self;
+    fn to_u64(self) -> u64;
+    fn to_usize(self) -> Option<usize>;
+}
+
+impl SizeExt for Size {
+    #[inline(always)]
+    fn from_i64(value: i64) -> Self {
+        value.try_into().unwrap_or_default()
+    }
+
+    #[inline(always)]
+    fn from_u64(value: u64) -> Self {
+        value as Self
+    }
+
+    #[allow(clippy::unnecessary_cast)]
+    #[inline(always)]
+    fn to_u64(self) -> u64 {
+        self as u64
+    }
+
+    #[cfg(target_pointer_width = "64")]
+    #[inline(always)]
+    fn to_usize(self) -> Option<usize> {
+        Some(self)
+    }
+
+    #[cfg(not(target_pointer_width = "64"))]
+    #[inline(always)]
+    fn to_usize(self) -> Option<usize> {
+        self.try_into().ok()
+    }
+}
 
 // ---------------------------------------------------------------------------
 // SQLite Error
@@ -52,11 +89,50 @@ pub fn check_constraint_violation(error: RusqliteError) -> Result<bool, Error> {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
 #[cfg(test)]
 mod test {
     use super::*;
     use crate::rusqlite::ffi::{Error as FfiError, ErrorCode as FfiErrorCode, SQLITE_CONSTRAINT, SQLITE_NOMEM};
     use std::path::PathBuf;
+
+    #[cfg(target_pointer_width = "64")]
+    #[test]
+    fn test_size_p64() {
+        assert_eq!(Size::from_i64(i64::MAX), i64::MAX as usize);
+        assert_eq!(Size::from_i64(1i64), 1usize);
+        assert_eq!(Size::from_i64(0i64), usize::MIN);
+        assert_eq!(Size::from_i64(-1i64), usize::MIN);
+        assert_eq!(Size::from_i64(i64::MIN), usize::MIN);
+
+        assert_eq!(Size::from_u64(u64::MAX), usize::MAX);
+        assert_eq!(Size::from_u64(1u64), 1usize);
+        assert_eq!(Size::from_u64(u64::MIN), usize::MIN);
+
+        assert_eq!(Size::from_i64(i64::MAX).to_u64(), i64::MAX as u64);
+        assert_eq!(Size::from_i64(i64::MAX).to_usize(), Some(i64::MAX as usize));
+    }
+
+    #[cfg(not(target_pointer_width = "64"))]
+    #[test]
+    fn test_size_p32() {
+        assert_eq!(Size::from_i64(i64::MAX), i64::MAX as u64);
+        assert_eq!(Size::from_i64(1i64), 1u64);
+        assert_eq!(Size::from_i64(0i64), u64::MIN);
+        assert_eq!(Size::from_i64(-1i64), u64::MIN);
+        assert_eq!(Size::from_i64(i64::MIN), u64::MIN);
+
+        assert_eq!(Size::from_u64(u64::MAX), u64::MAX);
+        assert_eq!(Size::from_u64(1u64), 1u64);
+        assert_eq!(Size::from_u64(u64::MIN), u64::MIN);
+
+        assert_eq!(Size::from_i64(i64::MAX).to_u64(), i64::MAX as u64);
+        assert_eq!(Size::from_i64(usize::MAX as i64).to_usize(), Some(usize::MAX));
+        assert!(Size::from_i64(i64::MAX).to_usize().is_none());
+    }
 
     #[test]
     fn test_error() {
