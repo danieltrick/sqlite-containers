@@ -17,8 +17,8 @@ fn main() {
 
     let mut hex = HexEncoder::default();
 
-    let mut sqlite_set = SQLiteSet::new().expect("Failed to create SQLiteSet!");
-    let mut tx = sqlite_set.transaction().expect("Failed to init transaction!");
+    let mut sqlite_set = SQLiteSet::<String>::new().expect("Failed to create SQLiteSet!");
+    let mut tx = sqlite_set.transaction().expect("Failed to start transaction!");
 
     println!("Inserting elements, please wait...");
 

@@ -19,9 +19,14 @@ impl HexEncoder {
 
     #[inline]
     pub fn encode(&mut self, value: u64) -> &str {
+        unsafe { str::from_utf8_unchecked(self.encode_raw(value)) }
+    }
+
+    #[inline]
+    pub fn encode_raw(&mut self, value: u64) -> &[u8] {
         unsafe {
             encode_to_slice(slice::from_raw_parts(&value as *const u64 as *const u8, 8usize), &mut self.0).unwrap();
-            str::from_utf8_unchecked(&self.0)
+            &self.0
         }
     }
 }

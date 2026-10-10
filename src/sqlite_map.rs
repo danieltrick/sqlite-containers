@@ -2,10 +2,8 @@
 // This file is part of the 'SQLite-based containers for Rust' project (sqlite-containers)
 // SPDX-License-Identifier: Unlicense
 
-use rusqlite::OptionalExtension;
-
 use crate::common::{Error, Size, SizeExt, check_constraint_violation};
-use crate::rusqlite::{Connection, Transaction};
+use crate::rusqlite::{Connection, OptionalExtension, Transaction};
 
 // ---------------------------------------------------------------------------
 // Statements
@@ -29,13 +27,17 @@ const SQL_DELETE_ALL: &str = "DELETE FROM data;";
 // SQLiteMap
 // ---------------------------------------------------------------------------
 
-/// A [hash map](https://doc.rust-lang.org/std/collections/struct.HashMap.html) with [string](https://doc.rust-lang.org/beta/std/string/struct.String.html) keys and values, backed by an SQLite in-memory database.
+/// A [map](https://en.wikipedia.org/wiki/Associative_array) that stores key-value pairs with keys of type [`K`](crate::Type) and values of type [`V`](crate::Type), backed by an SQLite in-memory database.
 ///
-/// By default, `SQLiteMap` treats its keys as case-sensitive, but a case-insensitive variant is available. Even when using the case-sensitive map variant, for some operations a dedicated "case-insensitive" version is provided.
+/// It serves as a drop-in replacement for [`HashMap`](std::collections::HashMap).
+///
+/// By default, `SQLiteMap<String>` treats its keys as case-sensitive, but a case-insensitive variant is available. Even when using the case-sensitive map variant, for some operations a dedicated "case-insensitive" version is provided.
+///
+/// &nbsp;
 ///
 /// <div class="warning">
 ///
-/// **Important:** For bulk inserts or updates, it is **strongly recommended** to use an explicit [transaction](Self::transaction). Without one, SQLite executes each insert or update in its own transaction, which can significantly degrade performance.
+/// For bulk inserts or updates, it is **strongly recommended** to use an explicit [transaction](Self::transaction). Without one, SQLite executes each insert or update in its own transaction, which can significantly degrade performance.
 ///
 /// </div>
 pub struct SQLiteMap {
@@ -79,9 +81,9 @@ impl SQLiteMap {
         SQLiteMapTransaction::from(&mut self.connection)
     }
 
-    /// Tries to insert the given key-value pair into the map.
+    /// Inserts the given key-value pair into the map, if the specified key does *not* exist yet.
     ///
-    /// If the map already contains the specified key, then its associated value is **not** updated to the new value!
+    /// If the map already contains the specified key, then its associated value is **not** changed by this operation!
     ///
     /// Returns `true`, if the key-value pair was inserted; otherwise returns `false`.
     ///
@@ -95,11 +97,11 @@ impl SQLiteMap {
         }
     }
 
-    /// Associates the specified value with the specified key.
+    /// Associates the specified value with the specified key, regardless of whether the key already exists in the map.
     ///
     /// If the map does *not* already contain the specified key, then the key is inserted automatically.
     ///
-    /// Due to limitations in SQLite, it is *not* possible to determine whether the key-value pair was inserted or updated.
+    /// **Note:** Due to limitations in SQLite, it is *not* possible to determine whether the key was inserted or updated.
     #[inline]
     pub fn update(&mut self, key: &str, value: &str) -> Result<(), Error> {
         let mut update = self.connection.prepare_cached(SQL_UPSERT_KEY)?;

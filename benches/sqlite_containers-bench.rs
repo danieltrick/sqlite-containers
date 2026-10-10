@@ -108,7 +108,7 @@ fn bench_sqlite_set(c: &mut Criterion) {
 
     g.bench_function("insert_directly", |b| {
         b.iter(|| {
-            let mut sqlite_set = SQLiteSet::new().unwrap();
+            let mut sqlite_set = SQLiteSet::<String>::new().unwrap();
             for n in 0..TARGET_ITEM_COUNT {
                 assert!(black_box(sqlite_set.insert(hex.encode(black_box(mix64(n)))).unwrap()));
             }
@@ -117,7 +117,7 @@ fn bench_sqlite_set(c: &mut Criterion) {
 
     g.bench_function("insert_transact", |b| {
         b.iter(|| {
-            let mut sqlite_set = SQLiteSet::new().unwrap();
+            let mut sqlite_set = SQLiteSet::<String>::new().unwrap();
             let mut tx = sqlite_set.transaction().unwrap();
             for n in 0..TARGET_ITEM_COUNT {
                 assert!(black_box(tx.insert(hex.encode(black_box(mix64(n)))).unwrap()));
@@ -127,7 +127,7 @@ fn bench_sqlite_set(c: &mut Criterion) {
     });
 
     g.bench_function("lookup_directly", |b| {
-        let mut sqlite_set = SQLiteSet::new().unwrap();
+        let mut sqlite_set = SQLiteSet::<String>::new().unwrap();
         let mut tx = sqlite_set.transaction().unwrap();
         for n in 0..TARGET_ITEM_COUNT {
             assert!(black_box(tx.insert(hex.encode(black_box(mix64(n)))).unwrap()));
@@ -142,7 +142,7 @@ fn bench_sqlite_set(c: &mut Criterion) {
     });
 
     g.bench_function("lookup_transact", |b| {
-        let mut sqlite_set = SQLiteSet::new().unwrap();
+        let mut sqlite_set = SQLiteSet::<String>::new().unwrap();
         let mut tx = sqlite_set.transaction().unwrap();
         for n in 0..TARGET_ITEM_COUNT {
             assert!(black_box(tx.insert(hex.encode(black_box(mix64(n)))).unwrap()));
@@ -158,7 +158,7 @@ fn bench_sqlite_set(c: &mut Criterion) {
     });
 
     g.bench_function("length_directly", |b| {
-        let mut sqlite_set = SQLiteSet::new().unwrap();
+        let mut sqlite_set = SQLiteSet::<String>::new().unwrap();
         let mut tx = sqlite_set.transaction().unwrap();
         for n in 0..TARGET_ITEM_COUNT {
             assert!(black_box(tx.insert(hex.encode(black_box(mix64(n)))).unwrap()));
@@ -171,7 +171,7 @@ fn bench_sqlite_set(c: &mut Criterion) {
     });
 
     g.bench_function("length_transact", |b| {
-        let mut sqlite_set = SQLiteSet::new().unwrap();
+        let mut sqlite_set = SQLiteSet::<String>::new().unwrap();
         let mut tx = sqlite_set.transaction().unwrap();
         for n in 0..TARGET_ITEM_COUNT {
             assert!(black_box(tx.insert(hex.encode(black_box(mix64(n)))).unwrap()));

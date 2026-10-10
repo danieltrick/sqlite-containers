@@ -9,12 +9,214 @@ use sqlite_containers::{SQLiteSet, SizeExt};
 use std::collections::HashSet;
 
 // ---------------------------------------------------------------------------
-// SQLiteSet Tests
+// SQLiteSet<i64> Tests
 // ---------------------------------------------------------------------------
 
 #[test]
-fn test_sqlite_set() {
-    let mut set = SQLiteSet::default();
+fn test_sqlite_set_i64() {
+    let mut set = SQLiteSet::<i64>::new().unwrap();
+
+    assert_eq!(set.len().unwrap(), 0);
+    assert!(set.is_empty().unwrap());
+    assert!(!set.contains(&0i64).unwrap());
+    assert!(!set.contains(&42i64).unwrap());
+    assert!(!set.contains(&i64::MAX).unwrap());
+    assert!(!set.contains(&i64::MIN).unwrap());
+
+    assert!(set.insert(&0i64).unwrap());
+    assert!(set.insert(&42i64).unwrap());
+    assert!(!set.insert(&0i64).unwrap());
+    assert!(!set.insert(&42i64).unwrap());
+    assert!(set.insert(&i64::MAX).unwrap());
+    assert!(!set.insert(&i64::MAX).unwrap());
+
+    assert_eq!(set.len().unwrap(), 3);
+    assert!(!set.is_empty().unwrap());
+    assert!(set.contains(&0i64).unwrap());
+    assert!(set.contains(&42i64).unwrap());
+    assert!(set.contains(&i64::MAX).unwrap());
+    assert!(!set.contains(&i64::MIN).unwrap());
+
+    assert!(set.remove(&0i64).unwrap());
+    assert!(!set.remove(&0i64).unwrap());
+    assert!(set.remove(&42i64).unwrap());
+    assert!(!set.remove(&i64::MIN).unwrap());
+
+    assert_eq!(set.len().unwrap(), 1);
+    assert!(!set.is_empty().unwrap());
+    assert!(!set.contains(&0i64).unwrap());
+    assert!(!set.contains(&42i64).unwrap());
+    assert!(set.contains(&i64::MAX).unwrap());
+    assert!(!set.contains(&i64::MIN).unwrap());
+
+    assert!(set.insert(&i64::MIN).unwrap());
+    assert!(!set.insert(&i64::MIN).unwrap());
+    assert!(set.insert(&0i64).unwrap());
+    assert!(!set.insert(&0i64).unwrap());
+
+    assert_eq!(set.len().unwrap(), 3);
+    assert!(!set.is_empty().unwrap());
+    assert!(set.contains(&0i64).unwrap());
+    assert!(!set.contains(&42i64).unwrap());
+    assert!(set.contains(&i64::MAX).unwrap());
+    assert!(set.contains(&i64::MIN).unwrap());
+
+    {
+        let mut hash = HashSet::new();
+        set.for_each(|key| assert!(hash.insert(key.to_owned()))).unwrap();
+        assert_eq!(hash.len(), 3);
+        assert!(hash.contains(&0i64));
+        assert!(hash.contains(&i64::MAX));
+        assert!(hash.contains(&i64::MIN));
+    }
+
+    assert!(set.find(|item| item.eq(&0i64)).unwrap().is_some());
+    assert!(set.find(|item| item.eq(&42i64)).unwrap().is_none());
+    assert!(set.find(|item| item.eq(&i64::MAX)).unwrap().is_some());
+    assert!(set.find(|item| item.eq(&i64::MIN)).unwrap().is_some());
+
+    set.clear().unwrap();
+
+    assert_eq!(set.len().unwrap(), 0);
+    assert!(set.is_empty().unwrap());
+    assert!(!set.contains(&0i64).unwrap());
+    assert!(!set.contains(&42i64).unwrap());
+    assert!(!set.contains(&i64::MAX).unwrap());
+    assert!(!set.contains(&i64::MIN).unwrap());
+}
+
+#[test]
+fn test_sqlite_set_i64_transacted() {
+    let mut set = SQLiteSet::<i64>::new().unwrap();
+    let mut tx = set.transaction().unwrap();
+
+    assert_eq!(tx.len().unwrap(), 0);
+    assert!(tx.is_empty().unwrap());
+    assert!(!tx.contains(&0i64).unwrap());
+    assert!(!tx.contains(&42i64).unwrap());
+    assert!(!tx.contains(&i64::MAX).unwrap());
+    assert!(!tx.contains(&i64::MIN).unwrap());
+
+    assert!(tx.insert(&0i64).unwrap());
+    assert!(tx.insert(&42i64).unwrap());
+    assert!(!tx.insert(&0i64).unwrap());
+    assert!(!tx.insert(&42i64).unwrap());
+    assert!(tx.insert(&i64::MAX).unwrap());
+    assert!(!tx.insert(&i64::MAX).unwrap());
+
+    assert_eq!(tx.len().unwrap(), 3);
+    assert!(!tx.is_empty().unwrap());
+    assert!(tx.contains(&0i64).unwrap());
+    assert!(tx.contains(&42i64).unwrap());
+    assert!(tx.contains(&i64::MAX).unwrap());
+    assert!(!tx.contains(&i64::MIN).unwrap());
+
+    assert!(tx.remove(&0i64).unwrap());
+    assert!(!tx.remove(&0i64).unwrap());
+    assert!(tx.remove(&42i64).unwrap());
+    assert!(!tx.remove(&i64::MIN).unwrap());
+
+    assert_eq!(tx.len().unwrap(), 1);
+    assert!(!tx.is_empty().unwrap());
+    assert!(!tx.contains(&0i64).unwrap());
+    assert!(!tx.contains(&42i64).unwrap());
+    assert!(tx.contains(&i64::MAX).unwrap());
+    assert!(!tx.contains(&i64::MIN).unwrap());
+
+    assert!(tx.insert(&i64::MIN).unwrap());
+    assert!(!tx.insert(&i64::MIN).unwrap());
+    assert!(tx.insert(&0i64).unwrap());
+    assert!(!tx.insert(&0i64).unwrap());
+
+    assert_eq!(tx.len().unwrap(), 3);
+    assert!(!tx.is_empty().unwrap());
+    assert!(tx.contains(&0i64).unwrap());
+    assert!(!tx.contains(&42i64).unwrap());
+    assert!(tx.contains(&i64::MAX).unwrap());
+    assert!(tx.contains(&i64::MIN).unwrap());
+
+    {
+        let mut hash = HashSet::new();
+        tx.for_each(|key| assert!(hash.insert(key.to_owned()))).unwrap();
+        assert_eq!(hash.len(), 3);
+        assert!(hash.contains(&0i64));
+        assert!(hash.contains(&i64::MAX));
+        assert!(hash.contains(&i64::MIN));
+    }
+
+    assert!(tx.find(|item| item.eq(&0i64)).unwrap().is_some());
+    assert!(tx.find(|item| item.eq(&42i64)).unwrap().is_none());
+    assert!(tx.find(|item| item.eq(&i64::MAX)).unwrap().is_some());
+    assert!(tx.find(|item| item.eq(&i64::MIN)).unwrap().is_some());
+
+    tx.clear().unwrap();
+
+    assert_eq!(tx.len().unwrap(), 0);
+    assert!(tx.is_empty().unwrap());
+    assert!(!tx.contains(&0i64).unwrap());
+    assert!(!tx.contains(&42i64).unwrap());
+    assert!(!tx.contains(&i64::MAX).unwrap());
+    assert!(!tx.contains(&i64::MIN).unwrap());
+
+    assert!(tx.insert(&0i64).unwrap());
+    assert!(tx.insert(&42i64).unwrap());
+
+    tx.commit();
+
+    assert_eq!(set.len().unwrap(), 2);
+    assert!(!set.is_empty().unwrap());
+    assert!(set.contains(&0i64).unwrap());
+    assert!(set.contains(&42i64).unwrap());
+    assert!(!set.contains(&i64::MAX).unwrap());
+    assert!(!set.contains(&i64::MIN).unwrap());
+}
+
+#[test]
+fn test_sqlite_set_i64_stresstest() {
+    let mut set = SQLiteSet::<i64>::new().unwrap();
+    const MAX_ITEMS: u64 = 1_000_000u64;
+
+    {
+        let mut tx = set.transaction().unwrap();
+        for i in 0u64..MAX_ITEMS {
+            assert!(tx.insert(&(mix64(i) as i64)).unwrap());
+        }
+    }
+
+    assert!(!set.is_empty().unwrap());
+    assert_eq!(set.len().unwrap().to_u64(), MAX_ITEMS);
+
+    {
+        let tx = set.transaction().unwrap();
+        for i in 0u64..MAX_ITEMS {
+            assert!(tx.contains(&(mix64(i) as i64)).unwrap());
+            assert!(!tx.contains(&(mix64(MAX_ITEMS.checked_add(i).unwrap()) as i64)).unwrap());
+        }
+    }
+
+    assert!(!set.is_empty().unwrap());
+    assert_eq!(set.len().unwrap().to_u64(), MAX_ITEMS);
+
+    {
+        let mut tx = set.transaction().unwrap();
+        for i in 0u64..MAX_ITEMS {
+            assert!(tx.remove(&(mix64(i) as i64)).unwrap());
+        }
+        for i in 0u64..MAX_ITEMS {
+            assert!(!tx.remove(&(mix64(i) as i64)).unwrap());
+        }
+    }
+
+    assert!(set.is_empty().unwrap());
+}
+
+// ---------------------------------------------------------------------------
+// SQLiteSet<String> Tests
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_sqlite_set_string() {
+    let mut set = SQLiteSet::<String>::new().unwrap();
 
     assert_eq!(set.len().unwrap(), 0);
     assert!(set.is_empty().unwrap());
@@ -101,8 +303,8 @@ fn test_sqlite_set() {
 }
 
 #[test]
-fn test_sqlite_set_transacted() {
-    let mut set = SQLiteSet::new().unwrap();
+fn test_sqlite_set_string_transacted() {
+    let mut set = SQLiteSet::<String>::new().unwrap();
     let mut tx = set.transaction().unwrap();
 
     assert_eq!(tx.len().unwrap(), 0);
@@ -202,9 +404,9 @@ fn test_sqlite_set_transacted() {
 }
 
 #[test]
-fn test_sqlite_set_ignorecase() {
-    let mut set_1 = SQLiteSet::new().unwrap();
-    let mut set_2 = SQLiteSet::with_nocase().unwrap();
+fn test_sqlite_set_string_ignorecase() {
+    let mut set_1 = SQLiteSet::<String>::new().unwrap();
+    let mut set_2 = SQLiteSet::<String>::with_nocase().unwrap();
 
     assert!(set_1.insert("foo").unwrap());
     assert!(set_1.insert("FOO").unwrap());
@@ -239,8 +441,8 @@ fn test_sqlite_set_ignorecase() {
 }
 
 #[test]
-fn test_sqlite_set_stresstest() {
-    let mut set = SQLiteSet::new().unwrap();
+fn test_sqlite_set_string_stresstest() {
+    let mut set = SQLiteSet::<String>::new().unwrap();
     let mut hex = HexEncoder::default();
     const MAX_ITEMS: u64 = 1_000_000u64;
 
@@ -272,6 +474,223 @@ fn test_sqlite_set_stresstest() {
         }
         for i in 0u64..MAX_ITEMS {
             assert!(!tx.remove(hex.encode(mix64(i))).unwrap());
+        }
+    }
+
+    assert!(set.is_empty().unwrap());
+}
+
+// ---------------------------------------------------------------------------
+// SQLiteSet<Vec<u8>> Tests
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_sqlite_set_blob() {
+    let mut set = SQLiteSet::<Vec<u8>>::new().unwrap();
+
+    assert_eq!(set.len().unwrap(), 0);
+    assert!(set.is_empty().unwrap());
+    assert!(!set.contains(b"foo").unwrap());
+    assert!(!set.contains(b"bar").unwrap());
+    assert!(!set.contains(b"baz").unwrap());
+    assert!(!set.contains(b"qux").unwrap());
+
+    assert!(set.insert(b"foo").unwrap());
+    assert!(set.insert(b"bar").unwrap());
+    assert!(!set.insert(b"foo").unwrap());
+    assert!(!set.insert(b"bar").unwrap());
+    assert!(set.insert(b"baz").unwrap());
+    assert!(!set.insert(b"baz").unwrap());
+
+    assert_eq!(set.len().unwrap(), 3);
+    assert!(!set.is_empty().unwrap());
+    assert!(set.contains(b"foo").unwrap());
+    assert!(!set.contains(b"FOO").unwrap());
+    assert!(set.contains(b"bar").unwrap());
+    assert!(!set.contains(b"BAR").unwrap());
+    assert!(set.contains(b"baz").unwrap());
+    assert!(!set.contains(b"BAZ").unwrap());
+    assert!(!set.contains(b"qux").unwrap());
+
+    assert!(set.remove(b"foo").unwrap());
+    assert!(!set.remove(b"foo").unwrap());
+    assert!(!set.remove(b"BAR").unwrap());
+    assert!(set.remove(b"bar").unwrap());
+    assert!(!set.remove(b"qux").unwrap());
+
+    assert_eq!(set.len().unwrap(), 1);
+    assert!(!set.is_empty().unwrap());
+    assert!(!set.contains(b"foo").unwrap());
+    assert!(!set.contains(b"bar").unwrap());
+    assert!(set.contains(b"baz").unwrap());
+    assert!(!set.contains(b"BAZ").unwrap());
+    assert!(!set.contains(b"qux").unwrap());
+
+    assert!(set.insert(b"qux").unwrap());
+    assert!(!set.insert(b"qux").unwrap());
+    assert!(set.insert(b"foo").unwrap());
+    assert!(!set.insert(b"foo").unwrap());
+
+    assert_eq!(set.len().unwrap(), 3);
+    assert!(!set.is_empty().unwrap());
+    assert!(set.contains(b"foo").unwrap());
+    assert!(!set.contains(b"FOO").unwrap());
+    assert!(!set.contains(b"bar").unwrap());
+    assert!(set.contains(b"baz").unwrap());
+    assert!(!set.contains(b"BAZ").unwrap());
+    assert!(set.contains(b"qux").unwrap());
+    assert!(!set.contains(b"QUX").unwrap());
+
+    {
+        let mut hash = HashSet::new();
+        set.for_each(|key| assert!(hash.insert(key.to_owned()))).unwrap();
+        assert_eq!(hash.len(), 3);
+        assert!(hash.contains(b"foo".as_slice()));
+        assert!(hash.contains(b"baz".as_slice()));
+        assert!(hash.contains(b"qux".as_slice()));
+    }
+
+    assert!(set.find(|item| item.eq(b"foo")).unwrap().is_some());
+    assert!(set.find(|item| item.eq_ignore_ascii_case(b"FOO")).unwrap().is_some());
+    assert!(set.find(|item| item.eq(b"bar")).unwrap().is_none());
+
+    set.clear().unwrap();
+
+    assert_eq!(set.len().unwrap(), 0);
+    assert!(set.is_empty().unwrap());
+    assert!(!set.contains(b"foo").unwrap());
+    assert!(!set.contains(b"bar").unwrap());
+    assert!(!set.contains(b"baz").unwrap());
+    assert!(!set.contains(b"qux").unwrap());
+}
+
+#[test]
+fn test_sqlite_set_blob_transacted() {
+    let mut set = SQLiteSet::<Vec<u8>>::new().unwrap();
+    let mut tx = set.transaction().unwrap();
+
+    assert_eq!(tx.len().unwrap(), 0);
+    assert!(tx.is_empty().unwrap());
+    assert!(!tx.contains(b"foo").unwrap());
+    assert!(!tx.contains(b"bar").unwrap());
+    assert!(!tx.contains(b"baz").unwrap());
+    assert!(!tx.contains(b"qux").unwrap());
+
+    assert!(tx.insert(b"foo").unwrap());
+    assert!(tx.insert(b"bar").unwrap());
+    assert!(!tx.insert(b"foo").unwrap());
+    assert!(!tx.insert(b"bar").unwrap());
+    assert!(tx.insert(b"baz").unwrap());
+    assert!(!tx.insert(b"baz").unwrap());
+
+    assert_eq!(tx.len().unwrap(), 3);
+    assert!(!tx.is_empty().unwrap());
+    assert!(tx.contains(b"foo").unwrap());
+    assert!(!tx.contains(b"FOO").unwrap());
+    assert!(tx.contains(b"bar").unwrap());
+    assert!(!tx.contains(b"BAR").unwrap());
+    assert!(tx.contains(b"baz").unwrap());
+    assert!(!tx.contains(b"BAZ").unwrap());
+    assert!(!tx.contains(b"qux").unwrap());
+
+    assert!(tx.remove(b"foo").unwrap());
+    assert!(!tx.remove(b"foo").unwrap());
+    assert!(!tx.remove(b"BAR").unwrap());
+    assert!(tx.remove(b"bar").unwrap());
+    assert!(!tx.remove(b"qux").unwrap());
+
+    assert_eq!(tx.len().unwrap(), 1);
+    assert!(!tx.is_empty().unwrap());
+    assert!(!tx.contains(b"foo").unwrap());
+    assert!(!tx.contains(b"bar").unwrap());
+    assert!(tx.contains(b"baz").unwrap());
+    assert!(!tx.contains(b"BAZ").unwrap());
+    assert!(!tx.contains(b"qux").unwrap());
+
+    assert!(tx.insert(b"qux").unwrap());
+    assert!(!tx.insert(b"qux").unwrap());
+    assert!(tx.insert(b"foo").unwrap());
+    assert!(!tx.insert(b"foo").unwrap());
+
+    assert_eq!(tx.len().unwrap(), 3);
+    assert!(!tx.is_empty().unwrap());
+    assert!(tx.contains(b"foo").unwrap());
+    assert!(!tx.contains(b"FOO").unwrap());
+    assert!(!tx.contains(b"bar").unwrap());
+    assert!(tx.contains(b"baz").unwrap());
+    assert!(!tx.contains(b"BAZ").unwrap());
+    assert!(tx.contains(b"qux").unwrap());
+    assert!(!tx.contains(b"QUX").unwrap());
+
+    {
+        let mut hash = HashSet::new();
+        tx.for_each(|key| assert!(hash.insert(key.to_owned()))).unwrap();
+        assert_eq!(hash.len(), 3);
+        assert!(hash.contains(b"foo".as_slice()));
+        assert!(hash.contains(b"baz".as_slice()));
+        assert!(hash.contains(b"qux".as_slice()));
+    }
+
+    assert!(tx.find(|item| item.eq(b"foo")).unwrap().is_some());
+    assert!(tx.find(|item| item.eq_ignore_ascii_case(b"FOO")).unwrap().is_some());
+    assert!(tx.find(|item| item.eq(b"bar")).unwrap().is_none());
+
+    tx.clear().unwrap();
+
+    assert_eq!(tx.len().unwrap(), 0);
+    assert!(tx.is_empty().unwrap());
+    assert!(!tx.contains(b"foo").unwrap());
+    assert!(!tx.contains(b"bar").unwrap());
+    assert!(!tx.contains(b"baz").unwrap());
+    assert!(!tx.contains(b"qux").unwrap());
+
+    assert!(tx.insert(b"foo").unwrap());
+    assert!(tx.insert(b"bar").unwrap());
+
+    tx.commit();
+
+    assert_eq!(set.len().unwrap(), 2);
+    assert!(!set.is_empty().unwrap());
+    assert!(set.contains(b"foo").unwrap());
+    assert!(set.contains(b"bar").unwrap());
+    assert!(!set.contains(b"baz").unwrap());
+    assert!(!set.contains(b"qux").unwrap());
+}
+
+#[test]
+fn test_sqlite_set_blob_stresstest() {
+    let mut set = SQLiteSet::<Vec<u8>>::new().unwrap();
+    let mut hex = HexEncoder::default();
+    const MAX_ITEMS: u64 = 1_000_000u64;
+
+    {
+        let mut tx = set.transaction().unwrap();
+        for i in 0u64..MAX_ITEMS {
+            assert!(tx.insert(hex.encode_raw(mix64(i))).unwrap());
+        }
+    }
+
+    assert!(!set.is_empty().unwrap());
+    assert_eq!(set.len().unwrap().to_u64(), MAX_ITEMS);
+
+    {
+        let tx = set.transaction().unwrap();
+        for i in 0u64..MAX_ITEMS {
+            assert!(tx.contains(hex.encode_raw(mix64(i))).unwrap());
+            assert!(!tx.contains(hex.encode_raw(mix64(MAX_ITEMS.checked_add(i).unwrap()))).unwrap());
+        }
+    }
+
+    assert!(!set.is_empty().unwrap());
+    assert_eq!(set.len().unwrap().to_u64(), MAX_ITEMS);
+
+    {
+        let mut tx = set.transaction().unwrap();
+        for i in 0u64..MAX_ITEMS {
+            assert!(tx.remove(hex.encode_raw(mix64(i))).unwrap());
+        }
+        for i in 0u64..MAX_ITEMS {
+            assert!(!tx.remove(hex.encode_raw(mix64(i))).unwrap());
         }
     }
 

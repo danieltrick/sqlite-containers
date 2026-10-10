@@ -2,9 +2,11 @@
 // This file is part of the SQLite-based containers for Rust project (sqlite-containers)
 // SPDX-License-Identifier: Unlicense
 
+use std::{fmt::Display, hash::Hash};
+
 use crate::rusqlite::{
     Error as RusqliteError, ErrorCode,
-    types::{FromSql, Type as RusqliteType},
+    types::{FromSql, ToSql, Type as RusqliteType},
 };
 
 // ---------------------------------------------------------------------------
@@ -21,60 +23,115 @@ macro_rules! impl_sealed {
     };
 }
 
-impl_sealed!(i64, String, Vec<u8>);
+impl_sealed!(i32, u32, i64, String, Vec<u8>);
+
+// ---------------------------------------------------------------------------
+// SQL Type Holder
+// ---------------------------------------------------------------------------
+
+#[derive(Eq, PartialEq, Copy, Clone)]
+pub struct SqlType(RusqliteType);
+
+impl SqlType {
+    #[inline]
+    pub const fn new(value: RusqliteType) -> Self {
+        Self(value)
+    }
+}
+
+impl Hash for SqlType {
+    #[inline]
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        (self.0 as usize).hash(state);
+    }
+}
+
+impl Display for SqlType {
+    #[inline]
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0.to_string().to_ascii_uppercase())
+    }
+}
+
+pub static SQL_TYPES: [SqlType; 3usize] = [SqlType::new(RusqliteType::Integer), SqlType::new(RusqliteType::Text), SqlType::new(RusqliteType::Blob)];
 
 // ---------------------------------------------------------------------------
 // Key or Value Type
 // ---------------------------------------------------------------------------
 
+/// The type of the keys or values that are stored in an [`SQLiteMap`](crate::SQLiteMap) or an [`SQLiteSet`](crate::SQLiteSet).
+///
+/// Currently, the following types are supported:
+///
+/// Type          | Reference type | SQLite storage datatype
+/// ------------- | -------------- | -----------------------
+/// **`i32`**     | `&i32`         | `INTEGER`
+/// **`u32`**     | `&u32`         | `INTEGER`
+/// **`i64`**     | `&i64`         | `INTEGER`
+/// **`Vec<u8>`** | `&[u8]`        | `BLOB`
+/// **`String`**  | `&str`         | `TEXT`
+///
+/// &nbsp;
+///
+/// <div class="warning">
+///
+/// Type `u64` is **not** currently supported directly, because SQLite's `INTEGER` datatype is (at most) 64-Bit in size and is *always* signed; it can **not** store values greater than `i64::MAX`. To store `u64` keys or values, please use `value as i64` to convert the keys or value to `i64` before insertion. This can be reverted, after a key or value has been read, with `value as u64`.
+///
+/// </div>
 #[allow(private_bounds)]
-pub trait Type: FromSql + Sealed {
-    type RefType<'a>;
-    const SQL_TYPE: RusqliteType;
+pub trait Type: FromSql + ToSql + Sealed {
+    /// The corresponding type that is used for references.
+    type RefType: ?Sized + ToSql;
+    /// The corresponding SQLite storage data type.
+    const SQL_TYPE: SqlType;
+    /// Converts from `&Self` to the an `&RefType` reference.
+    fn as_ref(&self) -> &Self::RefType;
 }
 
-macro_rules! impl_sqlite_types {
-    ($( $type:ty => ($ref_type:ty, $sql_type:expr) );* $(;)?) => {
-        $(
-            impl Type for $type {
-                type RefType<'a> = $ref_type;
-                const SQL_TYPE: RusqliteType = $sql_type;
+macro_rules! impl_type {
+    ($ty:ty, $ref_ty:ty, $sql_ty:ident) => {
+        impl Type for $ty {
+            type RefType = $ref_ty;
+            const SQL_TYPE: SqlType = SqlType::new(RusqliteType::$sql_ty);
+            #[inline(always)]
+            fn as_ref(&self) -> &Self::RefType {
+                self
             }
+        }
+    };
+    ($ty:ty, $ref_ty:ty, $sql_ty:ident, $as_ref:ident) => {
+        impl Type for $ty {
+            type RefType = $ref_ty;
+            const SQL_TYPE: SqlType = SqlType::new(RusqliteType::$sql_ty);
+            #[inline(always)]
+            fn as_ref(&self) -> &Self::RefType {
+                self.$as_ref()
+            }
+        }
+    };
+}
+
+impl_type!(i32, i32, Integer);
+impl_type!(u32, u32, Integer);
+impl_type!(i64, i64, Integer);
+impl_type!(Vec<u8>, [u8], Blob, as_slice);
+impl_type!(String, str, Text, as_str);
+
+// ---------------------------------------------------------------------------
+// Character-based Types
+// ---------------------------------------------------------------------------
+
+pub trait CharType {}
+
+macro_rules! impl_chartype {
+    ($($t:ty),*) => {
+        $(
+            impl CharType for $t {}
         )*
     };
 }
 
-impl_sqlite_types!(
-    i64 => (i64, RusqliteType::Integer);
-    Vec<u8> => (&'a [u8], RusqliteType::Blob);
-    String => (&'a str, RusqliteType::Text);
-);
-
-// struct Test<T> {
-//     _type: PhantomData<T>,
-// }
-
-// impl<T> Test<T>
-// where
-//     T: Type,
-// {
-//     pub fn new() -> Self {
-//         Self { _type: PhantomData }
-//     }
-
-//     pub fn something(&self, _param: T::RefType<'_>, row: &Row) -> T {
-//         row.get(0).unwrap()
-//     }
-// }
-
-// fn test() {
-//     let x: Test<String> = Test::new();
-//     let s: &str = "s";
-//     let _o = x.something(s, unsafe { mem::transmute::<*mut Row, &Row>(0 as *mut Row) });
-
-//     let y: Test<i64> = Test::new();
-//     let _o2 = y.something(32i64, unsafe { mem::transmute::<*mut Row, &Row>(0 as *mut Row) });
-// }
+impl_chartype!(String);
 
 // ---------------------------------------------------------------------------
 // Size Type
@@ -87,6 +144,7 @@ pub type Size = usize;
 #[cfg(not(target_pointer_width = "64"))]
 pub type Size = u64;
 
+/// Provides useful helper functions for the [`Size`](crate::Size) type.
 pub trait SizeExt {
     fn from_i64(value: i64) -> Self;
     fn from_u64(value: u64) -> Self;

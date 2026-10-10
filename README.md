@@ -9,9 +9,11 @@
 SQLite-based containers for Rust
 ================================
 
-**`sqlite-containers`** provides [*hash set*](https://doc.rust-lang.org/std/collections/struct.HashSet.html) and [*hash map*](https://doc.rust-lang.org/std/collections/struct.HashMap.html) implementations backed by in-memory **SQLite** databases.
+**`sqlite-containers`** provides [*map*](https://en.wikipedia.org/wiki/Associative_array) and [*set*](https://en.wikipedia.org/wiki/Set_(abstract_data_type)) implementations that are backed by **SQLite** [in-memory](https://www.sqlite.org/inmemorydb.html) databases.
 
-Leveraging the power of the SQLite engine, these containers can efficiently store billions of elements.
+Intended as drop-in replacements for [`HashMap`](std::collections::HashMap) and [`HashSet`](std::collections::HashSet).
+
+Leveraging the power of the SQLite engine, `sqlite-containers` efficiently store billions of elements &#x1F60E;
 
 
 Quick Start
@@ -20,20 +22,27 @@ Quick Start
 This example demonstrates how to use **`SQLiteSet`**:
 
 ```rust
-fn main() {
-    let mut sqlite_set = SQLiteSet::new().expect("Failed to create SQLiteSet!");
-    let mut tx = sqlite_set.transaction().expect("Failed to init transaction!");
+use sqlite_containers::SQLiteSet;
 
-    println!("Inserting elements, please wait...");
+let mut sqlite_set = SQLiteSet::<String>::new().expect("Failed to create SQLiteSet!");
+let mut tx = sqlite_set.transaction().expect("Failed to start transaction!");
 
-    for n in 0..100_000_000u64 {
-        tx.insert(&format!("{:016X}", mix64(n))).expect("Insertion failed!");
-    }
+println!("Inserting elements, please wait...");
 
-    tx.commit();
-    println!("{} element(s) succesfully inserted.", sqlite_set.len().unwrap());
+for n in 0..1_000_000u64 {
+    tx.insert(&format!("{:016X}", n)).expect("Insertion failed!");
 }
+
+tx.commit();
+println!("{} element(s) successfully inserted.", sqlite_set.len().unwrap());
 ```
+
+Documentation
+-------------
+
+For more details, please refer to the online documentation at:  
+<https://docs.rs/sqlite-containers/latest/>
+
 
 Acknowledgement
 ---------------
