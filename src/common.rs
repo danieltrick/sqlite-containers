@@ -2,7 +2,79 @@
 // This file is part of the SQLite-based containers for Rust project (sqlite-containers)
 // SPDX-License-Identifier: Unlicense
 
-use crate::rusqlite::{Error as RusqliteError, ErrorCode};
+use crate::rusqlite::{
+    Error as RusqliteError, ErrorCode,
+    types::{FromSql, Type as RusqliteType},
+};
+
+// ---------------------------------------------------------------------------
+// Sealed Type
+// ---------------------------------------------------------------------------
+
+trait Sealed {}
+
+macro_rules! impl_sealed {
+    ($($t:ty),*) => {
+        $(
+            impl Sealed for $t {}
+        )*
+    };
+}
+
+impl_sealed!(i64, String, Vec<u8>);
+
+// ---------------------------------------------------------------------------
+// Key or Value Type
+// ---------------------------------------------------------------------------
+
+#[allow(private_bounds)]
+pub trait Type: FromSql + Sealed {
+    type RefType<'a>;
+    const SQL_TYPE: RusqliteType;
+}
+
+macro_rules! impl_sqlite_types {
+    ($( $type:ty => ($ref_type:ty, $sql_type:expr) );* $(;)?) => {
+        $(
+            impl Type for $type {
+                type RefType<'a> = $ref_type;
+                const SQL_TYPE: RusqliteType = $sql_type;
+            }
+        )*
+    };
+}
+
+impl_sqlite_types!(
+    i64 => (i64, RusqliteType::Integer);
+    Vec<u8> => (&'a [u8], RusqliteType::Blob);
+    String => (&'a str, RusqliteType::Text);
+);
+
+// struct Test<T> {
+//     _type: PhantomData<T>,
+// }
+
+// impl<T> Test<T>
+// where
+//     T: Type,
+// {
+//     pub fn new() -> Self {
+//         Self { _type: PhantomData }
+//     }
+
+//     pub fn something(&self, _param: T::RefType<'_>, row: &Row) -> T {
+//         row.get(0).unwrap()
+//     }
+// }
+
+// fn test() {
+//     let x: Test<String> = Test::new();
+//     let s: &str = "s";
+//     let _o = x.something(s, unsafe { mem::transmute::<*mut Row, &Row>(0 as *mut Row) });
+
+//     let y: Test<i64> = Test::new();
+//     let _o2 = y.something(32i64, unsafe { mem::transmute::<*mut Row, &Row>(0 as *mut Row) });
+// }
 
 // ---------------------------------------------------------------------------
 // Size Type
