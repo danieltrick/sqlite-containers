@@ -7,6 +7,7 @@ use crate::{
     common::{SQL_TYPE_TEXT, SQL_TYPES, SqlType, check_constraint_violation},
     rusqlite::{Connection, OptionalExtension, ToSql, Transaction, params},
 };
+use cfg_if::cfg_if;
 use std::{borrow::Borrow, collections::BTreeMap, marker::PhantomData, sync::LazyLock};
 
 // ---------------------------------------------------------------------------
@@ -15,12 +16,15 @@ use std::{borrow::Borrow, collections::BTreeMap, marker::PhantomData, sync::Lazy
 
 static SQL_CREATE_TBL: LazyLock<BTreeMap<(SqlType, SqlType), String>> = LazyLock::new(|| {
     let mut map = BTreeMap::<(SqlType, SqlType), String>::new();
-    for key_type in SQL_TYPES {
-        for value_type in SQL_TYPES {
-            map.insert(
-                (key_type, value_type),
-                format!("CREATE TABLE data (key {} PRIMARY KEY NOT NULL, value {} NOT NULL) WITHOUT ROWID;", key_type, value_type),
-            );
+    for key_tp in SQL_TYPES {
+        for value_tp in SQL_TYPES {
+            cfg_if! {
+                if #[cfg(feature = "with_rowid")] {
+                    map.insert((key_tp, value_tp), format!("CREATE TABLE data (key {} PRIMARY KEY NOT NULL, value {} NOT NULL);", key_tp, value_tp));
+                } else {
+                    map.insert((key_tp, value_tp), format!("CREATE TABLE data (key {} PRIMARY KEY NOT NULL, value {} NOT NULL) WITHOUT ROWID;", key_tp, value_tp));
+                }
+            }
         }
     }
     map
@@ -29,7 +33,13 @@ static SQL_CREATE_TBL: LazyLock<BTreeMap<(SqlType, SqlType), String>> = LazyLock
 static SQL_CREATE_NOC: LazyLock<BTreeMap<SqlType, String>> = LazyLock::new(|| {
     let mut map = BTreeMap::<SqlType, String>::new();
     for value_type in SQL_TYPES {
-        map.insert(value_type, format!("CREATE TABLE data (key TEXT PRIMARY KEY NOT NULL COLLATE NOCASE, value {} NOT NULL) WITHOUT ROWID;", value_type));
+        cfg_if! {
+            if #[cfg(feature = "with_rowid")] {
+                map.insert(value_type, format!("CREATE TABLE data (key TEXT PRIMARY KEY NOT NULL COLLATE NOCASE, value {} NOT NULL);", value_type));
+            } else {
+                map.insert(value_type, format!("CREATE TABLE data (key TEXT PRIMARY KEY NOT NULL COLLATE NOCASE, value {} NOT NULL) WITHOUT ROWID;", value_type));
+            }
+        }
     }
     map
 });

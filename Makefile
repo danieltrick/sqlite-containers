@@ -26,6 +26,7 @@ build:
 test:
 	cargo test --locked
 	cargo test --locked --release
+	cargo test --locked --release --features with_rowid
 
 run: $(EXAMPLES)
 $(EXAMPLES):

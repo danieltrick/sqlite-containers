@@ -12,9 +12,10 @@ readme = "README-package.md"
 [features]
 default = ["bundled"]
 bundled = ["rusqlite/bundled"]
+with_rowid = []
 
 [dependencies]
-rand = "0.10.3"
+cfg-if = "1.0.5"
 rusqlite = "0.40.2"
 
 [dev-dependencies]

@@ -7,6 +7,7 @@ use crate::{
     common::{SQL_TYPE_TEXT, SQL_TYPES, SqlType, check_constraint_violation},
     rusqlite::{Connection, ToSql, Transaction, params},
 };
+use cfg_if::cfg_if;
 use std::{borrow::Borrow, collections::BTreeMap, marker::PhantomData, sync::LazyLock};
 
 // ---------------------------------------------------------------------------
@@ -16,12 +17,25 @@ use std::{borrow::Borrow, collections::BTreeMap, marker::PhantomData, sync::Lazy
 static SQL_CREATE_TBL: LazyLock<BTreeMap<SqlType, String>> = LazyLock::new(|| {
     let mut map = BTreeMap::<SqlType, String>::new();
     for sql_type in SQL_TYPES {
-        map.insert(sql_type, format!("CREATE TABLE data (key {} PRIMARY KEY NOT NULL) WITHOUT ROWID;", sql_type));
+        cfg_if! {
+            if #[cfg(feature = "with_rowid")] {
+                map.insert(sql_type, format!("CREATE TABLE data (key {} PRIMARY KEY NOT NULL);", sql_type));
+            } else {
+                map.insert(sql_type, format!("CREATE TABLE data (key {} PRIMARY KEY NOT NULL) WITHOUT ROWID;", sql_type));
+            }
+        }
     }
     map
 });
 
-const SQL_CREATE_NOC: &str = "CREATE TABLE data (key TEXT PRIMARY KEY NOT NULL COLLATE NOCASE) WITHOUT ROWID;";
+cfg_if! {
+    if #[cfg(feature = "with_rowid")] {
+        const SQL_CREATE_NOC: &str = "CREATE TABLE data (key TEXT PRIMARY KEY NOT NULL COLLATE NOCASE);";
+    } else {
+        const SQL_CREATE_NOC: &str = "CREATE TABLE data (key TEXT PRIMARY KEY NOT NULL COLLATE NOCASE) WITHOUT ROWID;";
+    }
+}
+
 const SQL_COUNT_KEYS: &str = "SELECT COUNT(*) FROM data;";
 const SQL_INSERT_KEY: &str = "INSERT INTO data (key) VALUES (?1);";
 const SQL_EXISTS_KEY: &str = "SELECT 1 FROM data WHERE key = ? LIMIT 1;";

@@ -6,6 +6,7 @@ use crate::rusqlite::{
     Error as RusqliteError, ErrorCode,
     types::{FromSql, ToSql, Type as RusqliteType},
 };
+use cfg_if::cfg_if;
 use std::fmt::Display;
 
 /// Binary Large Object (BLOB), represented as a [`Vec<u8>`](std::vec::Vec).
@@ -131,12 +132,15 @@ impl_chartype!(String);
 // Size Type
 // ---------------------------------------------------------------------------
 
-/// The "size" type used by [`len()`](crate::SQLiteSet::len), equal to `usize` on this platform.
-#[cfg(target_pointer_width = "64")]
-pub type Size = usize;
-/// The "size" type used by [`len()`](crate::SQLiteSet::len), equal to `u64` on this platform.
-#[cfg(not(target_pointer_width = "64"))]
-pub type Size = u64;
+cfg_if! {
+    if #[cfg(target_pointer_width = "64")] {
+        /// The "size" type used by [`len()`](crate::SQLiteSet::len), equal to `usize` on this platform.
+        pub type Size = usize;
+    } else {
+        /// The "size" type used by [`len()`](crate::SQLiteSet::len), equal to `u64` on this platform.
+        pub type Size = u64;
+    }
+}
 
 /// Provides useful helper functions for the [`Size`](crate::Size) type.
 pub trait SizeExt {
@@ -163,16 +167,15 @@ impl SizeExt for Size {
         self as u64
     }
 
-    #[cfg(target_pointer_width = "64")]
     #[inline(always)]
     fn to_usize(self) -> Option<usize> {
-        Some(self)
-    }
-
-    #[cfg(not(target_pointer_width = "64"))]
-    #[inline(always)]
-    fn to_usize(self) -> Option<usize> {
-        self.try_into().ok()
+        cfg_if! {
+            if #[cfg(target_pointer_width = "64")] {
+                Some(self)
+            } else {
+                self.try_into().ok()
+            }
+        }
     }
 }
 

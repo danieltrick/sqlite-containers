@@ -46,9 +46,13 @@
 //!
 //! #### Features
 //!
-//! The `bundled` feature, which is enabled by default, automatically compiles and links in an up to date version of SQLite for you. This avoids many common build issues, and avoids depending on the version of SQLite on the users system.
+//! * The **`bundled`** feature, which is *enabled* by default, automatically compiles and links in an up to date version of SQLite for you. This avoids many common build issues, and avoids depending on the version of SQLite on the users system.
 //!
-//! Use `default-features = false`, if you want to disable this default behavior and use the "system" SQLite library instead.
+//!   Use `default-features = false`, if you want to disable this default behavior and instead use the "system" SQLite library.
+//!
+//! * The **`with_rowid`** feature, which is *disabled* by default, prevents `sqlite-containers` from using the [`WITHOUT ROWID`](https://www.sqlite.org/withoutrowid.html) optimization, allowing SQLite to implicitly create the special "rowid" column. By default, i.e., if the `with_rowid` feature is **not** explicitly enabled, `WITHOUT ROWID` *will* be used and thus the creation of a "rowid" column is suppressed.
+//!
+//!   Please note that, in most cases, using the `WITHOUT ROWID` optimization (the default) should improve the performance. This means that enabling the `with_rowid` feature is **not** normally recommended! Nonetheless, there are situations where `with_rowid` can actually be beneficial, so it is definitely worth trying for fine-tuning the performance of your application.
 //!
 //! Acknowledgement
 //! ---------------
