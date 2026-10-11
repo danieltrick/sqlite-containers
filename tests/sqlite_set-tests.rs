@@ -281,16 +281,16 @@ fn test_sqlite_set_string() {
 
     {
         let mut hash = HashSet::new();
-        set.for_each(|key| assert!(hash.insert(key.to_owned()))).unwrap();
+        set.for_each(|key| assert!(hash.insert(key))).unwrap();
         assert_eq!(hash.len(), 3);
         assert!(hash.contains("foo"));
         assert!(hash.contains("baz"));
         assert!(hash.contains("qux"));
     }
 
-    assert!(set.find(|item| item.eq("foo")).unwrap().is_some());
-    assert!(set.find(|item| item.eq_ignore_ascii_case("FOO")).unwrap().is_some());
-    assert!(set.find(|item| item.eq("bar")).unwrap().is_none());
+    assert!(set.find(|item: &str| item.eq("foo")).unwrap().is_some());
+    assert!(set.find(|item: &str| item.eq_ignore_ascii_case("FOO")).unwrap().is_some());
+    assert!(set.find(|item: &str| item.eq("bar")).unwrap().is_none());
 
     set.clear().unwrap();
 
@@ -370,16 +370,16 @@ fn test_sqlite_set_string_transacted() {
 
     {
         let mut hash = HashSet::new();
-        tx.for_each(|key| assert!(hash.insert(key.to_owned()))).unwrap();
+        tx.for_each(|key| assert!(hash.insert(key))).unwrap();
         assert_eq!(hash.len(), 3);
         assert!(hash.contains("foo"));
         assert!(hash.contains("baz"));
         assert!(hash.contains("qux"));
     }
 
-    assert!(tx.find(|item| item.eq("foo")).unwrap().is_some());
-    assert!(tx.find(|item| item.eq_ignore_ascii_case("FOO")).unwrap().is_some());
-    assert!(tx.find(|item| item.eq("bar")).unwrap().is_none());
+    assert!(tx.find(|item: &str| item.eq("foo")).unwrap().is_some());
+    assert!(tx.find(|item: &str| item.eq_ignore_ascii_case("FOO")).unwrap().is_some());
+    assert!(tx.find(|item: &str| item.eq("bar")).unwrap().is_none());
 
     tx.clear().unwrap();
 
@@ -490,78 +490,78 @@ fn test_sqlite_set_blob() {
 
     assert_eq!(set.len().unwrap(), 0);
     assert!(set.is_empty().unwrap());
-    assert!(!set.contains(b"foo").unwrap());
-    assert!(!set.contains(b"bar").unwrap());
-    assert!(!set.contains(b"baz").unwrap());
-    assert!(!set.contains(b"qux").unwrap());
+    assert!(!set.contains::<[u8]>(b"foo").unwrap());
+    assert!(!set.contains::<[u8]>(b"bar").unwrap());
+    assert!(!set.contains::<[u8]>(b"baz").unwrap());
+    assert!(!set.contains::<[u8]>(b"qux").unwrap());
 
-    assert!(set.insert(b"foo").unwrap());
-    assert!(set.insert(b"bar").unwrap());
-    assert!(!set.insert(b"foo").unwrap());
-    assert!(!set.insert(b"bar").unwrap());
-    assert!(set.insert(b"baz").unwrap());
-    assert!(!set.insert(b"baz").unwrap());
+    assert!(set.insert::<[u8]>(b"foo").unwrap());
+    assert!(set.insert::<[u8]>(b"bar").unwrap());
+    assert!(!set.insert::<[u8]>(b"foo").unwrap());
+    assert!(!set.insert::<[u8]>(b"bar").unwrap());
+    assert!(set.insert::<[u8]>(b"baz").unwrap());
+    assert!(!set.insert::<[u8]>(b"baz").unwrap());
 
     assert_eq!(set.len().unwrap(), 3);
     assert!(!set.is_empty().unwrap());
-    assert!(set.contains(b"foo").unwrap());
-    assert!(!set.contains(b"FOO").unwrap());
-    assert!(set.contains(b"bar").unwrap());
-    assert!(!set.contains(b"BAR").unwrap());
-    assert!(set.contains(b"baz").unwrap());
-    assert!(!set.contains(b"BAZ").unwrap());
-    assert!(!set.contains(b"qux").unwrap());
+    assert!(set.contains::<[u8]>(b"foo").unwrap());
+    assert!(!set.contains::<[u8]>(b"FOO").unwrap());
+    assert!(set.contains::<[u8]>(b"bar").unwrap());
+    assert!(!set.contains::<[u8]>(b"BAR").unwrap());
+    assert!(set.contains::<[u8]>(b"baz").unwrap());
+    assert!(!set.contains::<[u8]>(b"BAZ").unwrap());
+    assert!(!set.contains::<[u8]>(b"qux").unwrap());
 
-    assert!(set.remove(b"foo").unwrap());
-    assert!(!set.remove(b"foo").unwrap());
-    assert!(!set.remove(b"BAR").unwrap());
-    assert!(set.remove(b"bar").unwrap());
-    assert!(!set.remove(b"qux").unwrap());
+    assert!(set.remove::<[u8]>(b"foo").unwrap());
+    assert!(!set.remove::<[u8]>(b"foo").unwrap());
+    assert!(!set.remove::<[u8]>(b"BAR").unwrap());
+    assert!(set.remove::<[u8]>(b"bar").unwrap());
+    assert!(!set.remove::<[u8]>(b"qux").unwrap());
 
     assert_eq!(set.len().unwrap(), 1);
     assert!(!set.is_empty().unwrap());
-    assert!(!set.contains(b"foo").unwrap());
-    assert!(!set.contains(b"bar").unwrap());
-    assert!(set.contains(b"baz").unwrap());
-    assert!(!set.contains(b"BAZ").unwrap());
-    assert!(!set.contains(b"qux").unwrap());
+    assert!(!set.contains::<[u8]>(b"foo").unwrap());
+    assert!(!set.contains::<[u8]>(b"bar").unwrap());
+    assert!(set.contains::<[u8]>(b"baz").unwrap());
+    assert!(!set.contains::<[u8]>(b"BAZ").unwrap());
+    assert!(!set.contains::<[u8]>(b"qux").unwrap());
 
-    assert!(set.insert(b"qux").unwrap());
-    assert!(!set.insert(b"qux").unwrap());
-    assert!(set.insert(b"foo").unwrap());
-    assert!(!set.insert(b"foo").unwrap());
+    assert!(set.insert::<[u8]>(b"qux").unwrap());
+    assert!(!set.insert::<[u8]>(b"qux").unwrap());
+    assert!(set.insert::<[u8]>(b"foo").unwrap());
+    assert!(!set.insert::<[u8]>(b"foo").unwrap());
 
     assert_eq!(set.len().unwrap(), 3);
     assert!(!set.is_empty().unwrap());
-    assert!(set.contains(b"foo").unwrap());
-    assert!(!set.contains(b"FOO").unwrap());
-    assert!(!set.contains(b"bar").unwrap());
-    assert!(set.contains(b"baz").unwrap());
-    assert!(!set.contains(b"BAZ").unwrap());
-    assert!(set.contains(b"qux").unwrap());
-    assert!(!set.contains(b"QUX").unwrap());
+    assert!(set.contains::<[u8]>(b"foo").unwrap());
+    assert!(!set.contains::<[u8]>(b"FOO").unwrap());
+    assert!(!set.contains::<[u8]>(b"bar").unwrap());
+    assert!(set.contains::<[u8]>(b"baz").unwrap());
+    assert!(!set.contains::<[u8]>(b"BAZ").unwrap());
+    assert!(set.contains::<[u8]>(b"qux").unwrap());
+    assert!(!set.contains::<[u8]>(b"QUX").unwrap());
 
     {
         let mut hash = HashSet::new();
-        set.for_each(|key| assert!(hash.insert(key.to_owned()))).unwrap();
+        set.for_each(|key| assert!(hash.insert(key))).unwrap();
         assert_eq!(hash.len(), 3);
-        assert!(hash.contains(b"foo".as_slice()));
-        assert!(hash.contains(b"baz".as_slice()));
-        assert!(hash.contains(b"qux".as_slice()));
+        assert!(hash.contains::<[u8]>(b"foo"));
+        assert!(hash.contains::<[u8]>(b"baz"));
+        assert!(hash.contains::<[u8]>(b"qux"));
     }
 
-    assert!(set.find(|item| item.eq(b"foo")).unwrap().is_some());
-    assert!(set.find(|item| item.eq_ignore_ascii_case(b"FOO")).unwrap().is_some());
-    assert!(set.find(|item| item.eq(b"bar")).unwrap().is_none());
+    assert!(set.find(|item: &[u8]| item.eq(b"foo")).unwrap().is_some());
+    assert!(set.find(|item: &[u8]| item.eq_ignore_ascii_case(b"FOO")).unwrap().is_some());
+    assert!(set.find(|item: &[u8]| item.eq(b"bar")).unwrap().is_none());
 
     set.clear().unwrap();
 
     assert_eq!(set.len().unwrap(), 0);
     assert!(set.is_empty().unwrap());
-    assert!(!set.contains(b"foo").unwrap());
-    assert!(!set.contains(b"bar").unwrap());
-    assert!(!set.contains(b"baz").unwrap());
-    assert!(!set.contains(b"qux").unwrap());
+    assert!(!set.contains::<[u8]>(b"foo").unwrap());
+    assert!(!set.contains::<[u8]>(b"bar").unwrap());
+    assert!(!set.contains::<[u8]>(b"baz").unwrap());
+    assert!(!set.contains::<[u8]>(b"qux").unwrap());
 }
 
 #[test]
@@ -571,90 +571,90 @@ fn test_sqlite_set_blob_transacted() {
 
     assert_eq!(tx.len().unwrap(), 0);
     assert!(tx.is_empty().unwrap());
-    assert!(!tx.contains(b"foo").unwrap());
-    assert!(!tx.contains(b"bar").unwrap());
-    assert!(!tx.contains(b"baz").unwrap());
-    assert!(!tx.contains(b"qux").unwrap());
+    assert!(!tx.contains::<[u8]>(b"foo").unwrap());
+    assert!(!tx.contains::<[u8]>(b"bar").unwrap());
+    assert!(!tx.contains::<[u8]>(b"baz").unwrap());
+    assert!(!tx.contains::<[u8]>(b"qux").unwrap());
 
-    assert!(tx.insert(b"foo").unwrap());
-    assert!(tx.insert(b"bar").unwrap());
-    assert!(!tx.insert(b"foo").unwrap());
-    assert!(!tx.insert(b"bar").unwrap());
-    assert!(tx.insert(b"baz").unwrap());
-    assert!(!tx.insert(b"baz").unwrap());
+    assert!(tx.insert::<[u8]>(b"foo").unwrap());
+    assert!(tx.insert::<[u8]>(b"bar").unwrap());
+    assert!(!tx.insert::<[u8]>(b"foo").unwrap());
+    assert!(!tx.insert::<[u8]>(b"bar").unwrap());
+    assert!(tx.insert::<[u8]>(b"baz").unwrap());
+    assert!(!tx.insert::<[u8]>(b"baz").unwrap());
 
     assert_eq!(tx.len().unwrap(), 3);
     assert!(!tx.is_empty().unwrap());
-    assert!(tx.contains(b"foo").unwrap());
-    assert!(!tx.contains(b"FOO").unwrap());
-    assert!(tx.contains(b"bar").unwrap());
-    assert!(!tx.contains(b"BAR").unwrap());
-    assert!(tx.contains(b"baz").unwrap());
-    assert!(!tx.contains(b"BAZ").unwrap());
-    assert!(!tx.contains(b"qux").unwrap());
+    assert!(tx.contains::<[u8]>(b"foo").unwrap());
+    assert!(!tx.contains::<[u8]>(b"FOO").unwrap());
+    assert!(tx.contains::<[u8]>(b"bar").unwrap());
+    assert!(!tx.contains::<[u8]>(b"BAR").unwrap());
+    assert!(tx.contains::<[u8]>(b"baz").unwrap());
+    assert!(!tx.contains::<[u8]>(b"BAZ").unwrap());
+    assert!(!tx.contains::<[u8]>(b"qux").unwrap());
 
-    assert!(tx.remove(b"foo").unwrap());
-    assert!(!tx.remove(b"foo").unwrap());
-    assert!(!tx.remove(b"BAR").unwrap());
-    assert!(tx.remove(b"bar").unwrap());
-    assert!(!tx.remove(b"qux").unwrap());
+    assert!(tx.remove::<[u8]>(b"foo").unwrap());
+    assert!(!tx.remove::<[u8]>(b"foo").unwrap());
+    assert!(!tx.remove::<[u8]>(b"BAR").unwrap());
+    assert!(tx.remove::<[u8]>(b"bar").unwrap());
+    assert!(!tx.remove::<[u8]>(b"qux").unwrap());
 
     assert_eq!(tx.len().unwrap(), 1);
     assert!(!tx.is_empty().unwrap());
-    assert!(!tx.contains(b"foo").unwrap());
-    assert!(!tx.contains(b"bar").unwrap());
-    assert!(tx.contains(b"baz").unwrap());
-    assert!(!tx.contains(b"BAZ").unwrap());
-    assert!(!tx.contains(b"qux").unwrap());
+    assert!(!tx.contains::<[u8]>(b"foo").unwrap());
+    assert!(!tx.contains::<[u8]>(b"bar").unwrap());
+    assert!(tx.contains::<[u8]>(b"baz").unwrap());
+    assert!(!tx.contains::<[u8]>(b"BAZ").unwrap());
+    assert!(!tx.contains::<[u8]>(b"qux").unwrap());
 
-    assert!(tx.insert(b"qux").unwrap());
-    assert!(!tx.insert(b"qux").unwrap());
-    assert!(tx.insert(b"foo").unwrap());
-    assert!(!tx.insert(b"foo").unwrap());
+    assert!(tx.insert::<[u8]>(b"qux").unwrap());
+    assert!(!tx.insert::<[u8]>(b"qux").unwrap());
+    assert!(tx.insert::<[u8]>(b"foo").unwrap());
+    assert!(!tx.insert::<[u8]>(b"foo").unwrap());
 
     assert_eq!(tx.len().unwrap(), 3);
     assert!(!tx.is_empty().unwrap());
-    assert!(tx.contains(b"foo").unwrap());
-    assert!(!tx.contains(b"FOO").unwrap());
-    assert!(!tx.contains(b"bar").unwrap());
-    assert!(tx.contains(b"baz").unwrap());
-    assert!(!tx.contains(b"BAZ").unwrap());
-    assert!(tx.contains(b"qux").unwrap());
-    assert!(!tx.contains(b"QUX").unwrap());
+    assert!(tx.contains::<[u8]>(b"foo").unwrap());
+    assert!(!tx.contains::<[u8]>(b"FOO").unwrap());
+    assert!(!tx.contains::<[u8]>(b"bar").unwrap());
+    assert!(tx.contains::<[u8]>(b"baz").unwrap());
+    assert!(!tx.contains::<[u8]>(b"BAZ").unwrap());
+    assert!(tx.contains::<[u8]>(b"qux").unwrap());
+    assert!(!tx.contains::<[u8]>(b"QUX").unwrap());
 
     {
         let mut hash = HashSet::new();
-        tx.for_each(|key| assert!(hash.insert(key.to_owned()))).unwrap();
+        tx.for_each(|key| assert!(hash.insert(key))).unwrap();
         assert_eq!(hash.len(), 3);
-        assert!(hash.contains(b"foo".as_slice()));
-        assert!(hash.contains(b"baz".as_slice()));
-        assert!(hash.contains(b"qux".as_slice()));
+        assert!(hash.contains::<[u8]>(b"foo"));
+        assert!(hash.contains::<[u8]>(b"baz"));
+        assert!(hash.contains::<[u8]>(b"qux"));
     }
 
-    assert!(tx.find(|item| item.eq(b"foo")).unwrap().is_some());
-    assert!(tx.find(|item| item.eq_ignore_ascii_case(b"FOO")).unwrap().is_some());
-    assert!(tx.find(|item| item.eq(b"bar")).unwrap().is_none());
+    assert!(tx.find(|item: &[u8]| item.eq(b"foo")).unwrap().is_some());
+    assert!(tx.find(|item: &[u8]| item.eq_ignore_ascii_case(b"FOO")).unwrap().is_some());
+    assert!(tx.find(|item: &[u8]| item.eq(b"bar")).unwrap().is_none());
 
     tx.clear().unwrap();
 
     assert_eq!(tx.len().unwrap(), 0);
     assert!(tx.is_empty().unwrap());
-    assert!(!tx.contains(b"foo").unwrap());
-    assert!(!tx.contains(b"bar").unwrap());
-    assert!(!tx.contains(b"baz").unwrap());
-    assert!(!tx.contains(b"qux").unwrap());
+    assert!(!tx.contains::<[u8]>(b"foo").unwrap());
+    assert!(!tx.contains::<[u8]>(b"bar").unwrap());
+    assert!(!tx.contains::<[u8]>(b"baz").unwrap());
+    assert!(!tx.contains::<[u8]>(b"qux").unwrap());
 
-    assert!(tx.insert(b"foo").unwrap());
-    assert!(tx.insert(b"bar").unwrap());
+    assert!(tx.insert::<[u8]>(b"foo").unwrap());
+    assert!(tx.insert::<[u8]>(b"bar").unwrap());
 
     tx.commit();
 
     assert_eq!(set.len().unwrap(), 2);
     assert!(!set.is_empty().unwrap());
-    assert!(set.contains(b"foo").unwrap());
-    assert!(set.contains(b"bar").unwrap());
-    assert!(!set.contains(b"baz").unwrap());
-    assert!(!set.contains(b"qux").unwrap());
+    assert!(set.contains::<[u8]>(b"foo").unwrap());
+    assert!(set.contains::<[u8]>(b"bar").unwrap());
+    assert!(!set.contains::<[u8]>(b"baz").unwrap());
+    assert!(!set.contains::<[u8]>(b"qux").unwrap());
 }
 
 #[test]

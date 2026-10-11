@@ -63,13 +63,13 @@ pub static SQL_TYPES: [SqlType; 3usize] = [SqlType::new(RusqliteType::Integer), 
 ///
 /// Currently, the following types are supported:
 ///
-/// Type          | Reference type | SQLite storage datatype
-/// ------------- | -------------- | -----------------------
-/// **`i32`**     | `&i32`         | `INTEGER`
-/// **`u32`**     | `&u32`         | `INTEGER`
-/// **`i64`**     | `&i64`         | `INTEGER`
-/// **`Vec<u8>`** | `&[u8]`        | `BLOB`
-/// **`String`**  | `&str`         | `TEXT`
+/// Type          | SQLite storage datatype
+/// ------------- | -----------------------
+/// **`i32`**     | `INTEGER`
+/// **`u32`**     | `INTEGER`
+/// **`i64`**     | `INTEGER`
+/// **`Vec<u8>`** | `BLOB`
+/// **`String`**  | `TEXT`
 ///
 /// &nbsp;
 ///
@@ -80,42 +80,23 @@ pub static SQL_TYPES: [SqlType; 3usize] = [SqlType::new(RusqliteType::Integer), 
 /// </div>
 #[allow(private_bounds)]
 pub trait Type: FromSql + ToSql + Sealed {
-    /// The corresponding type that is used for references.
-    type RefType: ?Sized + ToSql;
-    /// The corresponding SQLite storage data type.
+    /// The SQLite storage datatype that corresponds to this type.
     const SQL_TYPE: SqlType;
-    /// Converts from `&Self` to the an `&RefType` reference.
-    fn as_ref(&self) -> &Self::RefType;
 }
 
 macro_rules! impl_type {
-    ($ty:ty, $ref_ty:ty, $sql_ty:ident) => {
-        impl Type for $ty {
-            type RefType = $ref_ty;
-            const SQL_TYPE: SqlType = SqlType::new(RusqliteType::$sql_ty);
-            #[inline(always)]
-            fn as_ref(&self) -> &Self::RefType {
-                self
-            }
-        }
-    };
-    ($ty:ty, $ref_ty:ty, $sql_ty:ident, $as_ref:ident) => {
-        impl Type for $ty {
-            type RefType = $ref_ty;
-            const SQL_TYPE: SqlType = SqlType::new(RusqliteType::$sql_ty);
-            #[inline(always)]
-            fn as_ref(&self) -> &Self::RefType {
-                self.$as_ref()
-            }
+    ($type:ty, $sql_type:ident) => {
+        impl Type for $type {
+            const SQL_TYPE: SqlType = SqlType::new(RusqliteType::$sql_type);
         }
     };
 }
 
-impl_type!(i32, i32, Integer);
-impl_type!(u32, u32, Integer);
-impl_type!(i64, i64, Integer);
-impl_type!(Vec<u8>, [u8], Blob, as_slice);
-impl_type!(String, str, Text, as_str);
+impl_type!(i32, Integer);
+impl_type!(u32, Integer);
+impl_type!(i64, Integer);
+impl_type!(Vec<u8>, Blob);
+impl_type!(String, Text);
 
 // ---------------------------------------------------------------------------
 // Character-based Types

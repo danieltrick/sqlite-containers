@@ -2,10 +2,12 @@
 // This file is part of the 'SQLite-based containers for Rust' project (sqlite-containers)
 // SPDX-License-Identifier: Unlicense
 
-use crate::common::{CharType, SQL_TYPES, SizeExt, SqlType, check_constraint_violation};
-use crate::rusqlite::{Connection, Transaction};
-use crate::{Error, Size, Type};
-use std::{collections::HashMap, marker::PhantomData, sync::LazyLock};
+use crate::{
+    Error, Size, Type,
+    common::{CharType, SQL_TYPES, SizeExt, SqlType, check_constraint_violation},
+    rusqlite::{Connection, ToSql, Transaction},
+};
+use std::{borrow::Borrow, collections::HashMap, marker::PhantomData, sync::LazyLock};
 
 // ---------------------------------------------------------------------------
 // Statements
@@ -100,7 +102,11 @@ where
     ///
     /// Returns `true`, if the set did not already contain the key; otherwise returns `false`.
     #[inline]
-    pub fn insert(&mut self, key: &T::RefType) -> Result<bool, Error> {
+    pub fn insert<Q>(&mut self, key: &Q) -> Result<bool, Error>
+    where
+        T: Borrow<Q>,
+        Q: ?Sized + ToSql,
+    {
         let mut statement = self.connection.prepare_cached(SQL_INSERT_KEY)?;
         match statement.execute([key]) {
             Ok(_) => Ok(true),
@@ -114,7 +120,11 @@ where
     ///
     /// Returns `true`, if the set contains the key; otherwise returns `false`.
     #[inline]
-    pub fn contains(&self, key: &T::RefType) -> Result<bool, Error> {
+    pub fn contains<Q>(&self, key: &Q) -> Result<bool, Error>
+    where
+        T: Borrow<Q>,
+        Q: ?Sized + ToSql,
+    {
         let mut statement = self.connection.prepare_cached(SQL_EXISTS_KEY)?;
         Ok(statement.exists([key])?)
     }
@@ -125,9 +135,10 @@ where
     ///
     /// Returns `true`, if the set contains the key; otherwise returns `false`.
     #[inline]
-    pub fn contains_nocase(&self, key: &T::RefType) -> Result<bool, Error>
+    pub fn contains_nocase<Q>(&self, key: &Q) -> Result<bool, Error>
     where
-        T: CharType,
+        T: Borrow<Q> + CharType,
+        Q: ?Sized + ToSql,
     {
         let mut statement = self.connection.prepare_cached(SQL_EXISTS_NOC)?;
         Ok(statement.exists([key])?)
@@ -139,7 +150,11 @@ where
     ///
     /// Returns `true`, if the set contained the key; otherwise returns `false`.
     #[inline]
-    pub fn remove(&mut self, key: &T::RefType) -> Result<bool, Error> {
+    pub fn remove<Q>(&mut self, key: &Q) -> Result<bool, Error>
+    where
+        T: Borrow<Q>,
+        Q: ?Sized + ToSql,
+    {
         let mut statement = self.connection.prepare_cached(SQL_DELETE_KEY)?;
         Ok(statement.execute([key])? != 0)
     }
@@ -150,9 +165,10 @@ where
     ///
     /// Returns `true`, if the set contained the key; otherwise returns `false`.
     #[inline]
-    pub fn remove_nocase(&mut self, key: &T::RefType) -> Result<bool, Error>
+    pub fn remove_nocase<Q>(&mut self, key: &Q) -> Result<bool, Error>
     where
-        T: CharType,
+        T: Borrow<Q> + CharType,
+        Q: ?Sized + ToSql,
     {
         let mut statement = self.connection.prepare_cached(SQL_DELETE_NOC)?;
         Ok(statement.execute([key])? != 0)
@@ -164,13 +180,13 @@ where
     #[inline]
     pub fn for_each<F>(&self, mut callback: F) -> Result<(), Error>
     where
-        F: FnMut(&T::RefType),
+        F: FnMut(T),
     {
         let mut iter = self.connection.prepare_cached(SQL_QUERY_KEYS)?;
         let mut result = iter.query([])?;
         while let Some(current_item) = result.next()? {
             let key: T = current_item.get(0)?;
-            callback(key.as_ref());
+            callback(key);
         }
         Ok(())
     }
@@ -183,15 +199,17 @@ where
     ///
     /// Also, the predicate is **not** always tested on *all* keys, because the function returns at the first match.
     #[inline]
-    pub fn find<P>(&self, predicate: P) -> Result<Option<T>, Error>
+    pub fn find<P, Q>(&self, predicate: P) -> Result<Option<T>, Error>
     where
-        P: Fn(&T::RefType) -> bool,
+        P: Fn(&Q) -> bool,
+        T: Borrow<Q>,
+        Q: ?Sized,
     {
         let mut statement = self.connection.prepare_cached(SQL_QUERY_KEYS)?;
         let mut result = statement.query([])?;
         while let Some(current_item) = result.next()? {
             let key: T = current_item.get(0)?;
-            if predicate(key.as_ref()) {
+            if predicate(key.borrow()) {
                 return Ok(Some(key));
             }
         }
@@ -255,7 +273,11 @@ where
 
     /// This function is equivalent to [`SQLiteSet::insert()`].
     #[inline]
-    pub fn insert(&mut self, key: &T::RefType) -> Result<bool, Error> {
+    pub fn insert<Q>(&mut self, key: &Q) -> Result<bool, Error>
+    where
+        T: Borrow<Q>,
+        Q: ?Sized + ToSql,
+    {
         let mut statement = self.transaction.prepare_cached(SQL_INSERT_KEY)?;
         match statement.execute([key]) {
             Ok(_) => Ok(true),
@@ -265,16 +287,21 @@ where
 
     /// This function is equivalent to [`SQLiteSet::contains()`].
     #[inline]
-    pub fn contains(&self, key: &T::RefType) -> Result<bool, Error> {
+    pub fn contains<Q>(&self, key: &Q) -> Result<bool, Error>
+    where
+        T: Borrow<Q>,
+        Q: ?Sized + ToSql,
+    {
         let mut statement = self.transaction.prepare_cached(SQL_EXISTS_KEY)?;
         Ok(statement.exists([key])?)
     }
 
     /// This function is equivalent to [`SQLiteSet::contains_nocase()`].
     #[inline]
-    pub fn contains_nocase(&self, key: &T::RefType) -> Result<bool, Error>
+    pub fn contains_nocase<Q>(&self, key: &Q) -> Result<bool, Error>
     where
-        T: CharType,
+        T: Borrow<Q> + CharType,
+        Q: ?Sized + ToSql,
     {
         let mut statement = self.transaction.prepare_cached(SQL_EXISTS_NOC)?;
         Ok(statement.exists([key])?)
@@ -282,16 +309,21 @@ where
 
     /// This function is equivalent to [`SQLiteSet::remove()`].
     #[inline]
-    pub fn remove(&mut self, key: &T::RefType) -> Result<bool, Error> {
+    pub fn remove<Q>(&mut self, key: &Q) -> Result<bool, Error>
+    where
+        T: Borrow<Q>,
+        Q: ?Sized + ToSql,
+    {
         let mut statement = self.transaction.prepare_cached(SQL_DELETE_KEY)?;
         Ok(statement.execute([key])? != 0)
     }
 
     /// This function is equivalent to [`SQLiteSet::remove_nocase()`].
     #[inline]
-    pub fn remove_nocase(&mut self, key: &T::RefType) -> Result<bool, Error>
+    pub fn remove_nocase<Q>(&mut self, key: &Q) -> Result<bool, Error>
     where
-        T: CharType,
+        T: Borrow<Q> + CharType,
+        Q: ?Sized + ToSql,
     {
         let mut statement = self.transaction.prepare_cached(SQL_DELETE_NOC)?;
         Ok(statement.execute([key])? != 0)
@@ -301,28 +333,30 @@ where
     #[inline]
     pub fn for_each<F>(&self, mut callback: F) -> Result<(), Error>
     where
-        F: FnMut(&T::RefType),
+        F: FnMut(T),
     {
         let mut statement = self.transaction.prepare_cached(SQL_QUERY_KEYS)?;
         let mut result = statement.query([])?;
         while let Some(current_item) = result.next()? {
             let key: T = current_item.get(0)?;
-            callback(key.as_ref());
+            callback(key);
         }
         Ok(())
     }
 
     /// This function is equivalent to [`SQLiteSet::find()`].
     #[inline]
-    pub fn find<P>(&self, predicate: P) -> Result<Option<T>, Error>
+    pub fn find<P, Q>(&self, predicate: P) -> Result<Option<T>, Error>
     where
-        P: Fn(&T::RefType) -> bool,
+        P: Fn(&Q) -> bool,
+        T: Borrow<Q>,
+        Q: ?Sized,
     {
         let mut statement = self.transaction.prepare_cached(SQL_QUERY_KEYS)?;
         let mut result = statement.query([])?;
         while let Some(current_item) = result.next()? {
             let key: T = current_item.get(0)?;
-            if predicate(key.as_ref()) {
+            if predicate(key.borrow()) {
                 return Ok(Some(key));
             }
         }
