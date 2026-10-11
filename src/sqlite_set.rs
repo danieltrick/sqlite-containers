@@ -5,7 +5,7 @@
 use crate::{
     CharType, Error, Size, SizeExt, Type,
     common::{SQL_TYPE_TEXT, SQL_TYPES, SqlType, check_constraint_violation},
-    rusqlite::{Connection, ToSql, Transaction, params},
+    rusqlite::{Connection, ToSql, Transaction},
 };
 use cfg_if::cfg_if;
 use std::{borrow::Borrow, collections::BTreeMap, marker::PhantomData, sync::LazyLock};
@@ -96,10 +96,10 @@ where
         connection.pragma_update(None, "synchronous", "OFF")?;
         connection.pragma_update(None, "temp_store", "MEMORY")?;
         if !NO_CASE {
-            connection.execute(SQL_CREATE_TBL.get(&T::SQL_TYPE).unwrap(), params![])?;
+            connection.execute(SQL_CREATE_TBL.get(&T::SQL_TYPE).unwrap(), [])?;
         } else {
             assert_eq!(T::SQL_TYPE, SQL_TYPE_TEXT);
-            connection.execute(SQL_CREATE_NOC, params![])?;
+            connection.execute(SQL_CREATE_NOC, [])?;
         }
         Ok(connection)
     }
@@ -123,7 +123,7 @@ where
         Q: ?Sized + ToSql,
     {
         let mut statement = self.connection.prepare_cached(SQL_INSERT_KEY)?;
-        match statement.execute(params![key]) {
+        match statement.execute([key]) {
             Ok(_) => Ok(true),
             Err(error) => check_constraint_violation(error),
         }
@@ -141,7 +141,7 @@ where
         Q: ?Sized + ToSql,
     {
         let mut statement = self.connection.prepare_cached(SQL_EXISTS_KEY)?;
-        Ok(statement.exists(params![key])?)
+        Ok(statement.exists([key])?)
     }
 
     /// This is the "case-insensitive" version of the [`contains()`](Self::contains) function.
@@ -156,7 +156,7 @@ where
         Q: ?Sized + ToSql,
     {
         let mut statement = self.connection.prepare_cached(SQL_EXISTS_NOC)?;
-        Ok(statement.exists(params![key])?)
+        Ok(statement.exists([key])?)
     }
 
     /// Removes the specified key from the set, if present.
@@ -171,7 +171,7 @@ where
         Q: ?Sized + ToSql,
     {
         let mut statement = self.connection.prepare_cached(SQL_DELETE_KEY)?;
-        Ok(statement.execute(params![key])? != 0)
+        Ok(statement.execute([key])? != 0)
     }
 
     /// This is the "case-insensitive" version of the [`remove()`](Self::remove) function.
@@ -186,7 +186,7 @@ where
         Q: ?Sized + ToSql,
     {
         let mut statement = self.connection.prepare_cached(SQL_DELETE_NOC)?;
-        Ok(statement.execute(params![key])? != 0)
+        Ok(statement.execute([key])? != 0)
     }
 
     /// Invokes the given `callback` function for each key that is currently contained in the set.
@@ -197,11 +197,9 @@ where
     where
         F: FnMut(T),
     {
-        let mut iter = self.connection.prepare_cached(SQL_QUERY_KEYS)?;
-        let mut result = iter.query(params![])?;
-        while let Some(current_item) = result.next()? {
-            let key: T = current_item.get(0)?;
-            callback(key);
+        let mut statement = self.connection.prepare_cached(SQL_QUERY_KEYS)?;
+        for key in statement.query_map([], |row| row.get(0))? {
+            callback(key?);
         }
         Ok(())
     }
@@ -221,9 +219,8 @@ where
         Q: ?Sized,
     {
         let mut statement = self.connection.prepare_cached(SQL_QUERY_KEYS)?;
-        let mut result = statement.query(params![])?;
-        while let Some(current_item) = result.next()? {
-            let key: T = current_item.get(0)?;
+        for key in statement.query_map([], |row| row.get(0))? {
+            let key: T = key?;
             if predicate(key.borrow()) {
                 return Ok(Some(key));
             }
@@ -235,7 +232,7 @@ where
     #[inline]
     pub fn len(&self) -> Result<Size, Error> {
         let mut statement = self.connection.prepare_cached(SQL_COUNT_KEYS)?;
-        let count: i64 = statement.query_one(params![], |row| row.get(0))?;
+        let count: i64 = statement.query_one([], |row| row.get(0))?;
         Ok(Size::from_i64(count))
     }
 
@@ -249,7 +246,7 @@ where
     #[inline]
     pub fn clear(&mut self) -> Result<(), Error> {
         let mut statement = self.connection.prepare_cached(SQL_DELETE_ALL)?;
-        statement.execute(params![])?;
+        statement.execute([])?;
         Ok(())
     }
 }
@@ -294,7 +291,7 @@ where
         Q: ?Sized + ToSql,
     {
         let mut statement = self.transaction.prepare_cached(SQL_INSERT_KEY)?;
-        match statement.execute(params![key]) {
+        match statement.execute([key]) {
             Ok(_) => Ok(true),
             Err(error) => check_constraint_violation(error),
         }
@@ -308,7 +305,7 @@ where
         Q: ?Sized + ToSql,
     {
         let mut statement = self.transaction.prepare_cached(SQL_EXISTS_KEY)?;
-        Ok(statement.exists(params![key])?)
+        Ok(statement.exists([key])?)
     }
 
     /// This function is equivalent to [`SQLiteSet::contains_nocase()`].
@@ -319,7 +316,7 @@ where
         Q: ?Sized + ToSql,
     {
         let mut statement = self.transaction.prepare_cached(SQL_EXISTS_NOC)?;
-        Ok(statement.exists(params![key])?)
+        Ok(statement.exists([key])?)
     }
 
     /// This function is equivalent to [`SQLiteSet::remove()`].
@@ -330,7 +327,7 @@ where
         Q: ?Sized + ToSql,
     {
         let mut statement = self.transaction.prepare_cached(SQL_DELETE_KEY)?;
-        Ok(statement.execute(params![key])? != 0)
+        Ok(statement.execute([key])? != 0)
     }
 
     /// This function is equivalent to [`SQLiteSet::remove_nocase()`].
@@ -341,7 +338,7 @@ where
         Q: ?Sized + ToSql,
     {
         let mut statement = self.transaction.prepare_cached(SQL_DELETE_NOC)?;
-        Ok(statement.execute(params![key])? != 0)
+        Ok(statement.execute([key])? != 0)
     }
 
     /// This function is equivalent to [`SQLiteSet::for_each()`].
@@ -351,10 +348,8 @@ where
         F: FnMut(T),
     {
         let mut statement = self.transaction.prepare_cached(SQL_QUERY_KEYS)?;
-        let mut result = statement.query(params![])?;
-        while let Some(current_item) = result.next()? {
-            let key: T = current_item.get(0)?;
-            callback(key);
+        for key in statement.query_map([], |row| row.get(0))? {
+            callback(key?);
         }
         Ok(())
     }
@@ -368,9 +363,8 @@ where
         Q: ?Sized,
     {
         let mut statement = self.transaction.prepare_cached(SQL_QUERY_KEYS)?;
-        let mut result = statement.query(params![])?;
-        while let Some(current_item) = result.next()? {
-            let key: T = current_item.get(0)?;
+        for key in statement.query_map([], |row| row.get(0))? {
+            let key: T = key?;
             if predicate(key.borrow()) {
                 return Ok(Some(key));
             }
@@ -382,7 +376,7 @@ where
     #[inline]
     pub fn len(&self) -> Result<Size, Error> {
         let mut statement = self.transaction.prepare_cached(SQL_COUNT_KEYS)?;
-        let count: i64 = statement.query_one(params![], |row| row.get(0))?;
+        let count: i64 = statement.query_one([], |row| row.get(0))?;
         Ok(Size::from_i64(count))
     }
 
@@ -396,7 +390,7 @@ where
     #[inline]
     pub fn clear(&mut self) -> Result<(), Error> {
         let mut statement = self.transaction.prepare_cached(SQL_DELETE_ALL)?;
-        statement.execute(params![])?;
+        statement.execute([])?;
         Ok(())
     }
 }

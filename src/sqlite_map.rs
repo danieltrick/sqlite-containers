@@ -109,10 +109,10 @@ where
         connection.pragma_update(None, "synchronous", "OFF")?;
         connection.pragma_update(None, "temp_store", "MEMORY")?;
         if !NO_CASE {
-            connection.execute(SQL_CREATE_TBL.get(&(K::SQL_TYPE, V::SQL_TYPE)).unwrap(), params![])?;
+            connection.execute(SQL_CREATE_TBL.get(&(K::SQL_TYPE, V::SQL_TYPE)).unwrap(), [])?;
         } else {
             assert_eq!(K::SQL_TYPE, SQL_TYPE_TEXT);
-            connection.execute(SQL_CREATE_NOC.get(&V::SQL_TYPE).unwrap(), params![])?;
+            connection.execute(SQL_CREATE_NOC.get(&V::SQL_TYPE).unwrap(), [])?;
         }
         Ok(connection)
     }
@@ -179,7 +179,7 @@ where
         Q: ?Sized + ToSql,
     {
         let mut statement = self.connection.prepare_cached(SQL_EXISTS_KEY)?;
-        Ok(statement.exists(params![key])?)
+        Ok(statement.exists([key])?)
     }
 
     /// This is the "case-insensitive" version of the [`contains()`](Self::contains) function.
@@ -194,7 +194,7 @@ where
         Q: ?Sized + ToSql,
     {
         let mut statement = self.connection.prepare_cached(SQL_EXISTS_NOC)?;
-        Ok(statement.exists(params![key])?)
+        Ok(statement.exists([key])?)
     }
 
     /// Tries to retrieve the value for the specified key.
@@ -209,7 +209,7 @@ where
         Q: ?Sized + ToSql,
     {
         let mut statement = self.connection.prepare_cached(SQL_LOOKUP_KEY)?;
-        Ok(statement.query_one(params![key], |row| row.get(0)).optional()?)
+        Ok(statement.query_one([key], |row| row.get(0)).optional()?)
     }
 
     /// This is the "case-insensitive" version of the [`get()`](Self::get) function.
@@ -224,7 +224,7 @@ where
         Q: ?Sized + ToSql,
     {
         let mut statement = self.connection.prepare_cached(SQL_LOOKUP_NOC)?;
-        Ok(statement.query_one(params![key], |row| row.get(0)).optional()?)
+        Ok(statement.query_one([key], |row| row.get(0)).optional()?)
     }
 
     /// Removes the specified key from the map, if present.
@@ -239,7 +239,7 @@ where
         Q: ?Sized + ToSql,
     {
         let mut statement = self.connection.prepare_cached(SQL_DELETE_KEY)?;
-        Ok(statement.execute(params![key])? != 0)
+        Ok(statement.execute([key])? != 0)
     }
 
     /// This is the "case-insensitive" version of the [`remove()`](Self::remove) function.
@@ -254,7 +254,7 @@ where
         Q: ?Sized + ToSql,
     {
         let mut statement = self.connection.prepare_cached(SQL_DELETE_NOC)?;
-        Ok(statement.execute(params![key])? != 0)
+        Ok(statement.execute([key])? != 0)
     }
 
     /// Invokes the given `callback` function for each key-value pair that is currently contained in the map.
@@ -263,13 +263,13 @@ where
     #[inline]
     pub fn for_each<F>(&self, mut callback: F) -> Result<(), Error>
     where
-        F: FnMut(&K, &V),
+        F: FnMut(K, V),
     {
         let mut statement = self.connection.prepare_cached(SQL_QUERY_KEYS)?;
-        let mut result = statement.query(params![])?;
-        while let Some(current_item) = result.next()? {
-            let (key, value): (K, V) = (current_item.get(0)?, current_item.get(1)?);
-            callback(&key, &value);
+        let mut result = statement.query([])?;
+        while let Some(key_value) = result.next()? {
+            let (key, value): (K, V) = (key_value.get(0)?, key_value.get(1)?);
+            callback(key, value);
         }
         Ok(())
     }
@@ -287,9 +287,9 @@ where
         P: Fn(&K, &V) -> bool,
     {
         let mut statement = self.connection.prepare_cached(SQL_QUERY_KEYS)?;
-        let mut result = statement.query(params![])?;
-        while let Some(current_item) = result.next()? {
-            let (key, value): (K, V) = (current_item.get(0)?, current_item.get(1)?);
+        let mut result = statement.query([])?;
+        while let Some(key_value) = result.next()? {
+            let (key, value): (K, V) = (key_value.get(0)?, key_value.get(1)?);
             if predicate(&key, &value) {
                 return Ok(Some((key, value)));
             }
@@ -301,7 +301,7 @@ where
     #[inline]
     pub fn len(&self) -> Result<Size, Error> {
         let mut statement = self.connection.prepare_cached(SQL_COUNT_KEYS)?;
-        let count: i64 = statement.query_one(params![], |row| row.get(0))?;
+        let count: i64 = statement.query_one([], |row| row.get(0))?;
         Ok(Size::from_i64(count))
     }
 
@@ -315,7 +315,7 @@ where
     #[inline]
     pub fn clear(&mut self) -> Result<(), Error> {
         let mut statement = self.connection.prepare_cached(SQL_DELETE_ALL)?;
-        statement.execute(params![])?;
+        statement.execute([])?;
         Ok(())
     }
 }
@@ -392,7 +392,7 @@ where
         Q: ?Sized + ToSql,
     {
         let mut statement = self.transaction.prepare_cached(SQL_EXISTS_KEY)?;
-        Ok(statement.exists(params![key])?)
+        Ok(statement.exists([key])?)
     }
 
     /// This function is equivalent to [`SQLiteMap::contains_nocase()`].
@@ -403,7 +403,7 @@ where
         Q: ?Sized + ToSql,
     {
         let mut statement = self.transaction.prepare_cached(SQL_EXISTS_NOC)?;
-        Ok(statement.exists(params![key])?)
+        Ok(statement.exists([key])?)
     }
 
     /// This function is equivalent to [`SQLiteMap::get()`].
@@ -414,7 +414,7 @@ where
         Q: ?Sized + ToSql,
     {
         let mut statement = self.transaction.prepare_cached(SQL_LOOKUP_KEY)?;
-        Ok(statement.query_one(params![key], |row| row.get(0)).optional()?)
+        Ok(statement.query_one([key], |row| row.get(0)).optional()?)
     }
 
     /// This function is equivalent to [`SQLiteMap::get_nocase()`].
@@ -425,7 +425,7 @@ where
         Q: ?Sized + ToSql,
     {
         let mut statement = self.transaction.prepare_cached(SQL_LOOKUP_NOC)?;
-        Ok(statement.query_one(params![key], |row| row.get(0)).optional()?)
+        Ok(statement.query_one([key], |row| row.get(0)).optional()?)
     }
 
     /// This function is equivalent to [`SQLiteMap::remove()`].
@@ -436,7 +436,7 @@ where
         Q: ?Sized + ToSql,
     {
         let mut statement = self.transaction.prepare_cached(SQL_DELETE_KEY)?;
-        Ok(statement.execute(params![key])? != 0)
+        Ok(statement.execute([key])? != 0)
     }
 
     /// This function is equivalent to [`SQLiteMap::remove_nocase()`].
@@ -447,20 +447,20 @@ where
         Q: ?Sized + ToSql,
     {
         let mut statement = self.transaction.prepare_cached(SQL_DELETE_NOC)?;
-        Ok(statement.execute(params![key])? != 0)
+        Ok(statement.execute([key])? != 0)
     }
 
     /// This function is equivalent to [`SQLiteMap::for_each()`].
     #[inline]
     pub fn for_each<F>(&self, mut callback: F) -> Result<(), Error>
     where
-        F: FnMut(&K, &V),
+        F: FnMut(K, V),
     {
         let mut statement = self.transaction.prepare_cached(SQL_QUERY_KEYS)?;
-        let mut result = statement.query(params![])?;
-        while let Some(current_item) = result.next()? {
-            let (key, value): (K, V) = (current_item.get(0)?, current_item.get(1)?);
-            callback(&key, &value);
+        let mut result = statement.query([])?;
+        while let Some(key_value) = result.next()? {
+            let (key, value): (K, V) = (key_value.get(0)?, key_value.get(1)?);
+            callback(key, value);
         }
         Ok(())
     }
@@ -472,9 +472,9 @@ where
         P: Fn(&K, &V) -> bool,
     {
         let mut statement = self.transaction.prepare_cached(SQL_QUERY_KEYS)?;
-        let mut result = statement.query(params![])?;
-        while let Some(current_item) = result.next()? {
-            let (key, value): (K, V) = (current_item.get(0)?, current_item.get(1)?);
+        let mut result = statement.query([])?;
+        while let Some(key_value) = result.next()? {
+            let (key, value): (K, V) = (key_value.get(0)?, key_value.get(1)?);
             if predicate(&key, &value) {
                 return Ok(Some((key, value)));
             }
