@@ -2,12 +2,11 @@
 // This file is part of the SQLite-based containers for Rust project (sqlite-containers)
 // SPDX-License-Identifier: Unlicense
 
-use std::{fmt::Display, hash::Hash};
-
 use crate::rusqlite::{
     Error as RusqliteError, ErrorCode,
     types::{FromSql, ToSql, Type as RusqliteType},
 };
+use std::fmt::Display;
 
 // ---------------------------------------------------------------------------
 // Sealed Type
@@ -29,20 +28,27 @@ impl_sealed!(i32, u32, i64, String, Vec<u8>);
 // SQL Type Holder
 // ---------------------------------------------------------------------------
 
-#[derive(Eq, PartialEq, Copy, Clone)]
+#[derive(Eq, PartialEq, Copy, Clone, Debug)]
 pub struct SqlType(RusqliteType);
 
 impl SqlType {
-    #[inline]
+    #[inline(always)]
     pub const fn new(value: RusqliteType) -> Self {
         Self(value)
     }
 }
 
-impl Hash for SqlType {
+impl Ord for SqlType {
     #[inline]
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        (self.0 as usize).hash(state);
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        (self.0 as usize).cmp(&(other.0 as usize))
+    }
+}
+
+impl PartialOrd for SqlType {
+    #[inline]
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
     }
 }
 
@@ -53,6 +59,7 @@ impl Display for SqlType {
     }
 }
 
+pub const SQL_TYPE_TEXT: SqlType = SqlType::new(RusqliteType::Text);
 pub static SQL_TYPES: [SqlType; 3usize] = [SqlType::new(RusqliteType::Integer), SqlType::new(RusqliteType::Text), SqlType::new(RusqliteType::Blob)];
 
 // ---------------------------------------------------------------------------

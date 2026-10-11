@@ -18,7 +18,7 @@ fn main() {
     let mut hex_1 = HexEncoder::default();
     let mut hex_2 = HexEncoder::default();
 
-    let mut sqlite_set = SQLiteMap::new().expect("Failed to create SQLiteSet!");
+    let mut sqlite_set = SQLiteMap::<String, String>::new().expect("Failed to create map!");
     let mut tx = sqlite_set.transaction().expect("Failed to init transaction!");
 
     println!("Inserting key-value pairs, please wait...");

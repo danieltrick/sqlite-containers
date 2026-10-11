@@ -9,12 +9,12 @@ use sqlite_containers::{SQLiteMap, SizeExt};
 use std::collections::HashMap;
 
 // ---------------------------------------------------------------------------
-// SQLiteSet Tests
+// SQLiteSet<String, String>> Tests
 // ---------------------------------------------------------------------------
 
 #[test]
-fn test_sqlite_map() {
-    let mut map = SQLiteMap::default();
+fn test_sqlite_map_string_string() {
+    let mut map = SQLiteMap::<String, String>::new().unwrap();
 
     assert_eq!(map.len().unwrap(), 0);
     assert!(map.is_empty().unwrap());
@@ -156,8 +156,8 @@ fn test_sqlite_map() {
 }
 
 #[test]
-fn test_sqlite_map_transacted() {
-    let mut map = SQLiteMap::new().unwrap();
+fn test_sqlite_map_string_string_transacted() {
+    let mut map = SQLiteMap::<String, String>::new().unwrap();
     let mut tx = map.transaction().unwrap();
 
     assert_eq!(tx.len().unwrap(), 0);
@@ -316,9 +316,9 @@ fn test_sqlite_map_transacted() {
 }
 
 #[test]
-fn test_sqlite_map_ignorecase() {
-    let mut map_1 = SQLiteMap::new().unwrap();
-    let mut map_2 = SQLiteMap::with_nocase().unwrap();
+fn test_sqlite_map_string_string_ignorecase() {
+    let mut map_1 = SQLiteMap::<String, String>::new().unwrap();
+    let mut map_2 = SQLiteMap::<String, String>::with_nocase().unwrap();
 
     assert!(map_1.insert("foo", "12345678").unwrap());
     assert!(map_1.insert("FOO", "87654321").unwrap());
@@ -365,8 +365,8 @@ fn test_sqlite_map_ignorecase() {
 }
 
 #[test]
-fn test_sqlite_map_stresstest() {
-    let mut set = SQLiteMap::new().unwrap();
+fn test_sqlite_map_string_string_stresstest() {
+    let mut set = SQLiteMap::<String, String>::new().unwrap();
     let (mut hex_1, mut hex_2) = (HexEncoder::default(), HexEncoder::default());
     const MAX_ITEMS: u64 = 1_000_000u64;
 

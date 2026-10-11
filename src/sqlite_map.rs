@@ -2,15 +2,38 @@
 // This file is part of the 'SQLite-based containers for Rust' project (sqlite-containers)
 // SPDX-License-Identifier: Unlicense
 
-use crate::common::{Error, Size, SizeExt, check_constraint_violation};
-use crate::rusqlite::{Connection, OptionalExtension, Transaction};
+use crate::{
+    Error, Size, SizeExt, Type,
+    common::{CharType, SQL_TYPE_TEXT, SQL_TYPES, SqlType, check_constraint_violation},
+    rusqlite::{Connection, OptionalExtension, ToSql, Transaction, params},
+};
+use std::{borrow::Borrow, collections::BTreeMap, marker::PhantomData, sync::LazyLock};
 
 // ---------------------------------------------------------------------------
 // Statements
 // ---------------------------------------------------------------------------
 
-const SQL_CREATE_TBL: &str = "CREATE TABLE data (key TEXT PRIMARY KEY NOT NULL, value TEXT NOT NULL) WITHOUT ROWID;";
-const SQL_CREATE_NOC: &str = "CREATE TABLE data (key TEXT PRIMARY KEY NOT NULL COLLATE NOCASE, value TEXT NOT NULL) WITHOUT ROWID;";
+static SQL_CREATE_TBL: LazyLock<BTreeMap<(SqlType, SqlType), String>> = LazyLock::new(|| {
+    let mut map = BTreeMap::<(SqlType, SqlType), String>::new();
+    for key_type in SQL_TYPES {
+        for value_type in SQL_TYPES {
+            map.insert(
+                (key_type, value_type),
+                format!("CREATE TABLE data (key {} PRIMARY KEY NOT NULL, value {} NOT NULL) WITHOUT ROWID;", key_type, value_type),
+            );
+        }
+    }
+    map
+});
+
+static SQL_CREATE_NOC: LazyLock<BTreeMap<SqlType, String>> = LazyLock::new(|| {
+    let mut map = BTreeMap::<SqlType, String>::new();
+    for value_type in SQL_TYPES {
+        map.insert(value_type, format!("CREATE TABLE data (key TEXT PRIMARY KEY NOT NULL COLLATE NOCASE, value {} NOT NULL) WITHOUT ROWID;", value_type));
+    }
+    map
+});
+
 const SQL_COUNT_KEYS: &str = "SELECT COUNT(*) FROM data;";
 const SQL_INSERT_KEY: &str = "INSERT INTO data (key, value) VALUES (?1, ?2);";
 const SQL_UPSERT_KEY: &str = "INSERT INTO data (key, value) VALUES (?1, ?2) ON CONFLICT(key) DO UPDATE SET value = excluded.value;";
@@ -40,33 +63,46 @@ const SQL_DELETE_ALL: &str = "DELETE FROM data;";
 /// For bulk inserts or updates, it is **strongly recommended** to use an explicit [transaction](Self::transaction). Without one, SQLite executes each insert or update in its own transaction, which can significantly degrade performance.
 ///
 /// </div>
-pub struct SQLiteMap {
+pub struct SQLiteMap<K, V>
+where
+    K: Type,
+    V: Type,
+{
+    _types: (PhantomData<K>, PhantomData<V>),
     connection: Connection,
 }
 
-impl SQLiteMap {
+impl<K, V> SQLiteMap<K, V>
+where
+    K: Type,
+    V: Type,
+{
     /// Creates a new, empty SQLite-backed hash map with case-sensitive keys.
     #[inline]
     pub fn new() -> Result<Self, Error> {
-        Ok(Self { connection: Self::initialize_connection(false)? })
+        Ok(Self { _types: (PhantomData, PhantomData), connection: Self::initialize_connection::<false>()? })
     }
 
     /// Creates a new, empty SQLite-backed hash map with case-insensitive keys.
     #[inline]
-    pub fn with_nocase() -> Result<Self, Error> {
-        Ok(Self { connection: Self::initialize_connection(true)? })
+    pub fn with_nocase() -> Result<Self, Error>
+    where
+        K: CharType,
+    {
+        Ok(Self { _types: (PhantomData, PhantomData), connection: Self::initialize_connection::<true>()? })
     }
 
     #[inline]
-    fn initialize_connection(no_case: bool) -> Result<Connection, Error> {
+    fn initialize_connection<const NO_CASE: bool>() -> Result<Connection, Error> {
         let connection = Connection::open_in_memory()?;
         connection.pragma_update(None, "journal_mode", "OFF")?;
         connection.pragma_update(None, "synchronous", "OFF")?;
         connection.pragma_update(None, "temp_store", "MEMORY")?;
-        if !no_case {
-            connection.execute(SQL_CREATE_TBL, [])?;
+        if !NO_CASE {
+            connection.execute(SQL_CREATE_TBL.get(&(K::SQL_TYPE, V::SQL_TYPE)).unwrap(), params![])?;
         } else {
-            connection.execute(SQL_CREATE_NOC, [])?;
+            assert_eq!(K::SQL_TYPE, SQL_TYPE_TEXT);
+            connection.execute(SQL_CREATE_NOC.get(&V::SQL_TYPE).unwrap(), params![])?;
         }
         Ok(connection)
     }
@@ -77,7 +113,7 @@ impl SQLiteMap {
     ///
     /// Returns the new [`SQLiteMapTransaction`] instance.
     #[inline]
-    pub fn transaction(&mut self) -> Result<SQLiteMapTransaction<'_>, Error> {
+    pub fn transaction(&mut self) -> Result<SQLiteMapTransaction<'_, K, V>, Error> {
         SQLiteMapTransaction::from(&mut self.connection)
     }
 
@@ -89,9 +125,15 @@ impl SQLiteMap {
     ///
     /// Please use the [`update()`](Self::update) function to update the value associated with a key that may already exist.
     #[inline]
-    pub fn insert(&mut self, key: &str, value: &str) -> Result<bool, Error> {
-        let mut insert = self.connection.prepare_cached(SQL_INSERT_KEY)?;
-        match insert.execute([key, value]) {
+    pub fn insert<Q, R>(&mut self, key: &Q, value: &R) -> Result<bool, Error>
+    where
+        K: Borrow<Q>,
+        Q: ?Sized + ToSql,
+        V: Borrow<R>,
+        R: ?Sized + ToSql,
+    {
+        let mut statement = self.connection.prepare_cached(SQL_INSERT_KEY)?;
+        match statement.execute(params![key, value]) {
             Ok(_) => Ok(true),
             Err(error) => check_constraint_violation(error),
         }
@@ -103,9 +145,15 @@ impl SQLiteMap {
     ///
     /// **Note:** Due to limitations in SQLite, it is *not* possible to determine whether the key was inserted or updated.
     #[inline]
-    pub fn update(&mut self, key: &str, value: &str) -> Result<(), Error> {
-        let mut update = self.connection.prepare_cached(SQL_UPSERT_KEY)?;
-        update.execute([key, value])?;
+    pub fn update<Q, R>(&mut self, key: &Q, value: &R) -> Result<(), Error>
+    where
+        K: Borrow<Q>,
+        Q: ?Sized + ToSql,
+        V: Borrow<R>,
+        R: ?Sized + ToSql,
+    {
+        let mut statement = self.connection.prepare_cached(SQL_UPSERT_KEY)?;
+        statement.execute(params![key, value])?;
         Ok(())
     }
 
@@ -115,9 +163,13 @@ impl SQLiteMap {
     ///
     /// Returns `true`, if the map contains the key; otherwise returns `false`.
     #[inline]
-    pub fn contains(&self, key: &str) -> Result<bool, Error> {
-        let mut contains = self.connection.prepare_cached(SQL_EXISTS_KEY)?;
-        Ok(contains.exists([key])?)
+    pub fn contains<Q>(&self, key: &Q) -> Result<bool, Error>
+    where
+        K: Borrow<Q>,
+        Q: ?Sized + ToSql,
+    {
+        let mut statement = self.connection.prepare_cached(SQL_EXISTS_KEY)?;
+        Ok(statement.exists(params![key])?)
     }
 
     /// This is the "case-insensitive" version of the [`contains()`](Self::contains) function.
@@ -126,9 +178,13 @@ impl SQLiteMap {
     ///
     /// Returns `true`, if the map contains the key; otherwise returns `false`.
     #[inline]
-    pub fn contains_nocase(&self, key: &str) -> Result<bool, Error> {
-        let mut contains = self.connection.prepare_cached(SQL_EXISTS_NOC)?;
-        Ok(contains.exists([key])?)
+    pub fn contains_nocase<Q>(&self, key: &Q) -> Result<bool, Error>
+    where
+        K: Borrow<Q> + CharType,
+        Q: ?Sized + ToSql,
+    {
+        let mut statement = self.connection.prepare_cached(SQL_EXISTS_NOC)?;
+        Ok(statement.exists(params![key])?)
     }
 
     /// Tries to retrieve the value for the specified key.
@@ -137,9 +193,13 @@ impl SQLiteMap {
     ///
     /// Returns the `Some(value)`, if the map contains the key; otherwise returns `None`.
     #[inline]
-    pub fn get(&self, key: &str) -> Result<Option<String>, Error> {
-        let mut get = self.connection.prepare_cached(SQL_LOOKUP_KEY)?;
-        Ok(get.query_one([key], |row| row.get(0)).optional()?)
+    pub fn get<Q>(&self, key: &Q) -> Result<Option<V>, Error>
+    where
+        K: Borrow<Q>,
+        Q: ?Sized + ToSql,
+    {
+        let mut statement = self.connection.prepare_cached(SQL_LOOKUP_KEY)?;
+        Ok(statement.query_one(params![key], |row| row.get(0)).optional()?)
     }
 
     /// This is the "case-insensitive" version of the [`get()`](Self::get) function.
@@ -148,9 +208,13 @@ impl SQLiteMap {
     ///
     /// Returns the `Some(value)`, if the map contains the key; otherwise returns `None`.
     #[inline]
-    pub fn get_nocase(&self, key: &str) -> Result<Option<String>, Error> {
-        let mut get = self.connection.prepare_cached(SQL_LOOKUP_NOC)?;
-        Ok(get.query_one([key], |row| row.get(0)).optional()?)
+    pub fn get_nocase<Q>(&self, key: &Q) -> Result<Option<V>, Error>
+    where
+        K: Borrow<Q> + CharType,
+        Q: ?Sized + ToSql,
+    {
+        let mut statement = self.connection.prepare_cached(SQL_LOOKUP_NOC)?;
+        Ok(statement.query_one(params![key], |row| row.get(0)).optional()?)
     }
 
     /// Removes the specified key from the map, if present.
@@ -159,9 +223,13 @@ impl SQLiteMap {
     ///
     /// Returns `true`, if the map contained the key; otherwise returns `false`.
     #[inline]
-    pub fn remove(&mut self, key: &str) -> Result<bool, Error> {
-        let mut contains = self.connection.prepare_cached(SQL_DELETE_KEY)?;
-        Ok(contains.execute([key])? != 0)
+    pub fn remove<Q>(&mut self, key: &Q) -> Result<bool, Error>
+    where
+        K: Borrow<Q>,
+        Q: ?Sized + ToSql,
+    {
+        let mut statement = self.connection.prepare_cached(SQL_DELETE_KEY)?;
+        Ok(statement.execute(params![key])? != 0)
     }
 
     /// This is the "case-insensitive" version of the [`remove()`](Self::remove) function.
@@ -170,9 +238,13 @@ impl SQLiteMap {
     ///
     /// Returns `true`, if the map contained the key; otherwise returns `false`.
     #[inline]
-    pub fn remove_nocase(&mut self, key: &str) -> Result<bool, Error> {
-        let mut contains = self.connection.prepare_cached(SQL_DELETE_NOC)?;
-        Ok(contains.execute([key])? != 0)
+    pub fn remove_nocase<Q>(&mut self, key: &Q) -> Result<bool, Error>
+    where
+        K: Borrow<Q> + CharType,
+        Q: ?Sized + ToSql,
+    {
+        let mut statement = self.connection.prepare_cached(SQL_DELETE_NOC)?;
+        Ok(statement.execute(params![key])? != 0)
     }
 
     /// Invokes the given `callback` function for each key-value pair that is currently contained in the map.
@@ -181,13 +253,12 @@ impl SQLiteMap {
     #[inline]
     pub fn for_each<F>(&self, mut callback: F) -> Result<(), Error>
     where
-        F: FnMut(&str, &str),
+        F: FnMut(&K, &V),
     {
-        let mut iter = self.connection.prepare_cached(SQL_QUERY_KEYS)?;
-        let mut result = iter.query([])?;
+        let mut statement = self.connection.prepare_cached(SQL_QUERY_KEYS)?;
+        let mut result = statement.query(params![])?;
         while let Some(current_item) = result.next()? {
-            let key: String = current_item.get(0)?;
-            let value: String = current_item.get(1)?;
+            let (key, value): (K, V) = (current_item.get(0)?, current_item.get(1)?);
             callback(&key, &value);
         }
         Ok(())
@@ -201,15 +272,14 @@ impl SQLiteMap {
     ///
     /// Also, the predicate is **not** always tested on *all* key-value pairs, because the function returns at the first match.
     #[inline]
-    pub fn find<P>(&self, predicate: P) -> Result<Option<(String, String)>, Error>
+    pub fn find<P>(&self, predicate: P) -> Result<Option<(K, V)>, Error>
     where
-        P: Fn(&str, &str) -> bool,
+        P: Fn(&K, &V) -> bool,
     {
-        let mut iter = self.connection.prepare_cached(SQL_QUERY_KEYS)?;
-        let mut result = iter.query([])?;
+        let mut statement = self.connection.prepare_cached(SQL_QUERY_KEYS)?;
+        let mut result = statement.query(params![])?;
         while let Some(current_item) = result.next()? {
-            let key: String = current_item.get(0)?;
-            let value: String = current_item.get(1)?;
+            let (key, value): (K, V) = (current_item.get(0)?, current_item.get(1)?);
             if predicate(&key, &value) {
                 return Ok(Some((key, value)));
             }
@@ -220,8 +290,8 @@ impl SQLiteMap {
     /// Returns the number of unique keys in the map.
     #[inline]
     pub fn len(&self) -> Result<Size, Error> {
-        let mut query_count = self.connection.prepare_cached(SQL_COUNT_KEYS)?;
-        let count: i64 = query_count.query_one([], |row| row.get(0))?;
+        let mut statement = self.connection.prepare_cached(SQL_COUNT_KEYS)?;
+        let count: i64 = statement.query_one(params![], |row| row.get(0))?;
         Ok(Size::from_i64(count))
     }
 
@@ -234,21 +304,9 @@ impl SQLiteMap {
     /// Removes *all* keys from the map.
     #[inline]
     pub fn clear(&mut self) -> Result<(), Error> {
-        let mut clear = self.connection.prepare_cached(SQL_DELETE_ALL)?;
-        clear.execute([])?;
+        let mut statement = self.connection.prepare_cached(SQL_DELETE_ALL)?;
+        statement.execute(params![])?;
         Ok(())
-    }
-}
-
-impl Default for SQLiteMap {
-    /// Returns a new, empty map, as created by the [`SQLiteMap::new()`] function.
-    ///
-    /// # Panics
-    ///
-    /// Panics if a new `SQLiteMap` instance could **not** be created, e.g., because of an SQLite error.
-    #[inline]
-    fn default() -> Self {
-        Self::new().expect("Failed to create SQLiteMap instance!")
     }
 }
 
@@ -261,16 +319,25 @@ impl Default for SQLiteMap {
 /// Most functions provided by this struct mirror the corresponding functions of the `SQLiteMap` struct.
 ///
 /// The transaction is committed when the `SQLiteMapTransaction` is dropped.
-pub struct SQLiteMapTransaction<'a> {
+pub struct SQLiteMapTransaction<'a, K, V>
+where
+    K: Type,
+    V: Type,
+{
+    _types: (PhantomData<K>, PhantomData<V>),
     transaction: Transaction<'a>,
 }
 
-impl<'a> SQLiteMapTransaction<'a> {
+impl<'a, K, V> SQLiteMapTransaction<'a, K, V>
+where
+    K: Type,
+    V: Type,
+{
     #[inline]
     fn from(connection: &'a mut Connection) -> Result<Self, Error> {
         let mut transaction = connection.transaction()?;
         transaction.set_drop_behavior(rusqlite::DropBehavior::Commit);
-        Ok(Self { transaction })
+        Ok(Self { _types: (PhantomData, PhantomData), transaction })
     }
 
     /// Drops the `SQLiteMapTransaction`, thereby committing the SQLite transaction.
@@ -279,9 +346,15 @@ impl<'a> SQLiteMapTransaction<'a> {
 
     /// This function is equivalent to [`SQLiteMap::insert()`].
     #[inline]
-    pub fn insert(&mut self, key: &str, value: &str) -> Result<bool, Error> {
-        let mut insert = self.transaction.prepare_cached(SQL_INSERT_KEY)?;
-        match insert.execute([key, value]) {
+    pub fn insert<Q, R>(&mut self, key: &Q, value: &R) -> Result<bool, Error>
+    where
+        K: Borrow<Q>,
+        Q: ?Sized + ToSql,
+        V: Borrow<R>,
+        R: ?Sized + ToSql,
+    {
+        let mut statement = self.transaction.prepare_cached(SQL_INSERT_KEY)?;
+        match statement.execute(params![key, value]) {
             Ok(_) => Ok(true),
             Err(error) => check_constraint_violation(error),
         }
@@ -289,65 +362,94 @@ impl<'a> SQLiteMapTransaction<'a> {
 
     /// This function is equivalent to [`SQLiteMap::update()`].
     #[inline]
-    pub fn update(&mut self, key: &str, value: &str) -> Result<(), Error> {
-        let mut update = self.transaction.prepare_cached(SQL_UPSERT_KEY)?;
-        update.execute([key, value])?;
+    pub fn update<Q, R>(&mut self, key: &Q, value: &R) -> Result<(), Error>
+    where
+        K: Borrow<Q>,
+        Q: ?Sized + ToSql,
+        V: Borrow<R>,
+        R: ?Sized + ToSql,
+    {
+        let mut statement = self.transaction.prepare_cached(SQL_UPSERT_KEY)?;
+        statement.execute(params![key, value])?;
         Ok(())
     }
 
     /// This function is equivalent to [`SQLiteMap::contains()`].
     #[inline]
-    pub fn contains(&self, key: &str) -> Result<bool, Error> {
-        let mut contains = self.transaction.prepare_cached(SQL_EXISTS_KEY)?;
-        Ok(contains.exists([key])?)
+    pub fn contains<Q>(&self, key: &Q) -> Result<bool, Error>
+    where
+        K: Borrow<Q>,
+        Q: ?Sized + ToSql,
+    {
+        let mut statement = self.transaction.prepare_cached(SQL_EXISTS_KEY)?;
+        Ok(statement.exists(params![key])?)
     }
 
     /// This function is equivalent to [`SQLiteMap::contains_nocase()`].
     #[inline]
-    pub fn contains_nocase(&self, key: &str) -> Result<bool, Error> {
-        let mut contains = self.transaction.prepare_cached(SQL_EXISTS_NOC)?;
-        Ok(contains.exists([key])?)
+    pub fn contains_nocase<Q>(&self, key: &Q) -> Result<bool, Error>
+    where
+        K: Borrow<Q> + CharType,
+        Q: ?Sized + ToSql,
+    {
+        let mut statement = self.transaction.prepare_cached(SQL_EXISTS_NOC)?;
+        Ok(statement.exists(params![key])?)
     }
 
     /// This function is equivalent to [`SQLiteMap::get()`].
     #[inline]
-    pub fn get(&self, key: &str) -> Result<Option<String>, Error> {
-        let mut get = self.transaction.prepare_cached(SQL_LOOKUP_KEY)?;
-        Ok(get.query_one([key], |row| row.get(0)).optional()?)
+    pub fn get<Q>(&self, key: &Q) -> Result<Option<V>, Error>
+    where
+        K: Borrow<Q>,
+        Q: ?Sized + ToSql,
+    {
+        let mut statement = self.transaction.prepare_cached(SQL_LOOKUP_KEY)?;
+        Ok(statement.query_one(params![key], |row| row.get(0)).optional()?)
     }
 
     /// This function is equivalent to [`SQLiteMap::get_nocase()`].
     #[inline]
-    pub fn get_nocase(&self, key: &str) -> Result<Option<String>, Error> {
-        let mut get = self.transaction.prepare_cached(SQL_LOOKUP_NOC)?;
-        Ok(get.query_one([key], |row| row.get(0)).optional()?)
+    pub fn get_nocase<Q>(&self, key: &Q) -> Result<Option<V>, Error>
+    where
+        K: Borrow<Q> + CharType,
+        Q: ?Sized + ToSql,
+    {
+        let mut statement = self.transaction.prepare_cached(SQL_LOOKUP_NOC)?;
+        Ok(statement.query_one(params![key], |row| row.get(0)).optional()?)
     }
 
     /// This function is equivalent to [`SQLiteMap::remove()`].
     #[inline]
-    pub fn remove(&mut self, key: &str) -> Result<bool, Error> {
-        let mut contains = self.transaction.prepare_cached(SQL_DELETE_KEY)?;
-        Ok(contains.execute([key])? != 0)
+    pub fn remove<Q>(&mut self, key: &Q) -> Result<bool, Error>
+    where
+        K: Borrow<Q>,
+        Q: ?Sized + ToSql,
+    {
+        let mut statement = self.transaction.prepare_cached(SQL_DELETE_KEY)?;
+        Ok(statement.execute(params![key])? != 0)
     }
 
     /// This function is equivalent to [`SQLiteMap::remove_nocase()`].
     #[inline]
-    pub fn remove_nocase(&mut self, key: &str) -> Result<bool, Error> {
-        let mut contains = self.transaction.prepare_cached(SQL_DELETE_NOC)?;
-        Ok(contains.execute([key])? != 0)
+    pub fn remove_nocase<Q>(&mut self, key: &Q) -> Result<bool, Error>
+    where
+        K: Borrow<Q> + CharType,
+        Q: ?Sized + ToSql,
+    {
+        let mut statement = self.transaction.prepare_cached(SQL_DELETE_NOC)?;
+        Ok(statement.execute(params![key])? != 0)
     }
 
     /// This function is equivalent to [`SQLiteMap::for_each()`].
     #[inline]
     pub fn for_each<F>(&self, mut callback: F) -> Result<(), Error>
     where
-        F: FnMut(&str, &str),
+        F: FnMut(&K, &V),
     {
-        let mut iter = self.transaction.prepare_cached(SQL_QUERY_KEYS)?;
-        let mut result = iter.query([])?;
+        let mut statement = self.transaction.prepare_cached(SQL_QUERY_KEYS)?;
+        let mut result = statement.query(params![])?;
         while let Some(current_item) = result.next()? {
-            let key: String = current_item.get(0)?;
-            let value: String = current_item.get(1)?;
+            let (key, value): (K, V) = (current_item.get(0)?, current_item.get(1)?);
             callback(&key, &value);
         }
         Ok(())
@@ -355,15 +457,14 @@ impl<'a> SQLiteMapTransaction<'a> {
 
     /// This function is equivalent to [`SQLiteMap::find()`].
     #[inline]
-    pub fn find<P>(&self, predicate: P) -> Result<Option<(String, String)>, Error>
+    pub fn find<P>(&self, predicate: P) -> Result<Option<(K, V)>, Error>
     where
-        P: Fn(&str, &str) -> bool,
+        P: Fn(&K, &V) -> bool,
     {
-        let mut iter = self.transaction.prepare_cached(SQL_QUERY_KEYS)?;
-        let mut result = iter.query([])?;
+        let mut statement = self.transaction.prepare_cached(SQL_QUERY_KEYS)?;
+        let mut result = statement.query(params![])?;
         while let Some(current_item) = result.next()? {
-            let key: String = current_item.get(0)?;
-            let value: String = current_item.get(1)?;
+            let (key, value): (K, V) = (current_item.get(0)?, current_item.get(1)?);
             if predicate(&key, &value) {
                 return Ok(Some((key, value)));
             }
@@ -374,8 +475,8 @@ impl<'a> SQLiteMapTransaction<'a> {
     /// This function is equivalent to [`SQLiteMap::len()`].
     #[inline]
     pub fn len(&self) -> Result<Size, Error> {
-        let mut query_count = self.transaction.prepare_cached(SQL_COUNT_KEYS)?;
-        let count: i64 = query_count.query_one([], |row| row.get(0))?;
+        let mut statement = self.transaction.prepare_cached(SQL_COUNT_KEYS)?;
+        let count: i64 = statement.query_one([], |row| row.get(0))?;
         Ok(Size::from_i64(count))
     }
 
@@ -388,8 +489,8 @@ impl<'a> SQLiteMapTransaction<'a> {
     /// This function is equivalent to [`SQLiteMap::clear()`].
     #[inline]
     pub fn clear(&mut self) -> Result<(), Error> {
-        let mut clear = self.transaction.prepare_cached(SQL_DELETE_ALL)?;
-        clear.execute([])?;
+        let mut statement = self.transaction.prepare_cached(SQL_DELETE_ALL)?;
+        statement.execute([])?;
         Ok(())
     }
 }
