@@ -7,6 +7,7 @@ rust-version = "1.88.0"
 authors = ["Daniel Trick <daniel.trick@sit.fraunhofer.de>"]
 license = "Unlicense"
 repository = "https://github.com/danieltrick/sqlite-containers/"
+readme = "README-package.md"
 
 [features]
 default = ["bundled"]
