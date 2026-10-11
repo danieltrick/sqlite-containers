@@ -6,7 +6,12 @@ mod utilities;
 
 use crate::utilities::{HexEncoder, mix64};
 use sqlite_containers::{Blob, SQLiteSet, SizeExt};
-use std::collections::HashSet;
+use std::{
+    array,
+    collections::HashSet,
+    sync::{Arc, Barrier, mpsc::sync_channel},
+    thread,
+};
 
 // ---------------------------------------------------------------------------
 // SQLiteSet<i64> Tests
@@ -696,4 +701,80 @@ fn test_sqlite_set_blob_stresstest() {
     }
 
     assert!(set.is_empty().unwrap());
+}
+
+// ---------------------------------------------------------------------------
+// SQLiteSet Multi-Thread Tests
+// ---------------------------------------------------------------------------
+
+fn sqlite_set_thread_worker<const MAX_ITEMS: u64>(mut thread_set: SQLiteSet<String>, barrier: &Barrier) -> SQLiteSet<String> {
+    let mut hex = HexEncoder::default();
+
+    barrier.wait();
+    {
+        let mut tx = thread_set.transaction().unwrap();
+        for i in 0u64..MAX_ITEMS {
+            assert!(tx.insert(hex.encode(mix64(i))).unwrap());
+        }
+    }
+
+    thread_set
+}
+
+#[test]
+fn test_sqlite_set_multithreading() {
+    const MAX_ITEMS: u64 = 1_000_000u64;
+    const THREADS: usize = 8usize;
+
+    let maps: [SQLiteSet<String>; THREADS] = array::from_fn(|_| SQLiteSet::new().unwrap());
+    let barrier = Arc::new(Barrier::new(THREADS));
+    let mut handles: Vec<_> = maps
+        .into_iter()
+        .map(|map| {
+            let barrier = Arc::clone(&barrier);
+            thread::spawn(move || sqlite_set_thread_worker::<MAX_ITEMS>(map, &barrier))
+        })
+        .collect();
+
+    for handle in handles.drain(..) {
+        let thread_map = handle.join().unwrap();
+        assert_eq!(thread_map.len().unwrap().to_u64(), MAX_ITEMS);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// SQLiteSet Test to Destruction
+// ---------------------------------------------------------------------------
+
+#[ignore]
+#[test]
+fn test_sqlite_set_to_destruction() {
+    let mut set = SQLiteSet::<String>::new().unwrap();
+    let (channel_tx, channel_rx) = sync_channel::<String>(1024usize);
+
+    let _handle = thread::spawn(move || {
+        let mut hex = HexEncoder::default();
+        for i in 0u64..=u64::MAX {
+            if channel_tx.send(hex.encode(mix64(i)).to_owned()).is_err() {
+                break;
+            }
+        }
+    });
+
+    let mut tx = set.transaction().unwrap();
+
+    loop {
+        let key = channel_rx.recv().expect("Out of items!");
+        match tx.insert(&key) {
+            Err(error) => match error.into_inner() {
+                sqlite_containers::rusqlite::Error::SqliteFailure(sqlite_error, _) => match sqlite_error.code {
+                    sqlite_containers::rusqlite::ErrorCode::OutOfMemory => break,
+                    sqlite_containers::rusqlite::ErrorCode::DiskFull => break,
+                    _ => panic!("Unexpected SQLite failure has been encountered! [{}]", sqlite_error),
+                },
+                _ => panic!("Unexpected SQLiteMap has been encountered!"),
+            },
+            Ok(success) => assert!(success),
+        }
+    }
 }

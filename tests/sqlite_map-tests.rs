@@ -6,7 +6,12 @@ mod utilities;
 
 use crate::utilities::{HexEncoder, mix64};
 use sqlite_containers::{Blob, SQLiteMap, SizeExt};
-use std::collections::HashMap;
+use std::{
+    array,
+    collections::HashMap,
+    sync::{Arc, Barrier, mpsc::sync_channel},
+    thread,
+};
 
 // ---------------------------------------------------------------------------
 // SQLiteMap<i64, String> Tests
@@ -1847,4 +1852,84 @@ fn test_sqlite_map_string_i64_stresstest() {
     }
 
     assert!(set.is_empty().unwrap());
+}
+
+// ---------------------------------------------------------------------------
+// SQLiteMap Multi-Thread Tests
+// ---------------------------------------------------------------------------
+
+fn sqlite_map_thread_worker<const MAX_ITEMS: u64>(mut thread_map: SQLiteMap<String, String>, barrier: &Barrier) -> SQLiteMap<String, String> {
+    let mut hex_1 = HexEncoder::default();
+    let mut hex_2 = HexEncoder::default();
+
+    barrier.wait();
+    {
+        let mut tx = thread_map.transaction().unwrap();
+        for i in 0u64..MAX_ITEMS {
+            let (key, value) = (hex_1.encode(mix64(i)), hex_2.encode(mix64(u64::MAX - i)));
+            assert!(tx.insert(key, value).unwrap());
+        }
+    }
+
+    thread_map
+}
+
+#[test]
+fn test_sqlite_map_multithreading() {
+    const MAX_ITEMS: u64 = 1_000_000u64;
+    const THREADS: usize = 8usize;
+
+    let maps: [SQLiteMap<String, String>; THREADS] = array::from_fn(|_| SQLiteMap::new().unwrap());
+    let barrier = Arc::new(Barrier::new(THREADS));
+    let mut handles: Vec<_> = maps
+        .into_iter()
+        .map(|map| {
+            let barrier = Arc::clone(&barrier);
+            thread::spawn(move || sqlite_map_thread_worker::<MAX_ITEMS>(map, &barrier))
+        })
+        .collect();
+
+    for handle in handles.drain(..) {
+        let thread_map = handle.join().unwrap();
+        assert_eq!(thread_map.len().unwrap().to_u64(), MAX_ITEMS);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// SQLiteMap Test to Destruction
+// ---------------------------------------------------------------------------
+
+#[ignore]
+#[test]
+fn test_sqlite_map_to_destruction() {
+    let mut set = SQLiteMap::<String, String>::new().unwrap();
+    let (channel_tx, channel_rx) = sync_channel::<(String, String)>(1024usize);
+
+    let _handle = thread::spawn(move || {
+        let mut hex_1 = HexEncoder::default();
+        let mut hex_2 = HexEncoder::default();
+        for i in 0u64..=u64::MAX {
+            let (key, value) = (hex_1.encode(mix64(i)), hex_2.encode(mix64(u64::MAX - i)));
+            if channel_tx.send((key.to_owned(), value.to_owned())).is_err() {
+                break;
+            }
+        }
+    });
+
+    let mut tx = set.transaction().unwrap();
+
+    loop {
+        let (key, value) = channel_rx.recv().expect("Out of items!");
+        match tx.insert(&key, &value) {
+            Err(error) => match error.into_inner() {
+                sqlite_containers::rusqlite::Error::SqliteFailure(sqlite_error, _) => match sqlite_error.code {
+                    sqlite_containers::rusqlite::ErrorCode::OutOfMemory => break,
+                    sqlite_containers::rusqlite::ErrorCode::DiskFull => break,
+                    _ => panic!("Unexpected SQLite failure has been encountered! [{}]", sqlite_error),
+                },
+                _ => panic!("Unexpected SQLiteMap has been encountered!"),
+            },
+            Ok(success) => assert!(success),
+        }
+    }
 }
