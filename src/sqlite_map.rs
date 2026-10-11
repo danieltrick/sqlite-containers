@@ -3,8 +3,8 @@
 // SPDX-License-Identifier: Unlicense
 
 use crate::{
-    Error, Size, SizeExt, Type,
-    common::{CharType, SQL_TYPE_TEXT, SQL_TYPES, SqlType, check_constraint_violation},
+    CharType, Error, Size, SizeExt, Type,
+    common::{SQL_TYPE_TEXT, SQL_TYPES, SqlType, check_constraint_violation},
     rusqlite::{Connection, OptionalExtension, ToSql, Transaction, params},
 };
 use std::{borrow::Borrow, collections::BTreeMap, marker::PhantomData, sync::LazyLock};

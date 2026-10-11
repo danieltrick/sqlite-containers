@@ -5,7 +5,7 @@
 mod utilities;
 
 use crate::utilities::{HexEncoder, mix64};
-use sqlite_containers::{SQLiteSet, SizeExt};
+use sqlite_containers::{Blob, SQLiteSet, SizeExt};
 use std::collections::HashSet;
 
 // ---------------------------------------------------------------------------
@@ -40,6 +40,7 @@ fn test_sqlite_set_i64() {
     assert!(set.remove(&0i64).unwrap());
     assert!(!set.remove(&0i64).unwrap());
     assert!(set.remove(&42i64).unwrap());
+    assert!(!set.remove(&42i64).unwrap());
     assert!(!set.remove(&i64::MIN).unwrap());
 
     assert_eq!(set.len().unwrap(), 1);
@@ -481,12 +482,12 @@ fn test_sqlite_set_string_stresstest() {
 }
 
 // ---------------------------------------------------------------------------
-// SQLiteSet<Vec<u8>> Tests
+// SQLiteSet<Blob> Tests
 // ---------------------------------------------------------------------------
 
 #[test]
 fn test_sqlite_set_blob() {
-    let mut set = SQLiteSet::<Vec<u8>>::new().unwrap();
+    let mut set = SQLiteSet::<Blob>::new().unwrap();
 
     assert_eq!(set.len().unwrap(), 0);
     assert!(set.is_empty().unwrap());
@@ -566,7 +567,7 @@ fn test_sqlite_set_blob() {
 
 #[test]
 fn test_sqlite_set_blob_transacted() {
-    let mut set = SQLiteSet::<Vec<u8>>::new().unwrap();
+    let mut set = SQLiteSet::<Blob>::new().unwrap();
     let mut tx = set.transaction().unwrap();
 
     assert_eq!(tx.len().unwrap(), 0);
@@ -659,7 +660,7 @@ fn test_sqlite_set_blob_transacted() {
 
 #[test]
 fn test_sqlite_set_blob_stresstest() {
-    let mut set = SQLiteSet::<Vec<u8>>::new().unwrap();
+    let mut set = SQLiteSet::<Blob>::new().unwrap();
     let mut hex = HexEncoder::default();
     const MAX_ITEMS: u64 = 1_000_000u64;
 

@@ -9,6 +9,8 @@
 SQLite-based containers for Rust
 ================================
 
+![SQLite-based containers for Rust](etc/images/sqlite-containers.png)
+
 [**`sqlite-containers`**](https://crates.io/crates/sqlite-containers) provides [*map*](https://en.wikipedia.org/wiki/Associative_array) and [*set*](https://en.wikipedia.org/wiki/Set_(abstract_data_type)) implementations that are backed by **SQLite** [in-memory](https://www.sqlite.org/inmemorydb.html) databases.
 
 Intended as drop-in replacements for [`HashMap`](std::collections::HashMap) and [`HashSet`](std::collections::HashSet).

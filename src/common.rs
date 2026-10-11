@@ -8,6 +8,9 @@ use crate::rusqlite::{
 };
 use std::fmt::Display;
 
+/// Binary Large Object (BLOB), represented as a [`Vec<u8>`](std::vec::Vec).
+pub type Blob = Vec<u8>;
+
 // ---------------------------------------------------------------------------
 // Sealed Type
 // ---------------------------------------------------------------------------
@@ -22,7 +25,7 @@ macro_rules! impl_sealed {
     };
 }
 
-impl_sealed!(i32, u32, i64, String, Vec<u8>);
+impl_sealed!(i32, u32, i64, String, Blob);
 
 // ---------------------------------------------------------------------------
 // SQL Type Holder
@@ -70,13 +73,13 @@ pub static SQL_TYPES: [SqlType; 3usize] = [SqlType::new(RusqliteType::Integer), 
 ///
 /// Currently, the following types are supported:
 ///
-/// Type          | SQLite storage datatype
-/// ------------- | -----------------------
-/// **`i32`**     | `INTEGER`
-/// **`u32`**     | `INTEGER`
-/// **`i64`**     | `INTEGER`
-/// **`Vec<u8>`** | `BLOB`
-/// **`String`**  | `TEXT`
+/// Type                              | SQLite storage datatype
+/// --------------------------------- | -----------------------
+/// **`i32`**                         | `INTEGER`
+/// **`u32`**                         | `INTEGER`
+/// **`i64`**                         | `INTEGER`
+/// **`Vec<u8>`**, alias **[`Blob`]** | `BLOB`
+/// **[`String`]**                    | `TEXT`
 ///
 /// &nbsp;
 ///
@@ -102,13 +105,16 @@ macro_rules! impl_type {
 impl_type!(i32, Integer);
 impl_type!(u32, Integer);
 impl_type!(i64, Integer);
-impl_type!(Vec<u8>, Blob);
+impl_type!(Blob, Blob);
 impl_type!(String, Text);
 
 // ---------------------------------------------------------------------------
 // Character-based Types
 // ---------------------------------------------------------------------------
 
+/// Represents a character-based type, e.g., [`String`].
+///
+/// Keys of these types can be treated case-sensitive (default) or case-insensitive.
 pub trait CharType {}
 
 macro_rules! impl_chartype {
