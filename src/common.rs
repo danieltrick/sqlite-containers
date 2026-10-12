@@ -33,7 +33,7 @@ impl_sealed!(i32, u32, i64, String, Blob);
 // ---------------------------------------------------------------------------
 
 #[derive(Eq, PartialEq, Copy, Clone, Debug)]
-pub struct SqlType(RusqliteType);
+pub struct SqlType(pub RusqliteType);
 
 impl SqlType {
     #[inline(always)]
@@ -259,6 +259,19 @@ mod test {
         assert_eq!(Size::from_i64(i64::MAX).to_u64(), i64::MAX as u64);
         assert_eq!(Size::from_i64(usize::MAX as i64).to_usize(), Some(usize::MAX));
         assert!(Size::from_i64(i64::MAX).to_usize().is_none());
+    }
+
+    #[test]
+    fn test_sql_type() {
+        const ALL_TYPES: [RusqliteType; 3usize] = [RusqliteType::Integer, RusqliteType::Blob, RusqliteType::Text];
+        for native_type in ALL_TYPES {
+            let sql_type = SqlType::new(native_type);
+            assert_eq!(sql_type.0, native_type);
+            for other_type in ALL_TYPES {
+                let other_type = SqlType::new(other_type);
+                assert_eq!(sql_type.partial_cmp(&other_type).unwrap(), sql_type.cmp(&other_type));
+            }
+        }
     }
 
     #[test]
