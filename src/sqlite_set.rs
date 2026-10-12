@@ -38,11 +38,12 @@ cfg_if! {
 
 const SQL_COUNT_KEYS: &str = "SELECT COUNT(*) FROM data;";
 const SQL_INSERT_KEY: &str = "INSERT INTO data (key) VALUES (?1);";
-const SQL_EXISTS_KEY: &str = "SELECT 1 FROM data WHERE key = ? LIMIT 1;";
+const SQL_EXISTS_KEY: &str = "SELECT 1 FROM data WHERE key = ?1 LIMIT 1;";
 const SQL_EXISTS_NOC: &str = "SELECT 1 FROM data WHERE key COLLATE NOCASE = ? LIMIT 1;";
 const SQL_QUERY_KEYS: &str = "SELECT key FROM data;";
-const SQL_DELETE_KEY: &str = "DELETE FROM data WHERE key = ?;";
-const SQL_DELETE_NOC: &str = "DELETE FROM data WHERE key COLLATE NOCASE = ?;";
+const SQL_WHERE_KEYS: &str = "SELECT key FROM data WHERE key LIKE ?1 ESCAPE '\\';";
+const SQL_DELETE_KEY: &str = "DELETE FROM data WHERE key = ?1;";
+const SQL_DELETE_NOC: &str = "DELETE FROM data WHERE key COLLATE NOCASE = ?1;";
 const SQL_DELETE_ALL: &str = "DELETE FROM data;";
 
 // ---------------------------------------------------------------------------
@@ -81,6 +82,8 @@ where
     }
 
     /// Creates a new, empty SQLite-backed hash set with case-insensitive keys.
+    ///
+    /// Note that only ASCII characters are case folded. SQLite does **not** attempt to do full UTF case folding!
     #[inline]
     pub fn with_nocase() -> Result<Self, Error>
     where
@@ -228,6 +231,29 @@ where
         Ok(None)
     }
 
+    /// Invokes the given `callback` function for each key that matches the given pattern.
+    ///
+    /// In the pattern string, the special character `%` matches zero or more characters, the special character `_` matches exactly one character, and the special character `\` serves as an escape character. All other characters are literals.
+    ///
+    /// Please note that SQLite's pattern matching is always *case-insensitive*.
+    ///
+    /// For example, the pattern `A%` matches all keys that begin with the character "A", whereas the pattern `H_nt` matches all keys with a length of exactly four characters where the first character is "H" and the last two characters are "nt".
+    ///
+    /// This function does **not** guarantee a specific iteration order.
+    #[inline]
+    pub fn filter<F, Q>(&self, pattern: &Q, mut callback: F) -> Result<(), Error>
+    where
+        F: FnMut(T),
+        T: Borrow<Q> + CharType,
+        Q: ?Sized + ToSql,
+    {
+        let mut statement = self.connection.prepare_cached(SQL_WHERE_KEYS)?;
+        for key in statement.query_map([pattern], |row| row.get(0))? {
+            callback(key?);
+        }
+        Ok(())
+    }
+
     /// Returns the number of unique keys in the set.
     #[inline]
     pub fn len(&self) -> Result<Size, Error> {
@@ -370,6 +396,21 @@ where
             }
         }
         Ok(None)
+    }
+
+    /// This function is equivalent to [`SQLiteSet::filter()`].
+    #[inline]
+    pub fn filter<F, Q>(&self, pattern: &Q, mut callback: F) -> Result<(), Error>
+    where
+        F: FnMut(T),
+        T: Borrow<Q> + CharType,
+        Q: ?Sized + ToSql,
+    {
+        let mut statement = self.transaction.prepare_cached(SQL_WHERE_KEYS)?;
+        for key in statement.query_map([pattern], |row| row.get(0))? {
+            callback(key?);
+        }
+        Ok(())
     }
 
     /// This function is equivalent to [`SQLiteSet::len()`].

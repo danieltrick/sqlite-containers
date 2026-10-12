@@ -298,6 +298,20 @@ fn test_sqlite_set_string() {
     assert!(set.find(|item: &str| item.eq_ignore_ascii_case("FOO")).unwrap().is_some());
     assert!(set.find(|item: &str| item.eq("bar")).unwrap().is_none());
 
+    {
+        let mut hash = HashSet::new();
+        set.filter("F%", |key| assert!(hash.insert(key))).unwrap();
+        assert_eq!(hash.len(), 1);
+        assert!(hash.contains("foo"));
+    }
+
+    {
+        let mut hash = HashSet::new();
+        set.filter("b_z", |key| assert!(hash.insert(key))).unwrap();
+        assert_eq!(hash.len(), 1);
+        assert!(hash.contains("baz"));
+    }
+
     set.clear().unwrap();
 
     assert_eq!(set.len().unwrap(), 0);
@@ -386,6 +400,20 @@ fn test_sqlite_set_string_transacted() {
     assert!(tx.find(|item: &str| item.eq("foo")).unwrap().is_some());
     assert!(tx.find(|item: &str| item.eq_ignore_ascii_case("FOO")).unwrap().is_some());
     assert!(tx.find(|item: &str| item.eq("bar")).unwrap().is_none());
+
+    {
+        let mut hash = HashSet::new();
+        tx.filter("F%", |key| assert!(hash.insert(key))).unwrap();
+        assert_eq!(hash.len(), 1);
+        assert!(hash.contains("foo"));
+    }
+
+    {
+        let mut hash = HashSet::new();
+        tx.filter("b_z", |key| assert!(hash.insert(key))).unwrap();
+        assert_eq!(hash.len(), 1);
+        assert!(hash.contains("baz"));
+    }
 
     tx.clear().unwrap();
 

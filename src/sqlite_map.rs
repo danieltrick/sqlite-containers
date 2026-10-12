@@ -53,6 +53,7 @@ const SQL_LOOKUP_KEY: &str = "SELECT value FROM data WHERE key = ? LIMIT 1;";
 const SQL_LOOKUP_NOC: &str = "SELECT value FROM data WHERE key COLLATE NOCASE = ? LIMIT 1;";
 const SQL_QUERY_KEYS: &str = "SELECT key FROM data;";
 const SQL_QUERY_PAIR: &str = "SELECT key, value FROM data;";
+const SQL_WHERE_PAIR: &str = "SELECT key, value FROM data WHERE key LIKE ?1 ESCAPE '\\';";
 const SQL_DELETE_KEY: &str = "DELETE FROM data WHERE key = ?;";
 const SQL_DELETE_NOC: &str = "DELETE FROM data WHERE key COLLATE NOCASE = ?;";
 const SQL_DELETE_ALL: &str = "DELETE FROM data;";
@@ -95,6 +96,8 @@ where
     }
 
     /// Creates a new, empty SQLite-backed hash map with case-insensitive keys.
+    ///
+    /// Note that only ASCII characters are case folded. SQLite does **not** attempt to do full UTF case folding!
     #[inline]
     pub fn with_nocase() -> Result<Self, Error>
     where
@@ -335,6 +338,31 @@ where
         Ok(None)
     }
 
+    /// Invokes the given `callback` function for each key-value pair whose key matches the given pattern.
+    ///
+    /// In the pattern string, the special character `%` matches zero or more characters, the special character `_` matches exactly one character, and the special character `\` serves as an escape character. All other characters are literals.
+    ///
+    /// Please note that SQLite's pattern matching is always *case-insensitive*.
+    ///
+    /// For example, the pattern `A%` matches all keys that begin with the character "A", whereas the pattern `H_nt` matches all keys with a length of exactly four characters where the first character is "H" and the last two characters are "nt".
+    ///
+    /// This function does **not** guarantee a specific iteration order.
+    #[inline]
+    pub fn filter_keys<F, Q>(&self, pattern: &Q, mut callback: F) -> Result<(), Error>
+    where
+        F: FnMut(K, V),
+        K: Borrow<Q> + CharType,
+        Q: ?Sized + ToSql,
+    {
+        let mut statement = self.connection.prepare_cached(SQL_WHERE_PAIR)?;
+        let mut result = statement.query([pattern])?;
+        while let Some(key_value) = result.next()? {
+            let (key, value): (K, V) = (key_value.get(0)?, key_value.get(1)?);
+            callback(key, value);
+        }
+        Ok(())
+    }
+
     /// Returns the number of unique keys in the map.
     #[inline]
     pub fn len(&self) -> Result<Size, Error> {
@@ -547,6 +575,23 @@ where
             }
         }
         Ok(None)
+    }
+
+    /// This function is equivalent to [`SQLiteMap::filter_keys()`].
+    #[inline]
+    pub fn filter_keys<F, Q>(&self, pattern: &Q, mut callback: F) -> Result<(), Error>
+    where
+        F: FnMut(K, V),
+        K: Borrow<Q> + CharType,
+        Q: ?Sized + ToSql,
+    {
+        let mut statement = self.transaction.prepare_cached(SQL_WHERE_PAIR)?;
+        let mut result = statement.query([pattern])?;
+        while let Some(key_value) = result.next()? {
+            let (key, value): (K, V) = (key_value.get(0)?, key_value.get(1)?);
+            callback(key, value);
+        }
+        Ok(())
     }
 
     /// This function is equivalent to [`SQLiteMap::len()`].
