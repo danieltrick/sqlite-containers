@@ -41,7 +41,7 @@
 //!
 //! ```toml
 //! [dependencies]
-//! sqlite-containers = "1.0.0"
+//! sqlite-containers = "2.0.0"
 //! ```
 //!
 //! #### Features
