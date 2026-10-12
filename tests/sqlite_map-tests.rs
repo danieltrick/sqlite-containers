@@ -923,14 +923,29 @@ fn test_sqlite_map_string_string() {
 
     {
         let mut hash = HashSet::new();
-        map.filter_keys("F%", |key, _| assert!(hash.insert(key))).unwrap();
+        map.filter_keys("F%", |key| assert!(hash.insert(key))).unwrap();
         assert_eq!(hash.len(), 1);
         assert!(hash.contains("foo"));
     }
 
     {
         let mut hash = HashSet::new();
-        map.filter_keys("ba_", |key, _| assert!(hash.insert(key))).unwrap();
+        map.filter_keys("ba_", |key| assert!(hash.insert(key))).unwrap();
+        assert_eq!(hash.len(), 2);
+        assert!(hash.contains("bar"));
+        assert!(hash.contains("baz"));
+    }
+
+    {
+        let mut hash = HashSet::new();
+        map.filter_entries("F%", |key, _| assert!(hash.insert(key))).unwrap();
+        assert_eq!(hash.len(), 1);
+        assert!(hash.contains("foo"));
+    }
+
+    {
+        let mut hash = HashSet::new();
+        map.filter_entries("ba_", |key, _| assert!(hash.insert(key))).unwrap();
         assert_eq!(hash.len(), 2);
         assert!(hash.contains("bar"));
         assert!(hash.contains("baz"));
@@ -1111,14 +1126,29 @@ fn test_sqlite_map_string_string_transacted() {
 
     {
         let mut hash = HashSet::new();
-        tx.filter_keys("F%", |key, _| assert!(hash.insert(key))).unwrap();
+        tx.filter_keys("F%", |key| assert!(hash.insert(key))).unwrap();
         assert_eq!(hash.len(), 1);
         assert!(hash.contains("foo"));
     }
 
     {
         let mut hash = HashSet::new();
-        tx.filter_keys("ba_", |key, _| assert!(hash.insert(key))).unwrap();
+        tx.filter_keys("ba_", |key| assert!(hash.insert(key))).unwrap();
+        assert_eq!(hash.len(), 2);
+        assert!(hash.contains("bar"));
+        assert!(hash.contains("baz"));
+    }
+
+    {
+        let mut hash = HashSet::new();
+        tx.filter_entries("F%", |key, _| assert!(hash.insert(key))).unwrap();
+        assert_eq!(hash.len(), 1);
+        assert!(hash.contains("foo"));
+    }
+
+    {
+        let mut hash = HashSet::new();
+        tx.filter_entries("ba_", |key, _| assert!(hash.insert(key))).unwrap();
         assert_eq!(hash.len(), 2);
         assert!(hash.contains("bar"));
         assert!(hash.contains("baz"));
@@ -1416,14 +1446,29 @@ fn test_sqlite_map_string_blob() {
 
     {
         let mut hash = HashSet::new();
-        map.filter_keys("F%", |key, _| assert!(hash.insert(key))).unwrap();
+        map.filter_keys("F%", |key| assert!(hash.insert(key))).unwrap();
         assert_eq!(hash.len(), 1);
         assert!(hash.contains("foo"));
     }
 
     {
         let mut hash = HashSet::new();
-        map.filter_keys("ba_", |key, _| assert!(hash.insert(key))).unwrap();
+        map.filter_keys("ba_", |key| assert!(hash.insert(key))).unwrap();
+        assert_eq!(hash.len(), 2);
+        assert!(hash.contains("bar"));
+        assert!(hash.contains("baz"));
+    }
+
+    {
+        let mut hash = HashSet::new();
+        map.filter_entries("F%", |key, _| assert!(hash.insert(key))).unwrap();
+        assert_eq!(hash.len(), 1);
+        assert!(hash.contains("foo"));
+    }
+
+    {
+        let mut hash = HashSet::new();
+        map.filter_entries("ba_", |key, _| assert!(hash.insert(key))).unwrap();
         assert_eq!(hash.len(), 2);
         assert!(hash.contains("bar"));
         assert!(hash.contains("baz"));
@@ -1604,14 +1649,29 @@ fn test_sqlite_map_string_blob_transacted() {
 
     {
         let mut hash = HashSet::new();
-        tx.filter_keys("F%", |key, _| assert!(hash.insert(key))).unwrap();
+        tx.filter_keys("F%", |key| assert!(hash.insert(key))).unwrap();
         assert_eq!(hash.len(), 1);
         assert!(hash.contains("foo"));
     }
 
     {
         let mut hash = HashSet::new();
-        tx.filter_keys("ba_", |key, _| assert!(hash.insert(key))).unwrap();
+        tx.filter_keys("ba_", |key| assert!(hash.insert(key))).unwrap();
+        assert_eq!(hash.len(), 2);
+        assert!(hash.contains("bar"));
+        assert!(hash.contains("baz"));
+    }
+
+    {
+        let mut hash = HashSet::new();
+        tx.filter_entries("F%", |key, _| assert!(hash.insert(key))).unwrap();
+        assert_eq!(hash.len(), 1);
+        assert!(hash.contains("foo"));
+    }
+
+    {
+        let mut hash = HashSet::new();
+        tx.filter_entries("ba_", |key, _| assert!(hash.insert(key))).unwrap();
         assert_eq!(hash.len(), 2);
         assert!(hash.contains("bar"));
         assert!(hash.contains("baz"));
@@ -1909,14 +1969,29 @@ fn test_sqlite_map_string_i64() {
 
     {
         let mut hash = HashSet::new();
-        map.filter_keys("F%", |key, _| assert!(hash.insert(key))).unwrap();
+        map.filter_keys("F%", |key| assert!(hash.insert(key))).unwrap();
         assert_eq!(hash.len(), 1);
         assert!(hash.contains("foo"));
     }
 
     {
         let mut hash = HashSet::new();
-        map.filter_keys("ba_", |key, _| assert!(hash.insert(key))).unwrap();
+        map.filter_keys("ba_", |key| assert!(hash.insert(key))).unwrap();
+        assert_eq!(hash.len(), 2);
+        assert!(hash.contains("bar"));
+        assert!(hash.contains("baz"));
+    }
+
+    {
+        let mut hash = HashSet::new();
+        map.filter_entries("F%", |key, _| assert!(hash.insert(key))).unwrap();
+        assert_eq!(hash.len(), 1);
+        assert!(hash.contains("foo"));
+    }
+
+    {
+        let mut hash = HashSet::new();
+        map.filter_entries("ba_", |key, _| assert!(hash.insert(key))).unwrap();
         assert_eq!(hash.len(), 2);
         assert!(hash.contains("bar"));
         assert!(hash.contains("baz"));
@@ -2097,14 +2172,29 @@ fn test_sqlite_map_string_i64_transacted() {
 
     {
         let mut hash = HashSet::new();
-        tx.filter_keys("F%", |key, _| assert!(hash.insert(key))).unwrap();
+        tx.filter_keys("F%", |key| assert!(hash.insert(key))).unwrap();
         assert_eq!(hash.len(), 1);
         assert!(hash.contains("foo"));
     }
 
     {
         let mut hash = HashSet::new();
-        tx.filter_keys("ba_", |key, _| assert!(hash.insert(key))).unwrap();
+        tx.filter_keys("ba_", |key| assert!(hash.insert(key))).unwrap();
+        assert_eq!(hash.len(), 2);
+        assert!(hash.contains("bar"));
+        assert!(hash.contains("baz"));
+    }
+
+    {
+        let mut hash = HashSet::new();
+        tx.filter_entries("F%", |key, _| assert!(hash.insert(key))).unwrap();
+        assert_eq!(hash.len(), 1);
+        assert!(hash.contains("foo"));
+    }
+
+    {
+        let mut hash = HashSet::new();
+        tx.filter_entries("ba_", |key, _| assert!(hash.insert(key))).unwrap();
         assert_eq!(hash.len(), 2);
         assert!(hash.contains("bar"));
         assert!(hash.contains("baz"));

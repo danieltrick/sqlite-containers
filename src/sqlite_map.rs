@@ -52,6 +52,7 @@ const SQL_EXISTS_NOC: &str = "SELECT 1 FROM data WHERE key COLLATE NOCASE = ? LI
 const SQL_LOOKUP_KEY: &str = "SELECT value FROM data WHERE key = ? LIMIT 1;";
 const SQL_LOOKUP_NOC: &str = "SELECT value FROM data WHERE key COLLATE NOCASE = ? LIMIT 1;";
 const SQL_QUERY_KEYS: &str = "SELECT key FROM data;";
+const SQL_WHERE_KEYS: &str = "SELECT key FROM data WHERE key LIKE ?1 ESCAPE '\\';";
 const SQL_QUERY_PAIR: &str = "SELECT key, value FROM data;";
 const SQL_WHERE_PAIR: &str = "SELECT key, value FROM data WHERE key LIKE ?1 ESCAPE '\\';";
 const SQL_DELETE_KEY: &str = "DELETE FROM data WHERE key = ?;";
@@ -338,7 +339,7 @@ where
         Ok(None)
     }
 
-    /// Invokes the given `callback` function for each key-value pair whose key matches the given pattern.
+    /// Invokes the given `callback` function for each key that matches the given pattern.
     ///
     /// In the pattern string, the special character `%` matches zero or more characters, the special character `_` matches exactly one character, and the special character `\` serves as an escape character. All other characters are literals.
     ///
@@ -349,6 +350,29 @@ where
     /// This function does **not** guarantee a specific iteration order.
     #[inline]
     pub fn filter_keys<F, Q>(&self, pattern: &Q, mut callback: F) -> Result<(), Error>
+    where
+        F: FnMut(K),
+        K: Borrow<Q> + CharType,
+        Q: ?Sized + ToSql,
+    {
+        let mut statement = self.connection.prepare_cached(SQL_WHERE_KEYS)?;
+        for key in statement.query_map([pattern], |row| row.get(0))? {
+            callback(key?);
+        }
+        Ok(())
+    }
+
+    /// Invokes the given `callback` function for each key-value pair whose key matches the given pattern.
+    ///
+    /// In the pattern string, the special character `%` matches zero or more characters, the special character `_` matches exactly one character, and the special character `\` serves as an escape character. All other characters are literals.
+    ///
+    /// Please note that SQLite's pattern matching is always *case-insensitive*.
+    ///
+    /// For example, the pattern `A%` matches all keys that begin with the character "A", whereas the pattern `H_nt` matches all keys with a length of exactly four characters where the first character is "H" and the last two characters are "nt".
+    ///
+    /// This function does **not** guarantee a specific iteration order.
+    #[inline]
+    pub fn filter_entries<F, Q>(&self, pattern: &Q, mut callback: F) -> Result<(), Error>
     where
         F: FnMut(K, V),
         K: Borrow<Q> + CharType,
@@ -580,6 +604,21 @@ where
     /// This function is equivalent to [`SQLiteMap::filter_keys()`].
     #[inline]
     pub fn filter_keys<F, Q>(&self, pattern: &Q, mut callback: F) -> Result<(), Error>
+    where
+        F: FnMut(K),
+        K: Borrow<Q> + CharType,
+        Q: ?Sized + ToSql,
+    {
+        let mut statement = self.transaction.prepare_cached(SQL_WHERE_KEYS)?;
+        for key in statement.query_map([pattern], |row| row.get(0))? {
+            callback(key?);
+        }
+        Ok(())
+    }
+
+    /// This function is equivalent to [`SQLiteMap::filter_entries()`].
+    #[inline]
+    pub fn filter_entries<F, Q>(&self, pattern: &Q, mut callback: F) -> Result<(), Error>
     where
         F: FnMut(K, V),
         K: Borrow<Q> + CharType,
