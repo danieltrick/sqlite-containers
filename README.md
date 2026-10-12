@@ -4,6 +4,7 @@
 [![License: Unlicense](https://img.shields.io/badge/license-Unlicense-blue.svg)](https://unlicense.org/)
 [![CI Workflow](https://github.com/danieltrick/sqlite-containers/actions/workflows/cargo-workflow.yaml/badge.svg)](https://github.com/danieltrick/sqlite-containers/actions/workflows/cargo-workflow.yaml)
 [![codecov](https://codecov.io/gh/danieltrick/sqlite-containers/graph/badge.svg?token=xrHYAQWW0J)](https://codecov.io/gh/danieltrick/sqlite-containers)
+[![Downloads](https://img.shields.io/crates/d/sqlite-containers.svg)](https://crates.io/crates/sqlite-containers)
 
 
 SQLite-based containers for Rust
@@ -13,9 +14,9 @@ SQLite-based containers for Rust
 
 [**`sqlite-containers`**](https://crates.io/crates/sqlite-containers) provides [*map*](https://en.wikipedia.org/wiki/Associative_array) and [*set*](https://en.wikipedia.org/wiki/Set_(abstract_data_type)) implementations that are backed by **SQLite** [in-memory](https://www.sqlite.org/inmemorydb.html) databases.
 
-Intended as drop-in replacements for [`HashMap`](std::collections::HashMap) and [`HashSet`](std::collections::HashSet).
+It is designed as a drop-in replacement for [`HashMap`](std::collections::HashMap) and [`HashSet`](std::collections::HashSet).
 
-Leveraging the power of the SQLite engine, `sqlite-containers` efficiently store billions of elements &#x1F60E;
+Leveraging the power of the SQLite engine, [`SQLiteMap`](https://docs.rs/sqlite-containers/latest/sqlite_containers/struct.SQLiteMap.html) and [`SQLiteSet`](https://docs.rs/sqlite-containers/latest/sqlite_containers/struct.SQLiteSet.html) efficiently store billions of elements!
 
 
 Quick Start

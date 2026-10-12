@@ -51,7 +51,8 @@ const SQL_EXISTS_KEY: &str = "SELECT 1 FROM data WHERE key = ? LIMIT 1;";
 const SQL_EXISTS_NOC: &str = "SELECT 1 FROM data WHERE key COLLATE NOCASE = ? LIMIT 1;";
 const SQL_LOOKUP_KEY: &str = "SELECT value FROM data WHERE key = ? LIMIT 1;";
 const SQL_LOOKUP_NOC: &str = "SELECT value FROM data WHERE key COLLATE NOCASE = ? LIMIT 1;";
-const SQL_QUERY_KEYS: &str = "SELECT key, value FROM data;";
+const SQL_QUERY_KEYS: &str = "SELECT key FROM data;";
+const SQL_QUERY_PAIR: &str = "SELECT key, value FROM data;";
 const SQL_DELETE_KEY: &str = "DELETE FROM data WHERE key = ?;";
 const SQL_DELETE_NOC: &str = "DELETE FROM data WHERE key COLLATE NOCASE = ?;";
 const SQL_DELETE_ALL: &str = "DELETE FROM data;";
@@ -173,7 +174,7 @@ where
     ///
     /// Returns `true`, if the map contains the key; otherwise returns `false`.
     #[inline]
-    pub fn contains<Q>(&self, key: &Q) -> Result<bool, Error>
+    pub fn contains_key<Q>(&self, key: &Q) -> Result<bool, Error>
     where
         K: Borrow<Q>,
         Q: ?Sized + ToSql,
@@ -182,13 +183,13 @@ where
         Ok(statement.exists([key])?)
     }
 
-    /// This is the "case-insensitive" version of the [`contains()`](Self::contains) function.
+    /// This is the "case-insensitive" version of the [`contains()`](Self::contains_key) function.
     ///
     /// The check is *always* performed case-insensitive.
     ///
     /// Returns `true`, if the map contains the key; otherwise returns `false`.
     #[inline]
-    pub fn contains_nocase<Q>(&self, key: &Q) -> Result<bool, Error>
+    pub fn contains_key_nocase<Q>(&self, key: &Q) -> Result<bool, Error>
     where
         K: Borrow<Q> + CharType,
         Q: ?Sized + ToSql,
@@ -257,21 +258,58 @@ where
         Ok(statement.execute([key])? != 0)
     }
 
+    /// Invokes the given `callback` function for each key that is currently contained in the map.
+    ///
+    /// This function does **not** guarantee a specific iteration order.
+    #[inline]
+    pub fn for_each_key<F>(&self, mut callback: F) -> Result<(), Error>
+    where
+        F: FnMut(K),
+    {
+        let mut statement = self.connection.prepare_cached(SQL_QUERY_KEYS)?;
+        for key in statement.query_map([], |row| row.get(0))? {
+            callback(key?);
+        }
+        Ok(())
+    }
+
     /// Invokes the given `callback` function for each key-value pair that is currently contained in the map.
     ///
     /// This function does **not** guarantee a specific iteration order.
     #[inline]
-    pub fn for_each<F>(&self, mut callback: F) -> Result<(), Error>
+    pub fn for_each_entry<F>(&self, mut callback: F) -> Result<(), Error>
     where
         F: FnMut(K, V),
     {
-        let mut statement = self.connection.prepare_cached(SQL_QUERY_KEYS)?;
+        let mut statement = self.connection.prepare_cached(SQL_QUERY_PAIR)?;
         let mut result = statement.query([])?;
         while let Some(key_value) = result.next()? {
             let (key, value): (K, V) = (key_value.get(0)?, key_value.get(1)?);
             callback(key, value);
         }
         Ok(())
+    }
+
+    /// Searches the map for the first key that satisfies the given `predicate`.
+    ///
+    /// Returns the first key that satisfies the given predicate, or `None` if none satisfies the predicate or the map is empty.
+    ///
+    /// This function does **not** guarantee a specific iteration order.
+    ///
+    /// Also, the predicate is **not** always tested on *all* keys, because the function returns at the first match.
+    #[inline]
+    pub fn find_key<P>(&self, predicate: P) -> Result<Option<K>, Error>
+    where
+        P: Fn(&K) -> bool,
+    {
+        let mut statement = self.connection.prepare_cached(SQL_QUERY_KEYS)?;
+        for key in statement.query_map([], |row| row.get(0))? {
+            let key: K = key?;
+            if predicate(key.borrow()) {
+                return Ok(Some(key));
+            }
+        }
+        Ok(None)
     }
 
     /// Searches the map for the first key-value pair that satisfies the given `predicate`.
@@ -282,11 +320,11 @@ where
     ///
     /// Also, the predicate is **not** always tested on *all* key-value pairs, because the function returns at the first match.
     #[inline]
-    pub fn find<P>(&self, predicate: P) -> Result<Option<(K, V)>, Error>
+    pub fn find_entry<P>(&self, predicate: P) -> Result<Option<(K, V)>, Error>
     where
         P: Fn(&K, &V) -> bool,
     {
-        let mut statement = self.connection.prepare_cached(SQL_QUERY_KEYS)?;
+        let mut statement = self.connection.prepare_cached(SQL_QUERY_PAIR)?;
         let mut result = statement.query([])?;
         while let Some(key_value) = result.next()? {
             let (key, value): (K, V) = (key_value.get(0)?, key_value.get(1)?);
@@ -384,9 +422,9 @@ where
         Ok(())
     }
 
-    /// This function is equivalent to [`SQLiteMap::contains()`].
+    /// This function is equivalent to [`SQLiteMap::contains_key()`].
     #[inline]
-    pub fn contains<Q>(&self, key: &Q) -> Result<bool, Error>
+    pub fn contains_key<Q>(&self, key: &Q) -> Result<bool, Error>
     where
         K: Borrow<Q>,
         Q: ?Sized + ToSql,
@@ -395,9 +433,9 @@ where
         Ok(statement.exists([key])?)
     }
 
-    /// This function is equivalent to [`SQLiteMap::contains_nocase()`].
+    /// This function is equivalent to [`SQLiteMap::contains_key_nocase()`].
     #[inline]
-    pub fn contains_nocase<Q>(&self, key: &Q) -> Result<bool, Error>
+    pub fn contains_key_nocase<Q>(&self, key: &Q) -> Result<bool, Error>
     where
         K: Borrow<Q> + CharType,
         Q: ?Sized + ToSql,
@@ -450,13 +488,26 @@ where
         Ok(statement.execute([key])? != 0)
     }
 
-    /// This function is equivalent to [`SQLiteMap::for_each()`].
+    /// This function is equivalent to [`SQLiteMap::for_each_key()`].
     #[inline]
-    pub fn for_each<F>(&self, mut callback: F) -> Result<(), Error>
+    pub fn for_each_key<F>(&self, mut callback: F) -> Result<(), Error>
+    where
+        F: FnMut(K),
+    {
+        let mut statement = self.transaction.prepare_cached(SQL_QUERY_KEYS)?;
+        for key in statement.query_map([], |row| row.get(0))? {
+            callback(key?);
+        }
+        Ok(())
+    }
+
+    /// This function is equivalent to [`SQLiteMap::for_each_entry()`].
+    #[inline]
+    pub fn for_each_entry<F>(&self, mut callback: F) -> Result<(), Error>
     where
         F: FnMut(K, V),
     {
-        let mut statement = self.transaction.prepare_cached(SQL_QUERY_KEYS)?;
+        let mut statement = self.transaction.prepare_cached(SQL_QUERY_PAIR)?;
         let mut result = statement.query([])?;
         while let Some(key_value) = result.next()? {
             let (key, value): (K, V) = (key_value.get(0)?, key_value.get(1)?);
@@ -465,13 +516,29 @@ where
         Ok(())
     }
 
-    /// This function is equivalent to [`SQLiteMap::find()`].
+    /// This function is equivalent to [`SQLiteMap::find_key()`].
     #[inline]
-    pub fn find<P>(&self, predicate: P) -> Result<Option<(K, V)>, Error>
+    pub fn find_key<P>(&self, predicate: P) -> Result<Option<K>, Error>
+    where
+        P: Fn(&K) -> bool,
+    {
+        let mut statement = self.transaction.prepare_cached(SQL_QUERY_KEYS)?;
+        for key in statement.query_map([], |row| row.get(0))? {
+            let key: K = key?;
+            if predicate(key.borrow()) {
+                return Ok(Some(key));
+            }
+        }
+        Ok(None)
+    }
+
+    /// This function is equivalent to [`SQLiteMap::find_entry()`].
+    #[inline]
+    pub fn find_entry<P>(&self, predicate: P) -> Result<Option<(K, V)>, Error>
     where
         P: Fn(&K, &V) -> bool,
     {
-        let mut statement = self.transaction.prepare_cached(SQL_QUERY_KEYS)?;
+        let mut statement = self.transaction.prepare_cached(SQL_QUERY_PAIR)?;
         let mut result = statement.query([])?;
         while let Some(key_value) = result.next()? {
             let (key, value): (K, V) = (key_value.get(0)?, key_value.get(1)?);

@@ -8,7 +8,7 @@ use crate::utilities::{HexEncoder, mix64};
 use sqlite_containers::{Blob, SQLiteMap, SizeExt};
 use std::{
     array,
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     sync::{Arc, Barrier, mpsc::sync_channel},
     thread,
 };
@@ -23,10 +23,10 @@ fn test_sqlite_map_i64_string() {
 
     assert_eq!(map.len().unwrap(), 0);
     assert!(map.is_empty().unwrap());
-    assert!(!map.contains(&0i64).unwrap());
-    assert!(!map.contains(&42i64).unwrap());
-    assert!(!map.contains(&i64::MAX).unwrap());
-    assert!(!map.contains(&i64::MIN).unwrap());
+    assert!(!map.contains_key(&0i64).unwrap());
+    assert!(!map.contains_key(&42i64).unwrap());
+    assert!(!map.contains_key(&i64::MAX).unwrap());
+    assert!(!map.contains_key(&i64::MIN).unwrap());
     assert!(map.get(&0i64).unwrap().is_none());
     assert!(map.get(&42i64).unwrap().is_none());
     assert!(map.get(&i64::MAX).unwrap().is_none());
@@ -41,10 +41,10 @@ fn test_sqlite_map_i64_string() {
 
     assert_eq!(map.len().unwrap(), 3);
     assert!(!map.is_empty().unwrap());
-    assert!(map.contains(&0i64).unwrap());
-    assert!(map.contains(&42i64).unwrap());
-    assert!(map.contains(&i64::MAX).unwrap());
-    assert!(!map.contains(&i64::MIN).unwrap());
+    assert!(map.contains_key(&0i64).unwrap());
+    assert!(map.contains_key(&42i64).unwrap());
+    assert!(map.contains_key(&i64::MAX).unwrap());
+    assert!(!map.contains_key(&i64::MIN).unwrap());
     assert_eq!(map.get(&0i64).unwrap().unwrap(), "12345678");
     assert_eq!(map.get(&42i64).unwrap().unwrap(), "87654321");
     assert_eq!(map.get(&i64::MAX).unwrap().unwrap(), "deadbeef");
@@ -58,10 +58,10 @@ fn test_sqlite_map_i64_string() {
 
     assert_eq!(map.len().unwrap(), 1);
     assert!(!map.is_empty().unwrap());
-    assert!(!map.contains(&0i64).unwrap());
-    assert!(!map.contains(&42i64).unwrap());
-    assert!(map.contains(&i64::MAX).unwrap());
-    assert!(!map.contains(&i64::MIN).unwrap());
+    assert!(!map.contains_key(&0i64).unwrap());
+    assert!(!map.contains_key(&42i64).unwrap());
+    assert!(map.contains_key(&i64::MAX).unwrap());
+    assert!(!map.contains_key(&i64::MIN).unwrap());
     assert!(map.get(&0i64).unwrap().is_none());
     assert!(map.get(&42i64).unwrap().is_none());
     assert_eq!(map.get(&i64::MAX).unwrap().unwrap(), "deadbeef");
@@ -74,28 +74,42 @@ fn test_sqlite_map_i64_string() {
 
     assert_eq!(map.len().unwrap(), 3);
     assert!(!map.is_empty().unwrap());
-    assert!(map.contains(&0i64).unwrap());
-    assert!(!map.contains(&42i64).unwrap());
-    assert!(map.contains(&i64::MAX).unwrap());
-    assert!(map.contains(&i64::MIN).unwrap());
+    assert!(map.contains_key(&0i64).unwrap());
+    assert!(!map.contains_key(&42i64).unwrap());
+    assert!(map.contains_key(&i64::MAX).unwrap());
+    assert!(map.contains_key(&i64::MIN).unwrap());
     assert_eq!(map.get(&0i64).unwrap().unwrap(), "12345678");
     assert!(map.get(&42i64).unwrap().is_none());
     assert_eq!(map.get(&i64::MAX).unwrap().unwrap(), "deadbeef");
     assert_eq!(map.get(&i64::MIN).unwrap().unwrap(), "cafebabe");
 
     {
+        let mut hash = HashSet::new();
+        map.for_each_key(|key| assert!(hash.insert(key.to_owned()))).unwrap();
+        assert_eq!(hash.len(), 3);
+        assert!(hash.contains(&0i64));
+        assert!(hash.contains(&i64::MAX));
+        assert!(hash.contains(&i64::MIN));
+    }
+
+    {
         let mut hash = HashMap::new();
-        map.for_each(|key, value| assert!(hash.insert(key.to_owned(), value.to_owned()).is_none())).unwrap();
+        map.for_each_entry(|key, value| assert!(hash.insert(key.to_owned(), value.to_owned()).is_none())).unwrap();
         assert_eq!(hash.len(), 3);
         assert_eq!(hash.get(&0i64).unwrap(), "12345678");
         assert_eq!(hash.get(&i64::MAX).unwrap(), "deadbeef");
         assert_eq!(hash.get(&i64::MIN).unwrap(), "cafebabe");
     }
 
-    assert_eq!(map.find(|key, _| key.eq(&0i64)).unwrap().unwrap().1, "12345678");
-    assert!(map.find(|key, _| key.eq(&42i64)).unwrap().is_none());
-    assert_eq!(map.find(|key, _| key.eq(&i64::MAX)).unwrap().unwrap().1, "deadbeef");
-    assert_eq!(map.find(|key, _| key.eq(&i64::MIN)).unwrap().unwrap().1, "cafebabe");
+    assert!(map.find_key(|key| key.eq(&0i64)).unwrap().is_some());
+    assert!(map.find_key(|key| key.eq(&42i64)).unwrap().is_none());
+    assert!(map.find_key(|key| key.eq(&i64::MAX)).unwrap().is_some());
+    assert!(map.find_key(|key| key.eq(&i64::MIN)).unwrap().is_some());
+
+    assert_eq!(map.find_entry(|key, _| key.eq(&0i64)).unwrap().unwrap().1, "12345678");
+    assert!(map.find_entry(|key, _| key.eq(&42i64)).unwrap().is_none());
+    assert_eq!(map.find_entry(|key, _| key.eq(&i64::MAX)).unwrap().unwrap().1, "deadbeef");
+    assert_eq!(map.find_entry(|key, _| key.eq(&i64::MIN)).unwrap().unwrap().1, "cafebabe");
 
     map.update(&0i64, "abcdefgh").unwrap();
     map.update(&42i64, "hgfedcba").unwrap();
@@ -107,8 +121,18 @@ fn test_sqlite_map_i64_string() {
     assert_eq!(map.get(&i64::MIN).unwrap().unwrap(), "cafebabe");
 
     {
+        let mut hash = HashSet::new();
+        map.for_each_key(|key| assert!(hash.insert(key.to_owned()))).unwrap();
+        assert_eq!(hash.len(), 4);
+        assert!(hash.contains(&0i64));
+        assert!(hash.contains(&42i64));
+        assert!(hash.contains(&i64::MAX));
+        assert!(hash.contains(&i64::MIN));
+    }
+
+    {
         let mut hash = HashMap::new();
-        map.for_each(|key, value| assert!(hash.insert(key.to_owned(), value.to_owned()).is_none())).unwrap();
+        map.for_each_entry(|key, value| assert!(hash.insert(key.to_owned(), value.to_owned()).is_none())).unwrap();
         assert_eq!(hash.len(), 4);
         assert_eq!(hash.get(&0i64).unwrap(), "abcdefgh");
         assert_eq!(hash.get(&42i64).unwrap(), "hgfedcba");
@@ -116,19 +140,24 @@ fn test_sqlite_map_i64_string() {
         assert_eq!(hash.get(&i64::MIN).unwrap(), "cafebabe");
     }
 
-    assert_eq!(map.find(|key, _| key.eq(&0i64)).unwrap().unwrap().1, "abcdefgh");
-    assert_eq!(map.find(|key, _| key.eq(&42i64)).unwrap().unwrap().1, "hgfedcba");
-    assert_eq!(map.find(|key, _| key.eq(&i64::MAX)).unwrap().unwrap().1, "stuvwxyz");
-    assert_eq!(map.find(|key, _| key.eq(&i64::MIN)).unwrap().unwrap().1, "cafebabe");
+    assert!(map.find_key(|key| key.eq(&0i64)).unwrap().is_some());
+    assert!(map.find_key(|key| key.eq(&42i64)).unwrap().is_some());
+    assert!(map.find_key(|key| key.eq(&i64::MAX)).unwrap().is_some());
+    assert!(map.find_key(|key| key.eq(&i64::MIN)).unwrap().is_some());
+
+    assert_eq!(map.find_entry(|key, _| key.eq(&0i64)).unwrap().unwrap().1, "abcdefgh");
+    assert_eq!(map.find_entry(|key, _| key.eq(&42i64)).unwrap().unwrap().1, "hgfedcba");
+    assert_eq!(map.find_entry(|key, _| key.eq(&i64::MAX)).unwrap().unwrap().1, "stuvwxyz");
+    assert_eq!(map.find_entry(|key, _| key.eq(&i64::MIN)).unwrap().unwrap().1, "cafebabe");
 
     map.clear().unwrap();
 
     assert_eq!(map.len().unwrap(), 0);
     assert!(map.is_empty().unwrap());
-    assert!(!map.contains(&0i64).unwrap());
-    assert!(!map.contains(&42i64).unwrap());
-    assert!(!map.contains(&i64::MAX).unwrap());
-    assert!(!map.contains(&i64::MIN).unwrap());
+    assert!(!map.contains_key(&0i64).unwrap());
+    assert!(!map.contains_key(&42i64).unwrap());
+    assert!(!map.contains_key(&i64::MAX).unwrap());
+    assert!(!map.contains_key(&i64::MIN).unwrap());
 }
 
 #[test]
@@ -138,10 +167,10 @@ fn test_sqlite_map_i64_string_transacted() {
 
     assert_eq!(tx.len().unwrap(), 0);
     assert!(tx.is_empty().unwrap());
-    assert!(!tx.contains(&0i64).unwrap());
-    assert!(!tx.contains(&42i64).unwrap());
-    assert!(!tx.contains(&i64::MAX).unwrap());
-    assert!(!tx.contains(&i64::MIN).unwrap());
+    assert!(!tx.contains_key(&0i64).unwrap());
+    assert!(!tx.contains_key(&42i64).unwrap());
+    assert!(!tx.contains_key(&i64::MAX).unwrap());
+    assert!(!tx.contains_key(&i64::MIN).unwrap());
     assert!(tx.get(&0i64).unwrap().is_none());
     assert!(tx.get(&42i64).unwrap().is_none());
     assert!(tx.get(&i64::MAX).unwrap().is_none());
@@ -156,10 +185,10 @@ fn test_sqlite_map_i64_string_transacted() {
 
     assert_eq!(tx.len().unwrap(), 3);
     assert!(!tx.is_empty().unwrap());
-    assert!(tx.contains(&0i64).unwrap());
-    assert!(tx.contains(&42i64).unwrap());
-    assert!(tx.contains(&i64::MAX).unwrap());
-    assert!(!tx.contains(&i64::MIN).unwrap());
+    assert!(tx.contains_key(&0i64).unwrap());
+    assert!(tx.contains_key(&42i64).unwrap());
+    assert!(tx.contains_key(&i64::MAX).unwrap());
+    assert!(!tx.contains_key(&i64::MIN).unwrap());
     assert_eq!(tx.get(&0i64).unwrap().unwrap(), "12345678");
     assert_eq!(tx.get(&42i64).unwrap().unwrap(), "87654321");
     assert_eq!(tx.get(&i64::MAX).unwrap().unwrap(), "deadbeef");
@@ -173,10 +202,10 @@ fn test_sqlite_map_i64_string_transacted() {
 
     assert_eq!(tx.len().unwrap(), 1);
     assert!(!tx.is_empty().unwrap());
-    assert!(!tx.contains(&0i64).unwrap());
-    assert!(!tx.contains(&42i64).unwrap());
-    assert!(tx.contains(&i64::MAX).unwrap());
-    assert!(!tx.contains(&i64::MIN).unwrap());
+    assert!(!tx.contains_key(&0i64).unwrap());
+    assert!(!tx.contains_key(&42i64).unwrap());
+    assert!(tx.contains_key(&i64::MAX).unwrap());
+    assert!(!tx.contains_key(&i64::MIN).unwrap());
     assert!(tx.get(&0i64).unwrap().is_none());
     assert!(tx.get(&42i64).unwrap().is_none());
     assert_eq!(tx.get(&i64::MAX).unwrap().unwrap(), "deadbeef");
@@ -189,28 +218,42 @@ fn test_sqlite_map_i64_string_transacted() {
 
     assert_eq!(tx.len().unwrap(), 3);
     assert!(!tx.is_empty().unwrap());
-    assert!(tx.contains(&0i64).unwrap());
-    assert!(!tx.contains(&42i64).unwrap());
-    assert!(tx.contains(&i64::MAX).unwrap());
-    assert!(tx.contains(&i64::MIN).unwrap());
+    assert!(tx.contains_key(&0i64).unwrap());
+    assert!(!tx.contains_key(&42i64).unwrap());
+    assert!(tx.contains_key(&i64::MAX).unwrap());
+    assert!(tx.contains_key(&i64::MIN).unwrap());
     assert_eq!(tx.get(&0i64).unwrap().unwrap(), "12345678");
     assert!(tx.get(&42i64).unwrap().is_none());
     assert_eq!(tx.get(&i64::MAX).unwrap().unwrap(), "deadbeef");
     assert_eq!(tx.get(&i64::MIN).unwrap().unwrap(), "cafebabe");
 
     {
+        let mut hash = HashSet::new();
+        tx.for_each_key(|key| assert!(hash.insert(key.to_owned()))).unwrap();
+        assert_eq!(hash.len(), 3);
+        assert!(hash.contains(&0i64));
+        assert!(hash.contains(&i64::MAX));
+        assert!(hash.contains(&i64::MIN));
+    }
+
+    {
         let mut hash = HashMap::new();
-        tx.for_each(|key, value| assert!(hash.insert(key.to_owned(), value.to_owned()).is_none())).unwrap();
+        tx.for_each_entry(|key, value| assert!(hash.insert(key.to_owned(), value.to_owned()).is_none())).unwrap();
         assert_eq!(hash.len(), 3);
         assert_eq!(hash.get(&0i64).unwrap(), "12345678");
         assert_eq!(hash.get(&i64::MAX).unwrap(), "deadbeef");
         assert_eq!(hash.get(&i64::MIN).unwrap(), "cafebabe");
     }
 
-    assert_eq!(tx.find(|key, _| key.eq(&0i64)).unwrap().unwrap().1, "12345678");
-    assert!(tx.find(|key, _| key.eq(&42i64)).unwrap().is_none());
-    assert_eq!(tx.find(|key, _| key.eq(&i64::MAX)).unwrap().unwrap().1, "deadbeef");
-    assert_eq!(tx.find(|key, _| key.eq(&i64::MIN)).unwrap().unwrap().1, "cafebabe");
+    assert!(tx.find_key(|key| key.eq(&0i64)).unwrap().is_some());
+    assert!(tx.find_key(|key| key.eq(&42i64)).unwrap().is_none());
+    assert!(tx.find_key(|key| key.eq(&i64::MAX)).unwrap().is_some());
+    assert!(tx.find_key(|key| key.eq(&i64::MIN)).unwrap().is_some());
+
+    assert_eq!(tx.find_entry(|key, _| key.eq(&0i64)).unwrap().unwrap().1, "12345678");
+    assert!(tx.find_entry(|key, _| key.eq(&42i64)).unwrap().is_none());
+    assert_eq!(tx.find_entry(|key, _| key.eq(&i64::MAX)).unwrap().unwrap().1, "deadbeef");
+    assert_eq!(tx.find_entry(|key, _| key.eq(&i64::MIN)).unwrap().unwrap().1, "cafebabe");
 
     tx.update(&0i64, "abcdefgh").unwrap();
     tx.update(&42i64, "hgfedcba").unwrap();
@@ -222,8 +265,18 @@ fn test_sqlite_map_i64_string_transacted() {
     assert_eq!(tx.get(&i64::MIN).unwrap().unwrap(), "cafebabe");
 
     {
+        let mut hash = HashSet::new();
+        tx.for_each_key(|key| assert!(hash.insert(key.to_owned()))).unwrap();
+        assert_eq!(hash.len(), 4);
+        assert!(hash.contains(&0i64));
+        assert!(hash.contains(&42i64));
+        assert!(hash.contains(&i64::MAX));
+        assert!(hash.contains(&i64::MIN));
+    }
+
+    {
         let mut hash = HashMap::new();
-        tx.for_each(|key, value| assert!(hash.insert(key.to_owned(), value.to_owned()).is_none())).unwrap();
+        tx.for_each_entry(|key, value| assert!(hash.insert(key.to_owned(), value.to_owned()).is_none())).unwrap();
         assert_eq!(hash.len(), 4);
         assert_eq!(hash.get(&0i64).unwrap(), "abcdefgh");
         assert_eq!(hash.get(&42i64).unwrap(), "hgfedcba");
@@ -231,19 +284,24 @@ fn test_sqlite_map_i64_string_transacted() {
         assert_eq!(hash.get(&i64::MIN).unwrap(), "cafebabe");
     }
 
-    assert_eq!(tx.find(|key, _| key.eq(&0i64)).unwrap().unwrap().1, "abcdefgh");
-    assert_eq!(tx.find(|key, _| key.eq(&42i64)).unwrap().unwrap().1, "hgfedcba");
-    assert_eq!(tx.find(|key, _| key.eq(&i64::MAX)).unwrap().unwrap().1, "stuvwxyz");
-    assert_eq!(tx.find(|key, _| key.eq(&i64::MIN)).unwrap().unwrap().1, "cafebabe");
+    assert!(tx.find_key(|key| key.eq(&0i64)).unwrap().is_some());
+    assert!(tx.find_key(|key| key.eq(&42i64)).unwrap().is_some());
+    assert!(tx.find_key(|key| key.eq(&i64::MAX)).unwrap().is_some());
+    assert!(tx.find_key(|key| key.eq(&i64::MIN)).unwrap().is_some());
+
+    assert_eq!(tx.find_entry(|key, _| key.eq(&0i64)).unwrap().unwrap().1, "abcdefgh");
+    assert_eq!(tx.find_entry(|key, _| key.eq(&42i64)).unwrap().unwrap().1, "hgfedcba");
+    assert_eq!(tx.find_entry(|key, _| key.eq(&i64::MAX)).unwrap().unwrap().1, "stuvwxyz");
+    assert_eq!(tx.find_entry(|key, _| key.eq(&i64::MIN)).unwrap().unwrap().1, "cafebabe");
 
     tx.clear().unwrap();
 
     assert_eq!(tx.len().unwrap(), 0);
     assert!(tx.is_empty().unwrap());
-    assert!(!tx.contains(&0i64).unwrap());
-    assert!(!tx.contains(&42i64).unwrap());
-    assert!(!tx.contains(&i64::MAX).unwrap());
-    assert!(!tx.contains(&i64::MIN).unwrap());
+    assert!(!tx.contains_key(&0i64).unwrap());
+    assert!(!tx.contains_key(&42i64).unwrap());
+    assert!(!tx.contains_key(&i64::MAX).unwrap());
+    assert!(!tx.contains_key(&i64::MIN).unwrap());
 
     assert!(tx.insert(&0i64, "ijklmnop").unwrap());
     assert!(tx.insert(&42i64, "ponmlkji").unwrap());
@@ -252,10 +310,10 @@ fn test_sqlite_map_i64_string_transacted() {
 
     assert_eq!(map.len().unwrap(), 2);
     assert!(!map.is_empty().unwrap());
-    assert!(map.contains(&0i64).unwrap());
-    assert!(map.contains(&42i64).unwrap());
-    assert!(!map.contains(&i64::MAX).unwrap());
-    assert!(!map.contains(&i64::MIN).unwrap());
+    assert!(map.contains_key(&0i64).unwrap());
+    assert!(map.contains_key(&42i64).unwrap());
+    assert!(!map.contains_key(&i64::MAX).unwrap());
+    assert!(!map.contains_key(&i64::MIN).unwrap());
     assert_eq!(map.get(&0i64).unwrap().unwrap(), "ijklmnop");
     assert_eq!(map.get(&42i64).unwrap().unwrap(), "ponmlkji");
     assert!(map.get(&i64::MAX).unwrap().is_none());
@@ -286,8 +344,8 @@ fn test_sqlite_map_i64_string_stresstest() {
     {
         let tx = set.transaction().unwrap();
         for i in 0u64..MAX_ITEMS {
-            assert!(tx.contains(&(mix64(i) as i64)).unwrap());
-            assert!(!tx.contains(&(mix64(MAX_ITEMS.checked_add(i).unwrap()) as i64)).unwrap());
+            assert!(tx.contains_key(&(mix64(i) as i64)).unwrap());
+            assert!(!tx.contains_key(&(mix64(MAX_ITEMS.checked_add(i).unwrap()) as i64)).unwrap());
         }
         for i in 0u64..MAX_ITEMS {
             let (key, value) = (mix64(i) as i64, hex.encode(!mix64(u64::MAX - i)));
@@ -321,10 +379,10 @@ fn test_sqlite_map_blob_string() {
 
     assert_eq!(map.len().unwrap(), 0);
     assert!(map.is_empty().unwrap());
-    assert!(!map.contains(&b"foo"[..]).unwrap());
-    assert!(!map.contains(&b"bar"[..]).unwrap());
-    assert!(!map.contains(&b"baz"[..]).unwrap());
-    assert!(!map.contains(&b"qux"[..]).unwrap());
+    assert!(!map.contains_key(&b"foo"[..]).unwrap());
+    assert!(!map.contains_key(&b"bar"[..]).unwrap());
+    assert!(!map.contains_key(&b"baz"[..]).unwrap());
+    assert!(!map.contains_key(&b"qux"[..]).unwrap());
     assert!(map.get(&b"foo"[..]).unwrap().is_none());
     assert!(map.get(&b"bar"[..]).unwrap().is_none());
     assert!(map.get(&b"baz"[..]).unwrap().is_none());
@@ -339,13 +397,13 @@ fn test_sqlite_map_blob_string() {
 
     assert_eq!(map.len().unwrap(), 3);
     assert!(!map.is_empty().unwrap());
-    assert!(map.contains(&b"foo"[..]).unwrap());
-    assert!(!map.contains(&b"FOO"[..]).unwrap());
-    assert!(map.contains(&b"bar"[..]).unwrap());
-    assert!(!map.contains(&b"BAR"[..]).unwrap());
-    assert!(map.contains(&b"baz"[..]).unwrap());
-    assert!(!map.contains(&b"BAZ"[..]).unwrap());
-    assert!(!map.contains(&b"qux"[..]).unwrap());
+    assert!(map.contains_key(&b"foo"[..]).unwrap());
+    assert!(!map.contains_key(&b"FOO"[..]).unwrap());
+    assert!(map.contains_key(&b"bar"[..]).unwrap());
+    assert!(!map.contains_key(&b"BAR"[..]).unwrap());
+    assert!(map.contains_key(&b"baz"[..]).unwrap());
+    assert!(!map.contains_key(&b"BAZ"[..]).unwrap());
+    assert!(!map.contains_key(&b"qux"[..]).unwrap());
     assert_eq!(map.get(&b"foo"[..]).unwrap().unwrap(), "12345678");
     assert!(map.get(&b"FOO"[..]).unwrap().is_none());
     assert_eq!(map.get(&b"bar"[..]).unwrap().unwrap(), "87654321");
@@ -363,11 +421,11 @@ fn test_sqlite_map_blob_string() {
 
     assert_eq!(map.len().unwrap(), 1);
     assert!(!map.is_empty().unwrap());
-    assert!(!map.contains(&b"foo"[..]).unwrap());
-    assert!(!map.contains(&b"bar"[..]).unwrap());
-    assert!(map.contains(&b"baz"[..]).unwrap());
-    assert!(!map.contains(&b"BAZ"[..]).unwrap());
-    assert!(!map.contains(&b"qux"[..]).unwrap());
+    assert!(!map.contains_key(&b"foo"[..]).unwrap());
+    assert!(!map.contains_key(&b"bar"[..]).unwrap());
+    assert!(map.contains_key(&b"baz"[..]).unwrap());
+    assert!(!map.contains_key(&b"BAZ"[..]).unwrap());
+    assert!(!map.contains_key(&b"qux"[..]).unwrap());
     assert!(map.get(&b"foo"[..]).unwrap().is_none());
     assert!(map.get(&b"bar"[..]).unwrap().is_none());
     assert_eq!(map.get(&b"baz"[..]).unwrap().unwrap(), "deadbeef");
@@ -381,13 +439,13 @@ fn test_sqlite_map_blob_string() {
 
     assert_eq!(map.len().unwrap(), 3);
     assert!(!map.is_empty().unwrap());
-    assert!(map.contains(&b"foo"[..]).unwrap());
-    assert!(!map.contains(&b"FOO"[..]).unwrap());
-    assert!(!map.contains(&b"bar"[..]).unwrap());
-    assert!(map.contains(&b"baz"[..]).unwrap());
-    assert!(!map.contains(&b"BAZ"[..]).unwrap());
-    assert!(map.contains(&b"qux"[..]).unwrap());
-    assert!(!map.contains(&b"QUX"[..]).unwrap());
+    assert!(map.contains_key(&b"foo"[..]).unwrap());
+    assert!(!map.contains_key(&b"FOO"[..]).unwrap());
+    assert!(!map.contains_key(&b"bar"[..]).unwrap());
+    assert!(map.contains_key(&b"baz"[..]).unwrap());
+    assert!(!map.contains_key(&b"BAZ"[..]).unwrap());
+    assert!(map.contains_key(&b"qux"[..]).unwrap());
+    assert!(!map.contains_key(&b"QUX"[..]).unwrap());
     assert_eq!(map.get(&b"foo"[..]).unwrap().unwrap(), "12345678");
     assert!(map.get(&b"FOO"[..]).unwrap().is_none());
     assert!(map.get(&b"bar"[..]).unwrap().is_none());
@@ -397,17 +455,31 @@ fn test_sqlite_map_blob_string() {
     assert!(map.get(&b"QUX"[..]).unwrap().is_none());
 
     {
+        let mut hash = HashSet::new();
+        map.for_each_key(|key| assert!(hash.insert(key.to_owned()))).unwrap();
+        assert_eq!(hash.len(), 3);
+        assert!(hash.contains(&b"foo"[..]));
+        assert!(hash.contains(&b"baz"[..]));
+        assert!(hash.contains(&b"qux"[..]));
+    }
+
+    {
         let mut hash = HashMap::new();
-        map.for_each(|key, value| assert!(hash.insert(key.to_owned(), value.to_owned()).is_none())).unwrap();
+        map.for_each_entry(|key, value| assert!(hash.insert(key.to_owned(), value.to_owned()).is_none())).unwrap();
         assert_eq!(hash.len(), 3);
         assert_eq!(hash.get(&b"foo"[..]).unwrap(), "12345678");
         assert_eq!(hash.get(&b"baz"[..]).unwrap(), "deadbeef");
         assert_eq!(hash.get(&b"qux"[..]).unwrap(), "cafebabe");
     }
 
-    assert_eq!(map.find(|key, _| key.eq(b"foo")).unwrap().unwrap().1, "12345678");
-    assert_eq!(map.find(|key, _| key.eq_ignore_ascii_case(b"FOO")).unwrap().unwrap().1, "12345678");
-    assert!(map.find(|key, _| key.eq(b"bar")).unwrap().is_none());
+    assert!(map.find_key(|key| key.eq(b"foo")).unwrap().is_some());
+    assert!(map.find_key(|key| key.eq(b"bar")).unwrap().is_none());
+    assert!(map.find_key(|key| key.eq(b"baz")).unwrap().is_some());
+    assert!(map.find_key(|key| key.eq(b"qux")).unwrap().is_some());
+
+    assert_eq!(map.find_entry(|key, _| key.eq(b"foo")).unwrap().unwrap().1, "12345678");
+    assert_eq!(map.find_entry(|key, _| key.eq_ignore_ascii_case(b"FOO")).unwrap().unwrap().1, "12345678");
+    assert!(map.find_entry(|key, _| key.eq(b"bar")).unwrap().is_none());
 
     map.update(&b"foo"[..], "abcdefgh").unwrap();
     map.update(&b"bar"[..], "hgfedcba").unwrap();
@@ -419,8 +491,18 @@ fn test_sqlite_map_blob_string() {
     assert_eq!(map.get(&b"qux"[..]).unwrap().unwrap(), "cafebabe");
 
     {
+        let mut hash = HashSet::new();
+        map.for_each_key(|key| assert!(hash.insert(key.to_owned()))).unwrap();
+        assert_eq!(hash.len(), 4);
+        assert!(hash.contains(&b"foo"[..]));
+        assert!(hash.contains(&b"bar"[..]));
+        assert!(hash.contains(&b"baz"[..]));
+        assert!(hash.contains(&b"qux"[..]));
+    }
+
+    {
         let mut hash = HashMap::new();
-        map.for_each(|key, value| assert!(hash.insert(key.to_owned(), value.to_owned()).is_none())).unwrap();
+        map.for_each_entry(|key, value| assert!(hash.insert(key.to_owned(), value.to_owned()).is_none())).unwrap();
         assert_eq!(hash.len(), 4);
         assert_eq!(hash.get(&b"foo"[..]).unwrap(), "abcdefgh");
         assert_eq!(hash.get(&b"bar"[..]).unwrap(), "hgfedcba");
@@ -428,20 +510,25 @@ fn test_sqlite_map_blob_string() {
         assert_eq!(hash.get(&b"qux"[..]).unwrap(), "cafebabe");
     }
 
-    assert_eq!(map.find(|key, _| key.eq(b"foo")).unwrap().unwrap().1, "abcdefgh");
-    assert_eq!(map.find(|key, _| key.eq_ignore_ascii_case(b"FOO")).unwrap().unwrap().1, "abcdefgh");
-    assert_eq!(map.find(|key, _| key.eq(b"bar")).unwrap().unwrap().1, "hgfedcba");
-    assert_eq!(map.find(|key, _| key.eq_ignore_ascii_case(b"BAR")).unwrap().unwrap().1, "hgfedcba");
-    assert!(map.find(|key, _| key.eq(b"xyz")).unwrap().is_none());
+    assert!(map.find_key(|key| key.eq(b"foo")).unwrap().is_some());
+    assert!(map.find_key(|key| key.eq(b"bar")).unwrap().is_some());
+    assert!(map.find_key(|key| key.eq(b"baz")).unwrap().is_some());
+    assert!(map.find_key(|key| key.eq(b"qux")).unwrap().is_some());
+
+    assert_eq!(map.find_entry(|key, _| key.eq(b"foo")).unwrap().unwrap().1, "abcdefgh");
+    assert_eq!(map.find_entry(|key, _| key.eq_ignore_ascii_case(b"FOO")).unwrap().unwrap().1, "abcdefgh");
+    assert_eq!(map.find_entry(|key, _| key.eq(b"bar")).unwrap().unwrap().1, "hgfedcba");
+    assert_eq!(map.find_entry(|key, _| key.eq_ignore_ascii_case(b"BAR")).unwrap().unwrap().1, "hgfedcba");
+    assert!(map.find_entry(|key, _| key.eq(b"xyz")).unwrap().is_none());
 
     map.clear().unwrap();
 
     assert_eq!(map.len().unwrap(), 0);
     assert!(map.is_empty().unwrap());
-    assert!(!map.contains(&b"foo"[..]).unwrap());
-    assert!(!map.contains(&b"bar"[..]).unwrap());
-    assert!(!map.contains(&b"baz"[..]).unwrap());
-    assert!(!map.contains(&b"qux"[..]).unwrap());
+    assert!(!map.contains_key(&b"foo"[..]).unwrap());
+    assert!(!map.contains_key(&b"bar"[..]).unwrap());
+    assert!(!map.contains_key(&b"baz"[..]).unwrap());
+    assert!(!map.contains_key(&b"qux"[..]).unwrap());
 }
 
 #[test]
@@ -451,10 +538,10 @@ fn test_sqlite_map_blob_string_transacted() {
 
     assert_eq!(tx.len().unwrap(), 0);
     assert!(tx.is_empty().unwrap());
-    assert!(!tx.contains(&b"foo"[..]).unwrap());
-    assert!(!tx.contains(&b"bar"[..]).unwrap());
-    assert!(!tx.contains(&b"baz"[..]).unwrap());
-    assert!(!tx.contains(&b"qux"[..]).unwrap());
+    assert!(!tx.contains_key(&b"foo"[..]).unwrap());
+    assert!(!tx.contains_key(&b"bar"[..]).unwrap());
+    assert!(!tx.contains_key(&b"baz"[..]).unwrap());
+    assert!(!tx.contains_key(&b"qux"[..]).unwrap());
     assert!(tx.get(&b"foo"[..]).unwrap().is_none());
     assert!(tx.get(&b"bar"[..]).unwrap().is_none());
     assert!(tx.get(&b"baz"[..]).unwrap().is_none());
@@ -469,13 +556,13 @@ fn test_sqlite_map_blob_string_transacted() {
 
     assert_eq!(tx.len().unwrap(), 3);
     assert!(!tx.is_empty().unwrap());
-    assert!(tx.contains(&b"foo"[..]).unwrap());
-    assert!(!tx.contains(&b"FOO"[..]).unwrap());
-    assert!(tx.contains(&b"bar"[..]).unwrap());
-    assert!(!tx.contains(&b"BAR"[..]).unwrap());
-    assert!(tx.contains(&b"baz"[..]).unwrap());
-    assert!(!tx.contains(&b"BAZ"[..]).unwrap());
-    assert!(!tx.contains(&b"qux"[..]).unwrap());
+    assert!(tx.contains_key(&b"foo"[..]).unwrap());
+    assert!(!tx.contains_key(&b"FOO"[..]).unwrap());
+    assert!(tx.contains_key(&b"bar"[..]).unwrap());
+    assert!(!tx.contains_key(&b"BAR"[..]).unwrap());
+    assert!(tx.contains_key(&b"baz"[..]).unwrap());
+    assert!(!tx.contains_key(&b"BAZ"[..]).unwrap());
+    assert!(!tx.contains_key(&b"qux"[..]).unwrap());
     assert_eq!(tx.get(&b"foo"[..]).unwrap().unwrap(), "12345678");
     assert!(tx.get(&b"FOO"[..]).unwrap().is_none());
     assert_eq!(tx.get(&b"bar"[..]).unwrap().unwrap(), "87654321");
@@ -493,11 +580,11 @@ fn test_sqlite_map_blob_string_transacted() {
 
     assert_eq!(tx.len().unwrap(), 1);
     assert!(!tx.is_empty().unwrap());
-    assert!(!tx.contains(&b"foo"[..]).unwrap());
-    assert!(!tx.contains(&b"bar"[..]).unwrap());
-    assert!(tx.contains(&b"baz"[..]).unwrap());
-    assert!(!tx.contains(&b"BAZ"[..]).unwrap());
-    assert!(!tx.contains(&b"qux"[..]).unwrap());
+    assert!(!tx.contains_key(&b"foo"[..]).unwrap());
+    assert!(!tx.contains_key(&b"bar"[..]).unwrap());
+    assert!(tx.contains_key(&b"baz"[..]).unwrap());
+    assert!(!tx.contains_key(&b"BAZ"[..]).unwrap());
+    assert!(!tx.contains_key(&b"qux"[..]).unwrap());
     assert!(tx.get(&b"foo"[..]).unwrap().is_none());
     assert!(tx.get(&b"bar"[..]).unwrap().is_none());
     assert_eq!(tx.get(&b"baz"[..]).unwrap().unwrap(), "deadbeef");
@@ -511,13 +598,13 @@ fn test_sqlite_map_blob_string_transacted() {
 
     assert_eq!(tx.len().unwrap(), 3);
     assert!(!tx.is_empty().unwrap());
-    assert!(tx.contains(&b"foo"[..]).unwrap());
-    assert!(!tx.contains(&b"FOO"[..]).unwrap());
-    assert!(!tx.contains(&b"bar"[..]).unwrap());
-    assert!(tx.contains(&b"baz"[..]).unwrap());
-    assert!(!tx.contains(&b"BAZ"[..]).unwrap());
-    assert!(tx.contains(&b"qux"[..]).unwrap());
-    assert!(!tx.contains(&b"QUX"[..]).unwrap());
+    assert!(tx.contains_key(&b"foo"[..]).unwrap());
+    assert!(!tx.contains_key(&b"FOO"[..]).unwrap());
+    assert!(!tx.contains_key(&b"bar"[..]).unwrap());
+    assert!(tx.contains_key(&b"baz"[..]).unwrap());
+    assert!(!tx.contains_key(&b"BAZ"[..]).unwrap());
+    assert!(tx.contains_key(&b"qux"[..]).unwrap());
+    assert!(!tx.contains_key(&b"QUX"[..]).unwrap());
     assert_eq!(tx.get(&b"foo"[..]).unwrap().unwrap(), "12345678");
     assert!(tx.get(&b"FOO"[..]).unwrap().is_none());
     assert!(tx.get(&b"bar"[..]).unwrap().is_none());
@@ -527,17 +614,31 @@ fn test_sqlite_map_blob_string_transacted() {
     assert!(tx.get(&b"QUX"[..]).unwrap().is_none());
 
     {
+        let mut hash = HashSet::new();
+        tx.for_each_key(|key| assert!(hash.insert(key.to_owned()))).unwrap();
+        assert_eq!(hash.len(), 3);
+        assert!(hash.contains(&b"foo"[..]));
+        assert!(hash.contains(&b"baz"[..]));
+        assert!(hash.contains(&b"qux"[..]));
+    }
+
+    {
         let mut hash = HashMap::new();
-        tx.for_each(|key, value| assert!(hash.insert(key.to_owned(), value.to_owned()).is_none())).unwrap();
+        tx.for_each_entry(|key, value| assert!(hash.insert(key.to_owned(), value.to_owned()).is_none())).unwrap();
         assert_eq!(hash.len(), 3);
         assert_eq!(hash.get(&b"foo"[..]).unwrap(), "12345678");
         assert_eq!(hash.get(&b"baz"[..]).unwrap(), "deadbeef");
         assert_eq!(hash.get(&b"qux"[..]).unwrap(), "cafebabe");
     }
 
-    assert_eq!(tx.find(|key, _| key.eq(b"foo")).unwrap().unwrap().1, "12345678");
-    assert_eq!(tx.find(|key, _| key.eq_ignore_ascii_case(b"FOO")).unwrap().unwrap().1, "12345678");
-    assert!(tx.find(|key, _| key.eq(b"bar")).unwrap().is_none());
+    assert!(tx.find_key(|key| key.eq(b"foo")).unwrap().is_some());
+    assert!(tx.find_key(|key| key.eq(b"bar")).unwrap().is_none());
+    assert!(tx.find_key(|key| key.eq(b"baz")).unwrap().is_some());
+    assert!(tx.find_key(|key| key.eq(b"qux")).unwrap().is_some());
+
+    assert_eq!(tx.find_entry(|key, _| key.eq(b"foo")).unwrap().unwrap().1, "12345678");
+    assert_eq!(tx.find_entry(|key, _| key.eq_ignore_ascii_case(b"FOO")).unwrap().unwrap().1, "12345678");
+    assert!(tx.find_entry(|key, _| key.eq(b"bar")).unwrap().is_none());
 
     tx.update(&b"foo"[..], "abcdefgh").unwrap();
     tx.update(&b"bar"[..], "hgfedcba").unwrap();
@@ -549,8 +650,18 @@ fn test_sqlite_map_blob_string_transacted() {
     assert_eq!(tx.get(&b"qux"[..]).unwrap().unwrap(), "cafebabe");
 
     {
+        let mut hash = HashSet::new();
+        tx.for_each_key(|key| assert!(hash.insert(key.to_owned()))).unwrap();
+        assert_eq!(hash.len(), 4);
+        assert!(hash.contains(&b"foo"[..]));
+        assert!(hash.contains(&b"bar"[..]));
+        assert!(hash.contains(&b"baz"[..]));
+        assert!(hash.contains(&b"qux"[..]));
+    }
+
+    {
         let mut hash = HashMap::new();
-        tx.for_each(|key, value| assert!(hash.insert(key.to_owned(), value.to_owned()).is_none())).unwrap();
+        tx.for_each_entry(|key, value| assert!(hash.insert(key.to_owned(), value.to_owned()).is_none())).unwrap();
         assert_eq!(hash.len(), 4);
         assert_eq!(hash.get(&b"foo"[..]).unwrap(), "abcdefgh");
         assert_eq!(hash.get(&b"bar"[..]).unwrap(), "hgfedcba");
@@ -558,20 +669,25 @@ fn test_sqlite_map_blob_string_transacted() {
         assert_eq!(hash.get(&b"qux"[..]).unwrap(), "cafebabe");
     }
 
-    assert_eq!(tx.find(|key, _| key.eq(b"foo")).unwrap().unwrap().1, "abcdefgh");
-    assert_eq!(tx.find(|key, _| key.eq_ignore_ascii_case(b"FOO")).unwrap().unwrap().1, "abcdefgh");
-    assert_eq!(tx.find(|key, _| key.eq(b"bar")).unwrap().unwrap().1, "hgfedcba");
-    assert_eq!(tx.find(|key, _| key.eq_ignore_ascii_case(b"BAR")).unwrap().unwrap().1, "hgfedcba");
-    assert!(tx.find(|key, _| key.eq(b"xyz")).unwrap().is_none());
+    assert!(tx.find_key(|key| key.eq(b"foo")).unwrap().is_some());
+    assert!(tx.find_key(|key| key.eq(b"bar")).unwrap().is_some());
+    assert!(tx.find_key(|key| key.eq(b"baz")).unwrap().is_some());
+    assert!(tx.find_key(|key| key.eq(b"qux")).unwrap().is_some());
+
+    assert_eq!(tx.find_entry(|key, _| key.eq(b"foo")).unwrap().unwrap().1, "abcdefgh");
+    assert_eq!(tx.find_entry(|key, _| key.eq_ignore_ascii_case(b"FOO")).unwrap().unwrap().1, "abcdefgh");
+    assert_eq!(tx.find_entry(|key, _| key.eq(b"bar")).unwrap().unwrap().1, "hgfedcba");
+    assert_eq!(tx.find_entry(|key, _| key.eq_ignore_ascii_case(b"BAR")).unwrap().unwrap().1, "hgfedcba");
+    assert!(tx.find_entry(|key, _| key.eq(b"xyz")).unwrap().is_none());
 
     tx.clear().unwrap();
 
     assert_eq!(tx.len().unwrap(), 0);
     assert!(tx.is_empty().unwrap());
-    assert!(!tx.contains(&b"foo"[..]).unwrap());
-    assert!(!tx.contains(&b"bar"[..]).unwrap());
-    assert!(!tx.contains(&b"baz"[..]).unwrap());
-    assert!(!tx.contains(&b"qux"[..]).unwrap());
+    assert!(!tx.contains_key(&b"foo"[..]).unwrap());
+    assert!(!tx.contains_key(&b"bar"[..]).unwrap());
+    assert!(!tx.contains_key(&b"baz"[..]).unwrap());
+    assert!(!tx.contains_key(&b"qux"[..]).unwrap());
 
     assert!(tx.insert(&b"foo"[..], "ijklmnop").unwrap());
     assert!(tx.insert(&b"bar"[..], "ponmlkji").unwrap());
@@ -580,10 +696,10 @@ fn test_sqlite_map_blob_string_transacted() {
 
     assert_eq!(map.len().unwrap(), 2);
     assert!(!map.is_empty().unwrap());
-    assert!(map.contains(&b"foo"[..]).unwrap());
-    assert!(map.contains(&b"bar"[..]).unwrap());
-    assert!(!map.contains(&b"baz"[..]).unwrap());
-    assert!(!map.contains(&b"qux"[..]).unwrap());
+    assert!(map.contains_key(&b"foo"[..]).unwrap());
+    assert!(map.contains_key(&b"bar"[..]).unwrap());
+    assert!(!map.contains_key(&b"baz"[..]).unwrap());
+    assert!(!map.contains_key(&b"qux"[..]).unwrap());
     assert_eq!(map.get(&b"foo"[..]).unwrap().unwrap(), "ijklmnop");
     assert_eq!(map.get(&b"bar"[..]).unwrap().unwrap(), "ponmlkji");
     assert!(map.get(&b"baz"[..]).unwrap().is_none());
@@ -614,8 +730,8 @@ fn test_sqlite_map_blob_string_stresstest() {
     {
         let tx = set.transaction().unwrap();
         for i in 0u64..MAX_ITEMS {
-            assert!(tx.contains(hex_1.encode_raw(mix64(i))).unwrap());
-            assert!(!tx.contains(hex_1.encode_raw(mix64(MAX_ITEMS.checked_add(i).unwrap()))).unwrap());
+            assert!(tx.contains_key(hex_1.encode_raw(mix64(i))).unwrap());
+            assert!(!tx.contains_key(hex_1.encode_raw(mix64(MAX_ITEMS.checked_add(i).unwrap()))).unwrap());
         }
         for i in 0u64..MAX_ITEMS {
             let (key, value) = (hex_1.encode_raw(mix64(i)), hex_2.encode(!mix64(u64::MAX - i)));
@@ -649,10 +765,10 @@ fn test_sqlite_map_string_string() {
 
     assert_eq!(map.len().unwrap(), 0);
     assert!(map.is_empty().unwrap());
-    assert!(!map.contains("foo").unwrap());
-    assert!(!map.contains("bar").unwrap());
-    assert!(!map.contains("baz").unwrap());
-    assert!(!map.contains("qux").unwrap());
+    assert!(!map.contains_key("foo").unwrap());
+    assert!(!map.contains_key("bar").unwrap());
+    assert!(!map.contains_key("baz").unwrap());
+    assert!(!map.contains_key("qux").unwrap());
     assert!(map.get("foo").unwrap().is_none());
     assert!(map.get("bar").unwrap().is_none());
     assert!(map.get("baz").unwrap().is_none());
@@ -667,16 +783,16 @@ fn test_sqlite_map_string_string() {
 
     assert_eq!(map.len().unwrap(), 3);
     assert!(!map.is_empty().unwrap());
-    assert!(map.contains("foo").unwrap());
-    assert!(!map.contains("FOO").unwrap());
-    assert!(map.contains_nocase("FOO").unwrap());
-    assert!(map.contains("bar").unwrap());
-    assert!(!map.contains("BAR").unwrap());
-    assert!(map.contains_nocase("BAR").unwrap());
-    assert!(map.contains("baz").unwrap());
-    assert!(!map.contains("BAZ").unwrap());
-    assert!(map.contains_nocase("BAZ").unwrap());
-    assert!(!map.contains("qux").unwrap());
+    assert!(map.contains_key("foo").unwrap());
+    assert!(!map.contains_key("FOO").unwrap());
+    assert!(map.contains_key_nocase("FOO").unwrap());
+    assert!(map.contains_key("bar").unwrap());
+    assert!(!map.contains_key("BAR").unwrap());
+    assert!(map.contains_key_nocase("BAR").unwrap());
+    assert!(map.contains_key("baz").unwrap());
+    assert!(!map.contains_key("BAZ").unwrap());
+    assert!(map.contains_key_nocase("BAZ").unwrap());
+    assert!(!map.contains_key("qux").unwrap());
     assert_eq!(map.get("foo").unwrap().unwrap(), "12345678");
     assert!(map.get("FOO").unwrap().is_none());
     assert_eq!(map.get_nocase("FOO").unwrap().unwrap(), "12345678");
@@ -697,12 +813,12 @@ fn test_sqlite_map_string_string() {
 
     assert_eq!(map.len().unwrap(), 1);
     assert!(!map.is_empty().unwrap());
-    assert!(!map.contains("foo").unwrap());
-    assert!(!map.contains("bar").unwrap());
-    assert!(map.contains("baz").unwrap());
-    assert!(!map.contains("BAZ").unwrap());
-    assert!(map.contains_nocase("BAZ").unwrap());
-    assert!(!map.contains("qux").unwrap());
+    assert!(!map.contains_key("foo").unwrap());
+    assert!(!map.contains_key("bar").unwrap());
+    assert!(map.contains_key("baz").unwrap());
+    assert!(!map.contains_key("BAZ").unwrap());
+    assert!(map.contains_key_nocase("BAZ").unwrap());
+    assert!(!map.contains_key("qux").unwrap());
     assert!(map.get("foo").unwrap().is_none());
     assert!(map.get("bar").unwrap().is_none());
     assert_eq!(map.get("baz").unwrap().unwrap(), "deadbeef");
@@ -717,16 +833,16 @@ fn test_sqlite_map_string_string() {
 
     assert_eq!(map.len().unwrap(), 3);
     assert!(!map.is_empty().unwrap());
-    assert!(map.contains("foo").unwrap());
-    assert!(!map.contains("FOO").unwrap());
-    assert!(map.contains_nocase("FOO").unwrap());
-    assert!(!map.contains("bar").unwrap());
-    assert!(map.contains("baz").unwrap());
-    assert!(!map.contains("BAZ").unwrap());
-    assert!(map.contains_nocase("BAZ").unwrap());
-    assert!(map.contains("qux").unwrap());
-    assert!(!map.contains("QUX").unwrap());
-    assert!(map.contains_nocase("QUX").unwrap());
+    assert!(map.contains_key("foo").unwrap());
+    assert!(!map.contains_key("FOO").unwrap());
+    assert!(map.contains_key_nocase("FOO").unwrap());
+    assert!(!map.contains_key("bar").unwrap());
+    assert!(map.contains_key("baz").unwrap());
+    assert!(!map.contains_key("BAZ").unwrap());
+    assert!(map.contains_key_nocase("BAZ").unwrap());
+    assert!(map.contains_key("qux").unwrap());
+    assert!(!map.contains_key("QUX").unwrap());
+    assert!(map.contains_key_nocase("QUX").unwrap());
     assert_eq!(map.get("foo").unwrap().unwrap(), "12345678");
     assert!(map.get("FOO").unwrap().is_none());
     assert_eq!(map.get_nocase("FOO").unwrap().unwrap(), "12345678");
@@ -739,17 +855,31 @@ fn test_sqlite_map_string_string() {
     assert_eq!(map.get_nocase("QUX").unwrap().unwrap(), "cafebabe");
 
     {
+        let mut hash = HashSet::new();
+        map.for_each_key(|key| assert!(hash.insert(key.to_owned()))).unwrap();
+        assert_eq!(hash.len(), 3);
+        assert!(hash.contains("foo"));
+        assert!(hash.contains("baz"));
+        assert!(hash.contains("qux"));
+    }
+
+    {
         let mut hash = HashMap::new();
-        map.for_each(|key, value| assert!(hash.insert(key.to_owned(), value.to_owned()).is_none())).unwrap();
+        map.for_each_entry(|key, value| assert!(hash.insert(key.to_owned(), value.to_owned()).is_none())).unwrap();
         assert_eq!(hash.len(), 3);
         assert_eq!(hash.get("foo").unwrap(), "12345678");
         assert_eq!(hash.get("baz").unwrap(), "deadbeef");
         assert_eq!(hash.get("qux").unwrap(), "cafebabe");
     }
 
-    assert_eq!(map.find(|key, _| key.eq("foo")).unwrap().unwrap().1, "12345678");
-    assert_eq!(map.find(|key, _| key.eq_ignore_ascii_case("FOO")).unwrap().unwrap().1, "12345678");
-    assert!(map.find(|key, _| key.eq("bar")).unwrap().is_none());
+    assert!(map.find_key(|key| key.eq("foo")).unwrap().is_some());
+    assert!(map.find_key(|key| key.eq("bar")).unwrap().is_none());
+    assert!(map.find_key(|key| key.eq("baz")).unwrap().is_some());
+    assert!(map.find_key(|key| key.eq("qux")).unwrap().is_some());
+
+    assert_eq!(map.find_entry(|key, _| key.eq("foo")).unwrap().unwrap().1, "12345678");
+    assert_eq!(map.find_entry(|key, _| key.eq_ignore_ascii_case("FOO")).unwrap().unwrap().1, "12345678");
+    assert!(map.find_entry(|key, _| key.eq("bar")).unwrap().is_none());
 
     map.update("foo", "abcdefgh").unwrap();
     map.update("bar", "hgfedcba").unwrap();
@@ -761,8 +891,18 @@ fn test_sqlite_map_string_string() {
     assert_eq!(map.get("qux").unwrap().unwrap(), "cafebabe");
 
     {
+        let mut hash = HashSet::new();
+        map.for_each_key(|key| assert!(hash.insert(key.to_owned()))).unwrap();
+        assert_eq!(hash.len(), 4);
+        assert!(hash.contains("foo"));
+        assert!(hash.contains("bar"));
+        assert!(hash.contains("baz"));
+        assert!(hash.contains("qux"));
+    }
+
+    {
         let mut hash = HashMap::new();
-        map.for_each(|key, value| assert!(hash.insert(key.to_owned(), value.to_owned()).is_none())).unwrap();
+        map.for_each_entry(|key, value| assert!(hash.insert(key.to_owned(), value.to_owned()).is_none())).unwrap();
         assert_eq!(hash.len(), 4);
         assert_eq!(hash.get("foo").unwrap(), "abcdefgh");
         assert_eq!(hash.get("bar").unwrap(), "hgfedcba");
@@ -770,20 +910,25 @@ fn test_sqlite_map_string_string() {
         assert_eq!(hash.get("qux").unwrap(), "cafebabe");
     }
 
-    assert_eq!(map.find(|key, _| key.eq("foo")).unwrap().unwrap().1, "abcdefgh");
-    assert_eq!(map.find(|key, _| key.eq_ignore_ascii_case("FOO")).unwrap().unwrap().1, "abcdefgh");
-    assert_eq!(map.find(|key, _| key.eq("bar")).unwrap().unwrap().1, "hgfedcba");
-    assert_eq!(map.find(|key, _| key.eq_ignore_ascii_case("BAR")).unwrap().unwrap().1, "hgfedcba");
-    assert!(map.find(|key, _| key.eq("xyz")).unwrap().is_none());
+    assert!(map.find_key(|key| key.eq("foo")).unwrap().is_some());
+    assert!(map.find_key(|key| key.eq("bar")).unwrap().is_some());
+    assert!(map.find_key(|key| key.eq("baz")).unwrap().is_some());
+    assert!(map.find_key(|key| key.eq("qux")).unwrap().is_some());
+
+    assert_eq!(map.find_entry(|key, _| key.eq("foo")).unwrap().unwrap().1, "abcdefgh");
+    assert_eq!(map.find_entry(|key, _| key.eq_ignore_ascii_case("FOO")).unwrap().unwrap().1, "abcdefgh");
+    assert_eq!(map.find_entry(|key, _| key.eq("bar")).unwrap().unwrap().1, "hgfedcba");
+    assert_eq!(map.find_entry(|key, _| key.eq_ignore_ascii_case("BAR")).unwrap().unwrap().1, "hgfedcba");
+    assert!(map.find_entry(|key, _| key.eq("xyz")).unwrap().is_none());
 
     map.clear().unwrap();
 
     assert_eq!(map.len().unwrap(), 0);
     assert!(map.is_empty().unwrap());
-    assert!(!map.contains("foo").unwrap());
-    assert!(!map.contains("bar").unwrap());
-    assert!(!map.contains("baz").unwrap());
-    assert!(!map.contains("qux").unwrap());
+    assert!(!map.contains_key("foo").unwrap());
+    assert!(!map.contains_key("bar").unwrap());
+    assert!(!map.contains_key("baz").unwrap());
+    assert!(!map.contains_key("qux").unwrap());
 }
 
 #[test]
@@ -793,10 +938,10 @@ fn test_sqlite_map_string_string_transacted() {
 
     assert_eq!(tx.len().unwrap(), 0);
     assert!(tx.is_empty().unwrap());
-    assert!(!tx.contains("foo").unwrap());
-    assert!(!tx.contains("bar").unwrap());
-    assert!(!tx.contains("baz").unwrap());
-    assert!(!tx.contains("qux").unwrap());
+    assert!(!tx.contains_key("foo").unwrap());
+    assert!(!tx.contains_key("bar").unwrap());
+    assert!(!tx.contains_key("baz").unwrap());
+    assert!(!tx.contains_key("qux").unwrap());
     assert!(tx.get("foo").unwrap().is_none());
     assert!(tx.get("bar").unwrap().is_none());
     assert!(tx.get("baz").unwrap().is_none());
@@ -811,16 +956,16 @@ fn test_sqlite_map_string_string_transacted() {
 
     assert_eq!(tx.len().unwrap(), 3);
     assert!(!tx.is_empty().unwrap());
-    assert!(tx.contains("foo").unwrap());
-    assert!(!tx.contains("FOO").unwrap());
-    assert!(tx.contains_nocase("FOO").unwrap());
-    assert!(tx.contains("bar").unwrap());
-    assert!(!tx.contains("BAR").unwrap());
-    assert!(tx.contains_nocase("BAR").unwrap());
-    assert!(tx.contains("baz").unwrap());
-    assert!(!tx.contains("BAZ").unwrap());
-    assert!(tx.contains_nocase("BAZ").unwrap());
-    assert!(!tx.contains("qux").unwrap());
+    assert!(tx.contains_key("foo").unwrap());
+    assert!(!tx.contains_key("FOO").unwrap());
+    assert!(tx.contains_key_nocase("FOO").unwrap());
+    assert!(tx.contains_key("bar").unwrap());
+    assert!(!tx.contains_key("BAR").unwrap());
+    assert!(tx.contains_key_nocase("BAR").unwrap());
+    assert!(tx.contains_key("baz").unwrap());
+    assert!(!tx.contains_key("BAZ").unwrap());
+    assert!(tx.contains_key_nocase("BAZ").unwrap());
+    assert!(!tx.contains_key("qux").unwrap());
     assert_eq!(tx.get("foo").unwrap().unwrap(), "12345678");
     assert!(tx.get("FOO").unwrap().is_none());
     assert_eq!(tx.get_nocase("FOO").unwrap().unwrap(), "12345678");
@@ -841,12 +986,12 @@ fn test_sqlite_map_string_string_transacted() {
 
     assert_eq!(tx.len().unwrap(), 1);
     assert!(!tx.is_empty().unwrap());
-    assert!(!tx.contains("foo").unwrap());
-    assert!(!tx.contains("bar").unwrap());
-    assert!(tx.contains("baz").unwrap());
-    assert!(!tx.contains("BAZ").unwrap());
-    assert!(tx.contains_nocase("BAZ").unwrap());
-    assert!(!tx.contains("qux").unwrap());
+    assert!(!tx.contains_key("foo").unwrap());
+    assert!(!tx.contains_key("bar").unwrap());
+    assert!(tx.contains_key("baz").unwrap());
+    assert!(!tx.contains_key("BAZ").unwrap());
+    assert!(tx.contains_key_nocase("BAZ").unwrap());
+    assert!(!tx.contains_key("qux").unwrap());
     assert!(tx.get("foo").unwrap().is_none());
     assert!(tx.get("bar").unwrap().is_none());
     assert_eq!(tx.get("baz").unwrap().unwrap(), "deadbeef");
@@ -861,16 +1006,16 @@ fn test_sqlite_map_string_string_transacted() {
 
     assert_eq!(tx.len().unwrap(), 3);
     assert!(!tx.is_empty().unwrap());
-    assert!(tx.contains("foo").unwrap());
-    assert!(!tx.contains("FOO").unwrap());
-    assert!(tx.contains_nocase("FOO").unwrap());
-    assert!(!tx.contains("bar").unwrap());
-    assert!(tx.contains("baz").unwrap());
-    assert!(!tx.contains("BAZ").unwrap());
-    assert!(tx.contains_nocase("BAZ").unwrap());
-    assert!(tx.contains("qux").unwrap());
-    assert!(!tx.contains("QUX").unwrap());
-    assert!(tx.contains_nocase("QUX").unwrap());
+    assert!(tx.contains_key("foo").unwrap());
+    assert!(!tx.contains_key("FOO").unwrap());
+    assert!(tx.contains_key_nocase("FOO").unwrap());
+    assert!(!tx.contains_key("bar").unwrap());
+    assert!(tx.contains_key("baz").unwrap());
+    assert!(!tx.contains_key("BAZ").unwrap());
+    assert!(tx.contains_key_nocase("BAZ").unwrap());
+    assert!(tx.contains_key("qux").unwrap());
+    assert!(!tx.contains_key("QUX").unwrap());
+    assert!(tx.contains_key_nocase("QUX").unwrap());
     assert_eq!(tx.get("foo").unwrap().unwrap(), "12345678");
     assert!(tx.get("FOO").unwrap().is_none());
     assert_eq!(tx.get_nocase("FOO").unwrap().unwrap(), "12345678");
@@ -883,17 +1028,31 @@ fn test_sqlite_map_string_string_transacted() {
     assert_eq!(tx.get_nocase("QUX").unwrap().unwrap(), "cafebabe");
 
     {
+        let mut hash = HashSet::new();
+        tx.for_each_key(|key| assert!(hash.insert(key.to_owned()))).unwrap();
+        assert_eq!(hash.len(), 3);
+        assert!(hash.contains("foo"));
+        assert!(hash.contains("baz"));
+        assert!(hash.contains("qux"));
+    }
+
+    {
         let mut hash = HashMap::new();
-        tx.for_each(|key, value| assert!(hash.insert(key.to_owned(), value.to_owned()).is_none())).unwrap();
+        tx.for_each_entry(|key, value| assert!(hash.insert(key.to_owned(), value.to_owned()).is_none())).unwrap();
         assert_eq!(hash.len(), 3);
         assert_eq!(hash.get("foo").unwrap(), "12345678");
         assert_eq!(hash.get("baz").unwrap(), "deadbeef");
         assert_eq!(hash.get("qux").unwrap(), "cafebabe");
     }
 
-    assert_eq!(tx.find(|key, _| key.eq("foo")).unwrap().unwrap().1, "12345678");
-    assert_eq!(tx.find(|key, _| key.eq_ignore_ascii_case("FOO")).unwrap().unwrap().1, "12345678");
-    assert!(tx.find(|key, _| key.eq("bar")).unwrap().is_none());
+    assert!(tx.find_key(|key| key.eq("foo")).unwrap().is_some());
+    assert!(tx.find_key(|key| key.eq("bar")).unwrap().is_none());
+    assert!(tx.find_key(|key| key.eq("baz")).unwrap().is_some());
+    assert!(tx.find_key(|key| key.eq("qux")).unwrap().is_some());
+
+    assert_eq!(tx.find_entry(|key, _| key.eq("foo")).unwrap().unwrap().1, "12345678");
+    assert_eq!(tx.find_entry(|key, _| key.eq_ignore_ascii_case("FOO")).unwrap().unwrap().1, "12345678");
+    assert!(tx.find_entry(|key, _| key.eq("bar")).unwrap().is_none());
 
     tx.update("foo", "abcdefgh").unwrap();
     tx.update("bar", "hgfedcba").unwrap();
@@ -905,8 +1064,18 @@ fn test_sqlite_map_string_string_transacted() {
     assert_eq!(tx.get("qux").unwrap().unwrap(), "cafebabe");
 
     {
+        let mut hash = HashSet::new();
+        tx.for_each_key(|key| assert!(hash.insert(key.to_owned()))).unwrap();
+        assert_eq!(hash.len(), 4);
+        assert!(hash.contains("foo"));
+        assert!(hash.contains("bar"));
+        assert!(hash.contains("baz"));
+        assert!(hash.contains("qux"));
+    }
+
+    {
         let mut hash = HashMap::new();
-        tx.for_each(|key, value| assert!(hash.insert(key.to_owned(), value.to_owned()).is_none())).unwrap();
+        tx.for_each_entry(|key, value| assert!(hash.insert(key.to_owned(), value.to_owned()).is_none())).unwrap();
         assert_eq!(hash.len(), 4);
         assert_eq!(hash.get("foo").unwrap(), "abcdefgh");
         assert_eq!(hash.get("bar").unwrap(), "hgfedcba");
@@ -914,20 +1083,25 @@ fn test_sqlite_map_string_string_transacted() {
         assert_eq!(hash.get("qux").unwrap(), "cafebabe");
     }
 
-    assert_eq!(tx.find(|key, _| key.eq("foo")).unwrap().unwrap().1, "abcdefgh");
-    assert_eq!(tx.find(|key, _| key.eq_ignore_ascii_case("FOO")).unwrap().unwrap().1, "abcdefgh");
-    assert_eq!(tx.find(|key, _| key.eq("bar")).unwrap().unwrap().1, "hgfedcba");
-    assert_eq!(tx.find(|key, _| key.eq_ignore_ascii_case("BAR")).unwrap().unwrap().1, "hgfedcba");
-    assert!(tx.find(|key, _| key.eq("xyz")).unwrap().is_none());
+    assert!(tx.find_key(|key| key.eq("foo")).unwrap().is_some());
+    assert!(tx.find_key(|key| key.eq("bar")).unwrap().is_some());
+    assert!(tx.find_key(|key| key.eq("baz")).unwrap().is_some());
+    assert!(tx.find_key(|key| key.eq("qux")).unwrap().is_some());
+
+    assert_eq!(tx.find_entry(|key, _| key.eq("foo")).unwrap().unwrap().1, "abcdefgh");
+    assert_eq!(tx.find_entry(|key, _| key.eq_ignore_ascii_case("FOO")).unwrap().unwrap().1, "abcdefgh");
+    assert_eq!(tx.find_entry(|key, _| key.eq("bar")).unwrap().unwrap().1, "hgfedcba");
+    assert_eq!(tx.find_entry(|key, _| key.eq_ignore_ascii_case("BAR")).unwrap().unwrap().1, "hgfedcba");
+    assert!(tx.find_entry(|key, _| key.eq("xyz")).unwrap().is_none());
 
     tx.clear().unwrap();
 
     assert_eq!(tx.len().unwrap(), 0);
     assert!(tx.is_empty().unwrap());
-    assert!(!tx.contains("foo").unwrap());
-    assert!(!tx.contains("bar").unwrap());
-    assert!(!tx.contains("baz").unwrap());
-    assert!(!tx.contains("qux").unwrap());
+    assert!(!tx.contains_key("foo").unwrap());
+    assert!(!tx.contains_key("bar").unwrap());
+    assert!(!tx.contains_key("baz").unwrap());
+    assert!(!tx.contains_key("qux").unwrap());
 
     assert!(tx.insert("foo", "ijklmnop").unwrap());
     assert!(tx.insert("bar", "ponmlkji").unwrap());
@@ -936,10 +1110,10 @@ fn test_sqlite_map_string_string_transacted() {
 
     assert_eq!(map.len().unwrap(), 2);
     assert!(!map.is_empty().unwrap());
-    assert!(map.contains("foo").unwrap());
-    assert!(map.contains("bar").unwrap());
-    assert!(!map.contains("baz").unwrap());
-    assert!(!map.contains("qux").unwrap());
+    assert!(map.contains_key("foo").unwrap());
+    assert!(map.contains_key("bar").unwrap());
+    assert!(!map.contains_key("baz").unwrap());
+    assert!(!map.contains_key("qux").unwrap());
     assert_eq!(map.get("foo").unwrap().unwrap(), "ijklmnop");
     assert_eq!(map.get("bar").unwrap().unwrap(), "ponmlkji");
     assert!(map.get("baz").unwrap().is_none());
@@ -964,19 +1138,19 @@ fn test_sqlite_map_string_string_ignorecase() {
     assert!(map_1.remove("FOO").unwrap());
     assert!(map_1.remove("bar").unwrap());
 
-    assert!(map_1.contains("foo").unwrap());
-    assert!(!map_1.contains("FOO").unwrap());
-    assert!(!map_1.contains("bar").unwrap());
-    assert!(map_1.contains("BAR").unwrap());
+    assert!(map_1.contains_key("foo").unwrap());
+    assert!(!map_1.contains_key("FOO").unwrap());
+    assert!(!map_1.contains_key("bar").unwrap());
+    assert!(map_1.contains_key("BAR").unwrap());
     assert_eq!(map_1.get("foo").unwrap().unwrap(), "12345678");
     assert!(map_1.get("FOO").unwrap().is_none());
     assert!(map_1.get("bar").unwrap().is_none());
     assert_eq!(map_1.get("BAR").unwrap().unwrap(), "abcdefgh");
 
-    assert!(map_2.contains("foo").unwrap());
-    assert!(map_2.contains("FOO").unwrap());
-    assert!(map_2.contains("bar").unwrap());
-    assert!(map_2.contains("BAR").unwrap());
+    assert!(map_2.contains_key("foo").unwrap());
+    assert!(map_2.contains_key("FOO").unwrap());
+    assert!(map_2.contains_key("bar").unwrap());
+    assert!(map_2.contains_key("BAR").unwrap());
     assert_eq!(map_2.get("foo").unwrap().unwrap(), "12345678");
     assert_eq!(map_2.get("FOO").unwrap().unwrap(), "12345678");
     assert_eq!(map_2.get("bar").unwrap().unwrap(), "abcdefgh");
@@ -985,10 +1159,10 @@ fn test_sqlite_map_string_string_ignorecase() {
     assert!(map_2.remove("FOO").unwrap());
     assert!(map_2.remove("bar").unwrap());
 
-    assert!(!map_2.contains("foo").unwrap());
-    assert!(!map_2.contains("FOO").unwrap());
-    assert!(!map_2.contains("bar").unwrap());
-    assert!(!map_2.contains("BAR").unwrap());
+    assert!(!map_2.contains_key("foo").unwrap());
+    assert!(!map_2.contains_key("FOO").unwrap());
+    assert!(!map_2.contains_key("bar").unwrap());
+    assert!(!map_2.contains_key("BAR").unwrap());
     assert!(map_2.get("foo").unwrap().is_none());
     assert!(map_2.get("FOO").unwrap().is_none());
     assert!(map_2.get("bar").unwrap().is_none());
@@ -1019,8 +1193,8 @@ fn test_sqlite_map_string_string_stresstest() {
     {
         let tx = set.transaction().unwrap();
         for i in 0u64..MAX_ITEMS {
-            assert!(tx.contains(hex_1.encode(mix64(i))).unwrap());
-            assert!(!tx.contains(hex_1.encode(mix64(MAX_ITEMS.checked_add(i).unwrap()))).unwrap());
+            assert!(tx.contains_key(hex_1.encode(mix64(i))).unwrap());
+            assert!(!tx.contains_key(hex_1.encode(mix64(MAX_ITEMS.checked_add(i).unwrap()))).unwrap());
         }
         for i in 0u64..MAX_ITEMS {
             let (key, value) = (hex_1.encode(mix64(i)), hex_2.encode(!mix64(u64::MAX - i)));
@@ -1054,10 +1228,10 @@ fn test_sqlite_map_string_blob() {
 
     assert_eq!(map.len().unwrap(), 0);
     assert!(map.is_empty().unwrap());
-    assert!(!map.contains("foo").unwrap());
-    assert!(!map.contains("bar").unwrap());
-    assert!(!map.contains("baz").unwrap());
-    assert!(!map.contains("qux").unwrap());
+    assert!(!map.contains_key("foo").unwrap());
+    assert!(!map.contains_key("bar").unwrap());
+    assert!(!map.contains_key("baz").unwrap());
+    assert!(!map.contains_key("qux").unwrap());
     assert!(map.get("foo").unwrap().is_none());
     assert!(map.get("bar").unwrap().is_none());
     assert!(map.get("baz").unwrap().is_none());
@@ -1072,16 +1246,16 @@ fn test_sqlite_map_string_blob() {
 
     assert_eq!(map.len().unwrap(), 3);
     assert!(!map.is_empty().unwrap());
-    assert!(map.contains("foo").unwrap());
-    assert!(!map.contains("FOO").unwrap());
-    assert!(map.contains_nocase("FOO").unwrap());
-    assert!(map.contains("bar").unwrap());
-    assert!(!map.contains("BAR").unwrap());
-    assert!(map.contains_nocase("BAR").unwrap());
-    assert!(map.contains("baz").unwrap());
-    assert!(!map.contains("BAZ").unwrap());
-    assert!(map.contains_nocase("BAZ").unwrap());
-    assert!(!map.contains("qux").unwrap());
+    assert!(map.contains_key("foo").unwrap());
+    assert!(!map.contains_key("FOO").unwrap());
+    assert!(map.contains_key_nocase("FOO").unwrap());
+    assert!(map.contains_key("bar").unwrap());
+    assert!(!map.contains_key("BAR").unwrap());
+    assert!(map.contains_key_nocase("BAR").unwrap());
+    assert!(map.contains_key("baz").unwrap());
+    assert!(!map.contains_key("BAZ").unwrap());
+    assert!(map.contains_key_nocase("BAZ").unwrap());
+    assert!(!map.contains_key("qux").unwrap());
     assert_eq!(map.get("foo").unwrap().unwrap(), &b"12345678"[..]);
     assert!(map.get("FOO").unwrap().is_none());
     assert_eq!(map.get_nocase("FOO").unwrap().unwrap(), &b"12345678"[..]);
@@ -1102,12 +1276,12 @@ fn test_sqlite_map_string_blob() {
 
     assert_eq!(map.len().unwrap(), 1);
     assert!(!map.is_empty().unwrap());
-    assert!(!map.contains("foo").unwrap());
-    assert!(!map.contains("bar").unwrap());
-    assert!(map.contains("baz").unwrap());
-    assert!(!map.contains("BAZ").unwrap());
-    assert!(map.contains_nocase("BAZ").unwrap());
-    assert!(!map.contains("qux").unwrap());
+    assert!(!map.contains_key("foo").unwrap());
+    assert!(!map.contains_key("bar").unwrap());
+    assert!(map.contains_key("baz").unwrap());
+    assert!(!map.contains_key("BAZ").unwrap());
+    assert!(map.contains_key_nocase("BAZ").unwrap());
+    assert!(!map.contains_key("qux").unwrap());
     assert!(map.get("foo").unwrap().is_none());
     assert!(map.get("bar").unwrap().is_none());
     assert_eq!(map.get("baz").unwrap().unwrap(), &b"deadbeef"[..]);
@@ -1122,16 +1296,16 @@ fn test_sqlite_map_string_blob() {
 
     assert_eq!(map.len().unwrap(), 3);
     assert!(!map.is_empty().unwrap());
-    assert!(map.contains("foo").unwrap());
-    assert!(!map.contains("FOO").unwrap());
-    assert!(map.contains_nocase("FOO").unwrap());
-    assert!(!map.contains("bar").unwrap());
-    assert!(map.contains("baz").unwrap());
-    assert!(!map.contains("BAZ").unwrap());
-    assert!(map.contains_nocase("BAZ").unwrap());
-    assert!(map.contains("qux").unwrap());
-    assert!(!map.contains("QUX").unwrap());
-    assert!(map.contains_nocase("QUX").unwrap());
+    assert!(map.contains_key("foo").unwrap());
+    assert!(!map.contains_key("FOO").unwrap());
+    assert!(map.contains_key_nocase("FOO").unwrap());
+    assert!(!map.contains_key("bar").unwrap());
+    assert!(map.contains_key("baz").unwrap());
+    assert!(!map.contains_key("BAZ").unwrap());
+    assert!(map.contains_key_nocase("BAZ").unwrap());
+    assert!(map.contains_key("qux").unwrap());
+    assert!(!map.contains_key("QUX").unwrap());
+    assert!(map.contains_key_nocase("QUX").unwrap());
     assert_eq!(map.get("foo").unwrap().unwrap(), &b"12345678"[..]);
     assert!(map.get("FOO").unwrap().is_none());
     assert_eq!(map.get_nocase("FOO").unwrap().unwrap(), &b"12345678"[..]);
@@ -1144,17 +1318,31 @@ fn test_sqlite_map_string_blob() {
     assert_eq!(map.get_nocase("QUX").unwrap().unwrap(), &b"cafebabe"[..]);
 
     {
+        let mut hash = HashSet::new();
+        map.for_each_key(|key| assert!(hash.insert(key.to_owned()))).unwrap();
+        assert_eq!(hash.len(), 3);
+        assert!(hash.contains("foo"));
+        assert!(hash.contains("baz"));
+        assert!(hash.contains("qux"));
+    }
+
+    {
         let mut hash = HashMap::new();
-        map.for_each(|key, value| assert!(hash.insert(key.to_owned(), value.to_owned()).is_none())).unwrap();
+        map.for_each_entry(|key, value| assert!(hash.insert(key.to_owned(), value.to_owned()).is_none())).unwrap();
         assert_eq!(hash.len(), 3);
         assert_eq!(hash.get("foo").unwrap(), &b"12345678"[..]);
         assert_eq!(hash.get("baz").unwrap(), &b"deadbeef"[..]);
         assert_eq!(hash.get("qux").unwrap(), &b"cafebabe"[..]);
     }
 
-    assert_eq!(map.find(|key, _| key.eq("foo")).unwrap().unwrap().1, &b"12345678"[..]);
-    assert_eq!(map.find(|key, _| key.eq_ignore_ascii_case("FOO")).unwrap().unwrap().1, &b"12345678"[..]);
-    assert!(map.find(|key, _| key.eq("bar")).unwrap().is_none());
+    assert!(map.find_key(|key| key.eq("foo")).unwrap().is_some());
+    assert!(map.find_key(|key| key.eq("bar")).unwrap().is_none());
+    assert!(map.find_key(|key| key.eq("baz")).unwrap().is_some());
+    assert!(map.find_key(|key| key.eq("qux")).unwrap().is_some());
+
+    assert_eq!(map.find_entry(|key, _| key.eq("foo")).unwrap().unwrap().1, &b"12345678"[..]);
+    assert_eq!(map.find_entry(|key, _| key.eq_ignore_ascii_case("FOO")).unwrap().unwrap().1, &b"12345678"[..]);
+    assert!(map.find_entry(|key, _| key.eq("bar")).unwrap().is_none());
 
     map.update("foo", &b"abcdefgh"[..]).unwrap();
     map.update("bar", &b"hgfedcba"[..]).unwrap();
@@ -1166,8 +1354,18 @@ fn test_sqlite_map_string_blob() {
     assert_eq!(map.get("qux").unwrap().unwrap(), &b"cafebabe"[..]);
 
     {
+        let mut hash = HashSet::new();
+        map.for_each_key(|key| assert!(hash.insert(key.to_owned()))).unwrap();
+        assert_eq!(hash.len(), 4);
+        assert!(hash.contains("foo"));
+        assert!(hash.contains("bar"));
+        assert!(hash.contains("baz"));
+        assert!(hash.contains("qux"));
+    }
+
+    {
         let mut hash = HashMap::new();
-        map.for_each(|key, value| assert!(hash.insert(key.to_owned(), value.to_owned()).is_none())).unwrap();
+        map.for_each_entry(|key, value| assert!(hash.insert(key.to_owned(), value.to_owned()).is_none())).unwrap();
         assert_eq!(hash.len(), 4);
         assert_eq!(hash.get("foo").unwrap(), &b"abcdefgh"[..]);
         assert_eq!(hash.get("bar").unwrap(), &b"hgfedcba"[..]);
@@ -1175,20 +1373,25 @@ fn test_sqlite_map_string_blob() {
         assert_eq!(hash.get("qux").unwrap(), &b"cafebabe"[..]);
     }
 
-    assert_eq!(map.find(|key, _| key.eq("foo")).unwrap().unwrap().1, &b"abcdefgh"[..]);
-    assert_eq!(map.find(|key, _| key.eq_ignore_ascii_case("FOO")).unwrap().unwrap().1, &b"abcdefgh"[..]);
-    assert_eq!(map.find(|key, _| key.eq("bar")).unwrap().unwrap().1, &b"hgfedcba"[..]);
-    assert_eq!(map.find(|key, _| key.eq_ignore_ascii_case("BAR")).unwrap().unwrap().1, &b"hgfedcba"[..]);
-    assert!(map.find(|key, _| key.eq("xyz")).unwrap().is_none());
+    assert!(map.find_key(|key| key.eq("foo")).unwrap().is_some());
+    assert!(map.find_key(|key| key.eq("bar")).unwrap().is_some());
+    assert!(map.find_key(|key| key.eq("baz")).unwrap().is_some());
+    assert!(map.find_key(|key| key.eq("qux")).unwrap().is_some());
+
+    assert_eq!(map.find_entry(|key, _| key.eq("foo")).unwrap().unwrap().1, &b"abcdefgh"[..]);
+    assert_eq!(map.find_entry(|key, _| key.eq_ignore_ascii_case("FOO")).unwrap().unwrap().1, &b"abcdefgh"[..]);
+    assert_eq!(map.find_entry(|key, _| key.eq("bar")).unwrap().unwrap().1, &b"hgfedcba"[..]);
+    assert_eq!(map.find_entry(|key, _| key.eq_ignore_ascii_case("BAR")).unwrap().unwrap().1, &b"hgfedcba"[..]);
+    assert!(map.find_entry(|key, _| key.eq("xyz")).unwrap().is_none());
 
     map.clear().unwrap();
 
     assert_eq!(map.len().unwrap(), 0);
     assert!(map.is_empty().unwrap());
-    assert!(!map.contains("foo").unwrap());
-    assert!(!map.contains("bar").unwrap());
-    assert!(!map.contains("baz").unwrap());
-    assert!(!map.contains("qux").unwrap());
+    assert!(!map.contains_key("foo").unwrap());
+    assert!(!map.contains_key("bar").unwrap());
+    assert!(!map.contains_key("baz").unwrap());
+    assert!(!map.contains_key("qux").unwrap());
 }
 
 #[test]
@@ -1198,10 +1401,10 @@ fn test_sqlite_map_string_blob_transacted() {
 
     assert_eq!(tx.len().unwrap(), 0);
     assert!(tx.is_empty().unwrap());
-    assert!(!tx.contains("foo").unwrap());
-    assert!(!tx.contains("bar").unwrap());
-    assert!(!tx.contains("baz").unwrap());
-    assert!(!tx.contains("qux").unwrap());
+    assert!(!tx.contains_key("foo").unwrap());
+    assert!(!tx.contains_key("bar").unwrap());
+    assert!(!tx.contains_key("baz").unwrap());
+    assert!(!tx.contains_key("qux").unwrap());
     assert!(tx.get("foo").unwrap().is_none());
     assert!(tx.get("bar").unwrap().is_none());
     assert!(tx.get("baz").unwrap().is_none());
@@ -1216,16 +1419,16 @@ fn test_sqlite_map_string_blob_transacted() {
 
     assert_eq!(tx.len().unwrap(), 3);
     assert!(!tx.is_empty().unwrap());
-    assert!(tx.contains("foo").unwrap());
-    assert!(!tx.contains("FOO").unwrap());
-    assert!(tx.contains_nocase("FOO").unwrap());
-    assert!(tx.contains("bar").unwrap());
-    assert!(!tx.contains("BAR").unwrap());
-    assert!(tx.contains_nocase("BAR").unwrap());
-    assert!(tx.contains("baz").unwrap());
-    assert!(!tx.contains("BAZ").unwrap());
-    assert!(tx.contains_nocase("BAZ").unwrap());
-    assert!(!tx.contains("qux").unwrap());
+    assert!(tx.contains_key("foo").unwrap());
+    assert!(!tx.contains_key("FOO").unwrap());
+    assert!(tx.contains_key_nocase("FOO").unwrap());
+    assert!(tx.contains_key("bar").unwrap());
+    assert!(!tx.contains_key("BAR").unwrap());
+    assert!(tx.contains_key_nocase("BAR").unwrap());
+    assert!(tx.contains_key("baz").unwrap());
+    assert!(!tx.contains_key("BAZ").unwrap());
+    assert!(tx.contains_key_nocase("BAZ").unwrap());
+    assert!(!tx.contains_key("qux").unwrap());
     assert_eq!(tx.get("foo").unwrap().unwrap(), &b"12345678"[..]);
     assert!(tx.get("FOO").unwrap().is_none());
     assert_eq!(tx.get_nocase("FOO").unwrap().unwrap(), &b"12345678"[..]);
@@ -1246,12 +1449,12 @@ fn test_sqlite_map_string_blob_transacted() {
 
     assert_eq!(tx.len().unwrap(), 1);
     assert!(!tx.is_empty().unwrap());
-    assert!(!tx.contains("foo").unwrap());
-    assert!(!tx.contains("bar").unwrap());
-    assert!(tx.contains("baz").unwrap());
-    assert!(!tx.contains("BAZ").unwrap());
-    assert!(tx.contains_nocase("BAZ").unwrap());
-    assert!(!tx.contains("qux").unwrap());
+    assert!(!tx.contains_key("foo").unwrap());
+    assert!(!tx.contains_key("bar").unwrap());
+    assert!(tx.contains_key("baz").unwrap());
+    assert!(!tx.contains_key("BAZ").unwrap());
+    assert!(tx.contains_key_nocase("BAZ").unwrap());
+    assert!(!tx.contains_key("qux").unwrap());
     assert!(tx.get("foo").unwrap().is_none());
     assert!(tx.get("bar").unwrap().is_none());
     assert_eq!(tx.get("baz").unwrap().unwrap(), &b"deadbeef"[..]);
@@ -1266,16 +1469,16 @@ fn test_sqlite_map_string_blob_transacted() {
 
     assert_eq!(tx.len().unwrap(), 3);
     assert!(!tx.is_empty().unwrap());
-    assert!(tx.contains("foo").unwrap());
-    assert!(!tx.contains("FOO").unwrap());
-    assert!(tx.contains_nocase("FOO").unwrap());
-    assert!(!tx.contains("bar").unwrap());
-    assert!(tx.contains("baz").unwrap());
-    assert!(!tx.contains("BAZ").unwrap());
-    assert!(tx.contains_nocase("BAZ").unwrap());
-    assert!(tx.contains("qux").unwrap());
-    assert!(!tx.contains("QUX").unwrap());
-    assert!(tx.contains_nocase("QUX").unwrap());
+    assert!(tx.contains_key("foo").unwrap());
+    assert!(!tx.contains_key("FOO").unwrap());
+    assert!(tx.contains_key_nocase("FOO").unwrap());
+    assert!(!tx.contains_key("bar").unwrap());
+    assert!(tx.contains_key("baz").unwrap());
+    assert!(!tx.contains_key("BAZ").unwrap());
+    assert!(tx.contains_key_nocase("BAZ").unwrap());
+    assert!(tx.contains_key("qux").unwrap());
+    assert!(!tx.contains_key("QUX").unwrap());
+    assert!(tx.contains_key_nocase("QUX").unwrap());
     assert_eq!(tx.get("foo").unwrap().unwrap(), &b"12345678"[..]);
     assert!(tx.get("FOO").unwrap().is_none());
     assert_eq!(tx.get_nocase("FOO").unwrap().unwrap(), &b"12345678"[..]);
@@ -1288,17 +1491,31 @@ fn test_sqlite_map_string_blob_transacted() {
     assert_eq!(tx.get_nocase("QUX").unwrap().unwrap(), &b"cafebabe"[..]);
 
     {
+        let mut hash = HashSet::new();
+        tx.for_each_key(|key| assert!(hash.insert(key.to_owned()))).unwrap();
+        assert_eq!(hash.len(), 3);
+        assert!(hash.contains("foo"));
+        assert!(hash.contains("baz"));
+        assert!(hash.contains("qux"));
+    }
+
+    {
         let mut hash = HashMap::new();
-        tx.for_each(|key, value| assert!(hash.insert(key.to_owned(), value.to_owned()).is_none())).unwrap();
+        tx.for_each_entry(|key, value| assert!(hash.insert(key.to_owned(), value.to_owned()).is_none())).unwrap();
         assert_eq!(hash.len(), 3);
         assert_eq!(hash.get("foo").unwrap(), &b"12345678"[..]);
         assert_eq!(hash.get("baz").unwrap(), &b"deadbeef"[..]);
         assert_eq!(hash.get("qux").unwrap(), &b"cafebabe"[..]);
     }
 
-    assert_eq!(tx.find(|key, _| key.eq("foo")).unwrap().unwrap().1, &b"12345678"[..]);
-    assert_eq!(tx.find(|key, _| key.eq_ignore_ascii_case("FOO")).unwrap().unwrap().1, &b"12345678"[..]);
-    assert!(tx.find(|key, _| key.eq("bar")).unwrap().is_none());
+    assert!(tx.find_key(|key| key.eq("foo")).unwrap().is_some());
+    assert!(tx.find_key(|key| key.eq("bar")).unwrap().is_none());
+    assert!(tx.find_key(|key| key.eq("baz")).unwrap().is_some());
+    assert!(tx.find_key(|key| key.eq("qux")).unwrap().is_some());
+
+    assert_eq!(tx.find_entry(|key, _| key.eq("foo")).unwrap().unwrap().1, &b"12345678"[..]);
+    assert_eq!(tx.find_entry(|key, _| key.eq_ignore_ascii_case("FOO")).unwrap().unwrap().1, &b"12345678"[..]);
+    assert!(tx.find_entry(|key, _| key.eq("bar")).unwrap().is_none());
 
     tx.update("foo", &b"abcdefgh"[..]).unwrap();
     tx.update("bar", &b"hgfedcba"[..]).unwrap();
@@ -1310,8 +1527,18 @@ fn test_sqlite_map_string_blob_transacted() {
     assert_eq!(tx.get("qux").unwrap().unwrap(), &b"cafebabe"[..]);
 
     {
+        let mut hash = HashSet::new();
+        tx.for_each_key(|key| assert!(hash.insert(key.to_owned()))).unwrap();
+        assert_eq!(hash.len(), 4);
+        assert!(hash.contains("foo"));
+        assert!(hash.contains("bar"));
+        assert!(hash.contains("baz"));
+        assert!(hash.contains("qux"));
+    }
+
+    {
         let mut hash = HashMap::new();
-        tx.for_each(|key, value| assert!(hash.insert(key.to_owned(), value.to_owned()).is_none())).unwrap();
+        tx.for_each_entry(|key, value| assert!(hash.insert(key.to_owned(), value.to_owned()).is_none())).unwrap();
         assert_eq!(hash.len(), 4);
         assert_eq!(hash.get("foo").unwrap(), &b"abcdefgh"[..]);
         assert_eq!(hash.get("bar").unwrap(), &b"hgfedcba"[..]);
@@ -1319,20 +1546,25 @@ fn test_sqlite_map_string_blob_transacted() {
         assert_eq!(hash.get("qux").unwrap(), &b"cafebabe"[..]);
     }
 
-    assert_eq!(tx.find(|key, _| key.eq("foo")).unwrap().unwrap().1, &b"abcdefgh"[..]);
-    assert_eq!(tx.find(|key, _| key.eq_ignore_ascii_case("FOO")).unwrap().unwrap().1, &b"abcdefgh"[..]);
-    assert_eq!(tx.find(|key, _| key.eq("bar")).unwrap().unwrap().1, &b"hgfedcba"[..]);
-    assert_eq!(tx.find(|key, _| key.eq_ignore_ascii_case("BAR")).unwrap().unwrap().1, &b"hgfedcba"[..]);
-    assert!(tx.find(|key, _| key.eq("xyz")).unwrap().is_none());
+    assert!(tx.find_key(|key| key.eq("foo")).unwrap().is_some());
+    assert!(tx.find_key(|key| key.eq("bar")).unwrap().is_some());
+    assert!(tx.find_key(|key| key.eq("baz")).unwrap().is_some());
+    assert!(tx.find_key(|key| key.eq("qux")).unwrap().is_some());
+
+    assert_eq!(tx.find_entry(|key, _| key.eq("foo")).unwrap().unwrap().1, &b"abcdefgh"[..]);
+    assert_eq!(tx.find_entry(|key, _| key.eq_ignore_ascii_case("FOO")).unwrap().unwrap().1, &b"abcdefgh"[..]);
+    assert_eq!(tx.find_entry(|key, _| key.eq("bar")).unwrap().unwrap().1, &b"hgfedcba"[..]);
+    assert_eq!(tx.find_entry(|key, _| key.eq_ignore_ascii_case("BAR")).unwrap().unwrap().1, &b"hgfedcba"[..]);
+    assert!(tx.find_entry(|key, _| key.eq("xyz")).unwrap().is_none());
 
     tx.clear().unwrap();
 
     assert_eq!(tx.len().unwrap(), 0);
     assert!(tx.is_empty().unwrap());
-    assert!(!tx.contains("foo").unwrap());
-    assert!(!tx.contains("bar").unwrap());
-    assert!(!tx.contains("baz").unwrap());
-    assert!(!tx.contains("qux").unwrap());
+    assert!(!tx.contains_key("foo").unwrap());
+    assert!(!tx.contains_key("bar").unwrap());
+    assert!(!tx.contains_key("baz").unwrap());
+    assert!(!tx.contains_key("qux").unwrap());
 
     assert!(tx.insert("foo", &b"ijklmnop"[..]).unwrap());
     assert!(tx.insert("bar", &b"ponmlkji"[..]).unwrap());
@@ -1341,10 +1573,10 @@ fn test_sqlite_map_string_blob_transacted() {
 
     assert_eq!(map.len().unwrap(), 2);
     assert!(!map.is_empty().unwrap());
-    assert!(map.contains("foo").unwrap());
-    assert!(map.contains("bar").unwrap());
-    assert!(!map.contains("baz").unwrap());
-    assert!(!map.contains("qux").unwrap());
+    assert!(map.contains_key("foo").unwrap());
+    assert!(map.contains_key("bar").unwrap());
+    assert!(!map.contains_key("baz").unwrap());
+    assert!(!map.contains_key("qux").unwrap());
     assert_eq!(map.get("foo").unwrap().unwrap(), &b"ijklmnop"[..]);
     assert_eq!(map.get("bar").unwrap().unwrap(), &b"ponmlkji"[..]);
     assert!(map.get("baz").unwrap().is_none());
@@ -1369,19 +1601,19 @@ fn test_sqlite_map_string_blob_ignorecase() {
     assert!(map_1.remove("FOO").unwrap());
     assert!(map_1.remove("bar").unwrap());
 
-    assert!(map_1.contains("foo").unwrap());
-    assert!(!map_1.contains("FOO").unwrap());
-    assert!(!map_1.contains("bar").unwrap());
-    assert!(map_1.contains("BAR").unwrap());
+    assert!(map_1.contains_key("foo").unwrap());
+    assert!(!map_1.contains_key("FOO").unwrap());
+    assert!(!map_1.contains_key("bar").unwrap());
+    assert!(map_1.contains_key("BAR").unwrap());
     assert_eq!(map_1.get("foo").unwrap().unwrap(), &b"12345678"[..]);
     assert!(map_1.get("FOO").unwrap().is_none());
     assert!(map_1.get("bar").unwrap().is_none());
     assert_eq!(map_1.get("BAR").unwrap().unwrap(), &b"abcdefgh"[..]);
 
-    assert!(map_2.contains("foo").unwrap());
-    assert!(map_2.contains("FOO").unwrap());
-    assert!(map_2.contains("bar").unwrap());
-    assert!(map_2.contains("BAR").unwrap());
+    assert!(map_2.contains_key("foo").unwrap());
+    assert!(map_2.contains_key("FOO").unwrap());
+    assert!(map_2.contains_key("bar").unwrap());
+    assert!(map_2.contains_key("BAR").unwrap());
     assert_eq!(map_2.get("foo").unwrap().unwrap(), &b"12345678"[..]);
     assert_eq!(map_2.get("FOO").unwrap().unwrap(), &b"12345678"[..]);
     assert_eq!(map_2.get("bar").unwrap().unwrap(), &b"abcdefgh"[..]);
@@ -1390,10 +1622,10 @@ fn test_sqlite_map_string_blob_ignorecase() {
     assert!(map_2.remove("FOO").unwrap());
     assert!(map_2.remove("bar").unwrap());
 
-    assert!(!map_2.contains("foo").unwrap());
-    assert!(!map_2.contains("FOO").unwrap());
-    assert!(!map_2.contains("bar").unwrap());
-    assert!(!map_2.contains("BAR").unwrap());
+    assert!(!map_2.contains_key("foo").unwrap());
+    assert!(!map_2.contains_key("FOO").unwrap());
+    assert!(!map_2.contains_key("bar").unwrap());
+    assert!(!map_2.contains_key("BAR").unwrap());
     assert!(map_2.get("foo").unwrap().is_none());
     assert!(map_2.get("FOO").unwrap().is_none());
     assert!(map_2.get("bar").unwrap().is_none());
@@ -1424,8 +1656,8 @@ fn test_sqlite_map_string_blob_stresstest() {
     {
         let tx = set.transaction().unwrap();
         for i in 0u64..MAX_ITEMS {
-            assert!(tx.contains(hex_1.encode(mix64(i))).unwrap());
-            assert!(!tx.contains(hex_1.encode(mix64(MAX_ITEMS.checked_add(i).unwrap()))).unwrap());
+            assert!(tx.contains_key(hex_1.encode(mix64(i))).unwrap());
+            assert!(!tx.contains_key(hex_1.encode(mix64(MAX_ITEMS.checked_add(i).unwrap()))).unwrap());
         }
         for i in 0u64..MAX_ITEMS {
             let (key, value) = (hex_1.encode(mix64(i)), hex_2.encode_raw(!mix64(u64::MAX - i)));
@@ -1459,10 +1691,10 @@ fn test_sqlite_map_string_i64() {
 
     assert_eq!(map.len().unwrap(), 0);
     assert!(map.is_empty().unwrap());
-    assert!(!map.contains("foo").unwrap());
-    assert!(!map.contains("bar").unwrap());
-    assert!(!map.contains("baz").unwrap());
-    assert!(!map.contains("qux").unwrap());
+    assert!(!map.contains_key("foo").unwrap());
+    assert!(!map.contains_key("bar").unwrap());
+    assert!(!map.contains_key("baz").unwrap());
+    assert!(!map.contains_key("qux").unwrap());
     assert!(map.get("foo").unwrap().is_none());
     assert!(map.get("bar").unwrap().is_none());
     assert!(map.get("baz").unwrap().is_none());
@@ -1477,16 +1709,16 @@ fn test_sqlite_map_string_i64() {
 
     assert_eq!(map.len().unwrap(), 3);
     assert!(!map.is_empty().unwrap());
-    assert!(map.contains("foo").unwrap());
-    assert!(!map.contains("FOO").unwrap());
-    assert!(map.contains_nocase("FOO").unwrap());
-    assert!(map.contains("bar").unwrap());
-    assert!(!map.contains("BAR").unwrap());
-    assert!(map.contains_nocase("BAR").unwrap());
-    assert!(map.contains("baz").unwrap());
-    assert!(!map.contains("BAZ").unwrap());
-    assert!(map.contains_nocase("BAZ").unwrap());
-    assert!(!map.contains("qux").unwrap());
+    assert!(map.contains_key("foo").unwrap());
+    assert!(!map.contains_key("FOO").unwrap());
+    assert!(map.contains_key_nocase("FOO").unwrap());
+    assert!(map.contains_key("bar").unwrap());
+    assert!(!map.contains_key("BAR").unwrap());
+    assert!(map.contains_key_nocase("BAR").unwrap());
+    assert!(map.contains_key("baz").unwrap());
+    assert!(!map.contains_key("BAZ").unwrap());
+    assert!(map.contains_key_nocase("BAZ").unwrap());
+    assert!(!map.contains_key("qux").unwrap());
     assert_eq!(map.get("foo").unwrap().unwrap(), 0x12345678);
     assert!(map.get("FOO").unwrap().is_none());
     assert_eq!(map.get_nocase("FOO").unwrap().unwrap(), 0x12345678);
@@ -1507,12 +1739,12 @@ fn test_sqlite_map_string_i64() {
 
     assert_eq!(map.len().unwrap(), 1);
     assert!(!map.is_empty().unwrap());
-    assert!(!map.contains("foo").unwrap());
-    assert!(!map.contains("bar").unwrap());
-    assert!(map.contains("baz").unwrap());
-    assert!(!map.contains("BAZ").unwrap());
-    assert!(map.contains_nocase("BAZ").unwrap());
-    assert!(!map.contains("qux").unwrap());
+    assert!(!map.contains_key("foo").unwrap());
+    assert!(!map.contains_key("bar").unwrap());
+    assert!(map.contains_key("baz").unwrap());
+    assert!(!map.contains_key("BAZ").unwrap());
+    assert!(map.contains_key_nocase("BAZ").unwrap());
+    assert!(!map.contains_key("qux").unwrap());
     assert!(map.get("foo").unwrap().is_none());
     assert!(map.get("bar").unwrap().is_none());
     assert_eq!(map.get("baz").unwrap().unwrap(), 0xDEADBEEF);
@@ -1527,16 +1759,16 @@ fn test_sqlite_map_string_i64() {
 
     assert_eq!(map.len().unwrap(), 3);
     assert!(!map.is_empty().unwrap());
-    assert!(map.contains("foo").unwrap());
-    assert!(!map.contains("FOO").unwrap());
-    assert!(map.contains_nocase("FOO").unwrap());
-    assert!(!map.contains("bar").unwrap());
-    assert!(map.contains("baz").unwrap());
-    assert!(!map.contains("BAZ").unwrap());
-    assert!(map.contains_nocase("BAZ").unwrap());
-    assert!(map.contains("qux").unwrap());
-    assert!(!map.contains("QUX").unwrap());
-    assert!(map.contains_nocase("QUX").unwrap());
+    assert!(map.contains_key("foo").unwrap());
+    assert!(!map.contains_key("FOO").unwrap());
+    assert!(map.contains_key_nocase("FOO").unwrap());
+    assert!(!map.contains_key("bar").unwrap());
+    assert!(map.contains_key("baz").unwrap());
+    assert!(!map.contains_key("BAZ").unwrap());
+    assert!(map.contains_key_nocase("BAZ").unwrap());
+    assert!(map.contains_key("qux").unwrap());
+    assert!(!map.contains_key("QUX").unwrap());
+    assert!(map.contains_key_nocase("QUX").unwrap());
     assert_eq!(map.get("foo").unwrap().unwrap(), 0x12345678);
     assert!(map.get("FOO").unwrap().is_none());
     assert_eq!(map.get_nocase("FOO").unwrap().unwrap(), 0x12345678);
@@ -1549,17 +1781,31 @@ fn test_sqlite_map_string_i64() {
     assert_eq!(map.get_nocase("QUX").unwrap().unwrap(), 0xCAFEBABE);
 
     {
+        let mut hash = HashSet::new();
+        map.for_each_key(|key| assert!(hash.insert(key.to_owned()))).unwrap();
+        assert_eq!(hash.len(), 3);
+        assert!(hash.contains("foo"));
+        assert!(hash.contains("baz"));
+        assert!(hash.contains("qux"));
+    }
+
+    {
         let mut hash = HashMap::new();
-        map.for_each(|key, value| assert!(hash.insert(key.to_owned(), value.to_owned()).is_none())).unwrap();
+        map.for_each_entry(|key, value| assert!(hash.insert(key.to_owned(), value.to_owned()).is_none())).unwrap();
         assert_eq!(hash.len(), 3);
         assert_eq!(hash.get("foo").unwrap(), &0x12345678);
         assert_eq!(hash.get("baz").unwrap(), &0xDEADBEEF);
         assert_eq!(hash.get("qux").unwrap(), &0xCAFEBABE);
     }
 
-    assert_eq!(map.find(|key, _| key.eq("foo")).unwrap().unwrap().1, 0x12345678);
-    assert_eq!(map.find(|key, _| key.eq_ignore_ascii_case("FOO")).unwrap().unwrap().1, 0x12345678);
-    assert!(map.find(|key, _| key.eq("bar")).unwrap().is_none());
+    assert!(map.find_key(|key| key.eq("foo")).unwrap().is_some());
+    assert!(map.find_key(|key| key.eq("bar")).unwrap().is_none());
+    assert!(map.find_key(|key| key.eq("baz")).unwrap().is_some());
+    assert!(map.find_key(|key| key.eq("qux")).unwrap().is_some());
+
+    assert_eq!(map.find_entry(|key, _| key.eq("foo")).unwrap().unwrap().1, 0x12345678);
+    assert_eq!(map.find_entry(|key, _| key.eq_ignore_ascii_case("FOO")).unwrap().unwrap().1, 0x12345678);
+    assert!(map.find_entry(|key, _| key.eq("bar")).unwrap().is_none());
 
     map.update("foo", &0x9ABCDEF0).unwrap();
     map.update("bar", &0x0FEDCBA9).unwrap();
@@ -1571,8 +1817,18 @@ fn test_sqlite_map_string_i64() {
     assert_eq!(map.get("qux").unwrap().unwrap(), 0xCAFEBABE);
 
     {
+        let mut hash = HashSet::new();
+        map.for_each_key(|key| assert!(hash.insert(key.to_owned()))).unwrap();
+        assert_eq!(hash.len(), 4);
+        assert!(hash.contains("foo"));
+        assert!(hash.contains("bar"));
+        assert!(hash.contains("baz"));
+        assert!(hash.contains("qux"));
+    }
+
+    {
         let mut hash = HashMap::new();
-        map.for_each(|key, value| assert!(hash.insert(key.to_owned(), value.to_owned()).is_none())).unwrap();
+        map.for_each_entry(|key, value| assert!(hash.insert(key.to_owned(), value.to_owned()).is_none())).unwrap();
         assert_eq!(hash.len(), 4);
         assert_eq!(hash.get("foo").unwrap(), &0x9ABCDEF0);
         assert_eq!(hash.get("bar").unwrap(), &0x0FEDCBA9);
@@ -1580,20 +1836,25 @@ fn test_sqlite_map_string_i64() {
         assert_eq!(hash.get("qux").unwrap(), &0xCAFEBABE);
     }
 
-    assert_eq!(map.find(|key, _| key.eq("foo")).unwrap().unwrap().1, 0x9ABCDEF0);
-    assert_eq!(map.find(|key, _| key.eq_ignore_ascii_case("FOO")).unwrap().unwrap().1, 0x9ABCDEF0);
-    assert_eq!(map.find(|key, _| key.eq("bar")).unwrap().unwrap().1, 0x0FEDCBA9);
-    assert_eq!(map.find(|key, _| key.eq_ignore_ascii_case("BAR")).unwrap().unwrap().1, 0x0FEDCBA9);
-    assert!(map.find(|key, _| key.eq("xyz")).unwrap().is_none());
+    assert!(map.find_key(|key| key.eq("foo")).unwrap().is_some());
+    assert!(map.find_key(|key| key.eq("bar")).unwrap().is_some());
+    assert!(map.find_key(|key| key.eq("baz")).unwrap().is_some());
+    assert!(map.find_key(|key| key.eq("qux")).unwrap().is_some());
+
+    assert_eq!(map.find_entry(|key, _| key.eq("foo")).unwrap().unwrap().1, 0x9ABCDEF0);
+    assert_eq!(map.find_entry(|key, _| key.eq_ignore_ascii_case("FOO")).unwrap().unwrap().1, 0x9ABCDEF0);
+    assert_eq!(map.find_entry(|key, _| key.eq("bar")).unwrap().unwrap().1, 0x0FEDCBA9);
+    assert_eq!(map.find_entry(|key, _| key.eq_ignore_ascii_case("BAR")).unwrap().unwrap().1, 0x0FEDCBA9);
+    assert!(map.find_entry(|key, _| key.eq("xyz")).unwrap().is_none());
 
     map.clear().unwrap();
 
     assert_eq!(map.len().unwrap(), 0);
     assert!(map.is_empty().unwrap());
-    assert!(!map.contains("foo").unwrap());
-    assert!(!map.contains("bar").unwrap());
-    assert!(!map.contains("baz").unwrap());
-    assert!(!map.contains("qux").unwrap());
+    assert!(!map.contains_key("foo").unwrap());
+    assert!(!map.contains_key("bar").unwrap());
+    assert!(!map.contains_key("baz").unwrap());
+    assert!(!map.contains_key("qux").unwrap());
 }
 
 #[test]
@@ -1603,10 +1864,10 @@ fn test_sqlite_map_string_i64_transacted() {
 
     assert_eq!(tx.len().unwrap(), 0);
     assert!(tx.is_empty().unwrap());
-    assert!(!tx.contains("foo").unwrap());
-    assert!(!tx.contains("bar").unwrap());
-    assert!(!tx.contains("baz").unwrap());
-    assert!(!tx.contains("qux").unwrap());
+    assert!(!tx.contains_key("foo").unwrap());
+    assert!(!tx.contains_key("bar").unwrap());
+    assert!(!tx.contains_key("baz").unwrap());
+    assert!(!tx.contains_key("qux").unwrap());
     assert!(tx.get("foo").unwrap().is_none());
     assert!(tx.get("bar").unwrap().is_none());
     assert!(tx.get("baz").unwrap().is_none());
@@ -1621,16 +1882,16 @@ fn test_sqlite_map_string_i64_transacted() {
 
     assert_eq!(tx.len().unwrap(), 3);
     assert!(!tx.is_empty().unwrap());
-    assert!(tx.contains("foo").unwrap());
-    assert!(!tx.contains("FOO").unwrap());
-    assert!(tx.contains_nocase("FOO").unwrap());
-    assert!(tx.contains("bar").unwrap());
-    assert!(!tx.contains("BAR").unwrap());
-    assert!(tx.contains_nocase("BAR").unwrap());
-    assert!(tx.contains("baz").unwrap());
-    assert!(!tx.contains("BAZ").unwrap());
-    assert!(tx.contains_nocase("BAZ").unwrap());
-    assert!(!tx.contains("qux").unwrap());
+    assert!(tx.contains_key("foo").unwrap());
+    assert!(!tx.contains_key("FOO").unwrap());
+    assert!(tx.contains_key_nocase("FOO").unwrap());
+    assert!(tx.contains_key("bar").unwrap());
+    assert!(!tx.contains_key("BAR").unwrap());
+    assert!(tx.contains_key_nocase("BAR").unwrap());
+    assert!(tx.contains_key("baz").unwrap());
+    assert!(!tx.contains_key("BAZ").unwrap());
+    assert!(tx.contains_key_nocase("BAZ").unwrap());
+    assert!(!tx.contains_key("qux").unwrap());
     assert_eq!(tx.get("foo").unwrap().unwrap(), 0x12345678);
     assert!(tx.get("FOO").unwrap().is_none());
     assert_eq!(tx.get_nocase("FOO").unwrap().unwrap(), 0x12345678);
@@ -1651,12 +1912,12 @@ fn test_sqlite_map_string_i64_transacted() {
 
     assert_eq!(tx.len().unwrap(), 1);
     assert!(!tx.is_empty().unwrap());
-    assert!(!tx.contains("foo").unwrap());
-    assert!(!tx.contains("bar").unwrap());
-    assert!(tx.contains("baz").unwrap());
-    assert!(!tx.contains("BAZ").unwrap());
-    assert!(tx.contains_nocase("BAZ").unwrap());
-    assert!(!tx.contains("qux").unwrap());
+    assert!(!tx.contains_key("foo").unwrap());
+    assert!(!tx.contains_key("bar").unwrap());
+    assert!(tx.contains_key("baz").unwrap());
+    assert!(!tx.contains_key("BAZ").unwrap());
+    assert!(tx.contains_key_nocase("BAZ").unwrap());
+    assert!(!tx.contains_key("qux").unwrap());
     assert!(tx.get("foo").unwrap().is_none());
     assert!(tx.get("bar").unwrap().is_none());
     assert_eq!(tx.get("baz").unwrap().unwrap(), 0xDEADBEEF);
@@ -1671,16 +1932,16 @@ fn test_sqlite_map_string_i64_transacted() {
 
     assert_eq!(tx.len().unwrap(), 3);
     assert!(!tx.is_empty().unwrap());
-    assert!(tx.contains("foo").unwrap());
-    assert!(!tx.contains("FOO").unwrap());
-    assert!(tx.contains_nocase("FOO").unwrap());
-    assert!(!tx.contains("bar").unwrap());
-    assert!(tx.contains("baz").unwrap());
-    assert!(!tx.contains("BAZ").unwrap());
-    assert!(tx.contains_nocase("BAZ").unwrap());
-    assert!(tx.contains("qux").unwrap());
-    assert!(!tx.contains("QUX").unwrap());
-    assert!(tx.contains_nocase("QUX").unwrap());
+    assert!(tx.contains_key("foo").unwrap());
+    assert!(!tx.contains_key("FOO").unwrap());
+    assert!(tx.contains_key_nocase("FOO").unwrap());
+    assert!(!tx.contains_key("bar").unwrap());
+    assert!(tx.contains_key("baz").unwrap());
+    assert!(!tx.contains_key("BAZ").unwrap());
+    assert!(tx.contains_key_nocase("BAZ").unwrap());
+    assert!(tx.contains_key("qux").unwrap());
+    assert!(!tx.contains_key("QUX").unwrap());
+    assert!(tx.contains_key_nocase("QUX").unwrap());
     assert_eq!(tx.get("foo").unwrap().unwrap(), 0x12345678);
     assert!(tx.get("FOO").unwrap().is_none());
     assert_eq!(tx.get_nocase("FOO").unwrap().unwrap(), 0x12345678);
@@ -1693,17 +1954,31 @@ fn test_sqlite_map_string_i64_transacted() {
     assert_eq!(tx.get_nocase("QUX").unwrap().unwrap(), 0xCAFEBABE);
 
     {
+        let mut hash = HashSet::new();
+        tx.for_each_key(|key| assert!(hash.insert(key.to_owned()))).unwrap();
+        assert_eq!(hash.len(), 3);
+        assert!(hash.contains("foo"));
+        assert!(hash.contains("baz"));
+        assert!(hash.contains("qux"));
+    }
+
+    {
         let mut hash = HashMap::new();
-        tx.for_each(|key, value| assert!(hash.insert(key.to_owned(), value.to_owned()).is_none())).unwrap();
+        tx.for_each_entry(|key, value| assert!(hash.insert(key.to_owned(), value.to_owned()).is_none())).unwrap();
         assert_eq!(hash.len(), 3);
         assert_eq!(hash.get("foo").unwrap(), &0x12345678);
         assert_eq!(hash.get("baz").unwrap(), &0xDEADBEEF);
         assert_eq!(hash.get("qux").unwrap(), &0xCAFEBABE);
     }
 
-    assert_eq!(tx.find(|key, _| key.eq("foo")).unwrap().unwrap().1, 0x12345678);
-    assert_eq!(tx.find(|key, _| key.eq_ignore_ascii_case("FOO")).unwrap().unwrap().1, 0x12345678);
-    assert!(tx.find(|key, _| key.eq("bar")).unwrap().is_none());
+    assert!(tx.find_key(|key| key.eq("foo")).unwrap().is_some());
+    assert!(tx.find_key(|key| key.eq("bar")).unwrap().is_none());
+    assert!(tx.find_key(|key| key.eq("baz")).unwrap().is_some());
+    assert!(tx.find_key(|key| key.eq("qux")).unwrap().is_some());
+
+    assert_eq!(tx.find_entry(|key, _| key.eq("foo")).unwrap().unwrap().1, 0x12345678);
+    assert_eq!(tx.find_entry(|key, _| key.eq_ignore_ascii_case("FOO")).unwrap().unwrap().1, 0x12345678);
+    assert!(tx.find_entry(|key, _| key.eq("bar")).unwrap().is_none());
 
     tx.update("foo", &0x9ABCDEF0).unwrap();
     tx.update("bar", &0x0FEDCBA9).unwrap();
@@ -1715,8 +1990,18 @@ fn test_sqlite_map_string_i64_transacted() {
     assert_eq!(tx.get("qux").unwrap().unwrap(), 0xCAFEBABE);
 
     {
+        let mut hash = HashSet::new();
+        tx.for_each_key(|key| assert!(hash.insert(key.to_owned()))).unwrap();
+        assert_eq!(hash.len(), 4);
+        assert!(hash.contains("foo"));
+        assert!(hash.contains("bar"));
+        assert!(hash.contains("baz"));
+        assert!(hash.contains("qux"));
+    }
+
+    {
         let mut hash = HashMap::new();
-        tx.for_each(|key, value| assert!(hash.insert(key.to_owned(), value.to_owned()).is_none())).unwrap();
+        tx.for_each_entry(|key, value| assert!(hash.insert(key.to_owned(), value.to_owned()).is_none())).unwrap();
         assert_eq!(hash.len(), 4);
         assert_eq!(hash.get("foo").unwrap(), &0x9ABCDEF0);
         assert_eq!(hash.get("bar").unwrap(), &0x0FEDCBA9);
@@ -1724,20 +2009,25 @@ fn test_sqlite_map_string_i64_transacted() {
         assert_eq!(hash.get("qux").unwrap(), &0xCAFEBABE);
     }
 
-    assert_eq!(tx.find(|key, _| key.eq("foo")).unwrap().unwrap().1, 0x9ABCDEF0);
-    assert_eq!(tx.find(|key, _| key.eq_ignore_ascii_case("FOO")).unwrap().unwrap().1, 0x9ABCDEF0);
-    assert_eq!(tx.find(|key, _| key.eq("bar")).unwrap().unwrap().1, 0x0FEDCBA9);
-    assert_eq!(tx.find(|key, _| key.eq_ignore_ascii_case("BAR")).unwrap().unwrap().1, 0x0FEDCBA9);
-    assert!(tx.find(|key, _| key.eq("xyz")).unwrap().is_none());
+    assert!(tx.find_key(|key| key.eq("foo")).unwrap().is_some());
+    assert!(tx.find_key(|key| key.eq("bar")).unwrap().is_some());
+    assert!(tx.find_key(|key| key.eq("baz")).unwrap().is_some());
+    assert!(tx.find_key(|key| key.eq("qux")).unwrap().is_some());
+
+    assert_eq!(tx.find_entry(|key, _| key.eq("foo")).unwrap().unwrap().1, 0x9ABCDEF0);
+    assert_eq!(tx.find_entry(|key, _| key.eq_ignore_ascii_case("FOO")).unwrap().unwrap().1, 0x9ABCDEF0);
+    assert_eq!(tx.find_entry(|key, _| key.eq("bar")).unwrap().unwrap().1, 0x0FEDCBA9);
+    assert_eq!(tx.find_entry(|key, _| key.eq_ignore_ascii_case("BAR")).unwrap().unwrap().1, 0x0FEDCBA9);
+    assert!(tx.find_entry(|key, _| key.eq("xyz")).unwrap().is_none());
 
     tx.clear().unwrap();
 
     assert_eq!(tx.len().unwrap(), 0);
     assert!(tx.is_empty().unwrap());
-    assert!(!tx.contains("foo").unwrap());
-    assert!(!tx.contains("bar").unwrap());
-    assert!(!tx.contains("baz").unwrap());
-    assert!(!tx.contains("qux").unwrap());
+    assert!(!tx.contains_key("foo").unwrap());
+    assert!(!tx.contains_key("bar").unwrap());
+    assert!(!tx.contains_key("baz").unwrap());
+    assert!(!tx.contains_key("qux").unwrap());
 
     assert!(tx.insert("foo", &i64::MAX).unwrap());
     assert!(tx.insert("bar", &i64::MIN).unwrap());
@@ -1746,10 +2036,10 @@ fn test_sqlite_map_string_i64_transacted() {
 
     assert_eq!(map.len().unwrap(), 2);
     assert!(!map.is_empty().unwrap());
-    assert!(map.contains("foo").unwrap());
-    assert!(map.contains("bar").unwrap());
-    assert!(!map.contains("baz").unwrap());
-    assert!(!map.contains("qux").unwrap());
+    assert!(map.contains_key("foo").unwrap());
+    assert!(map.contains_key("bar").unwrap());
+    assert!(!map.contains_key("baz").unwrap());
+    assert!(!map.contains_key("qux").unwrap());
     assert_eq!(map.get("foo").unwrap().unwrap(), i64::MAX);
     assert_eq!(map.get("bar").unwrap().unwrap(), i64::MIN);
     assert!(map.get("baz").unwrap().is_none());
@@ -1774,19 +2064,19 @@ fn test_sqlite_map_string_i64_ignorecase() {
     assert!(map_1.remove("FOO").unwrap());
     assert!(map_1.remove("bar").unwrap());
 
-    assert!(map_1.contains("foo").unwrap());
-    assert!(!map_1.contains("FOO").unwrap());
-    assert!(!map_1.contains("bar").unwrap());
-    assert!(map_1.contains("BAR").unwrap());
+    assert!(map_1.contains_key("foo").unwrap());
+    assert!(!map_1.contains_key("FOO").unwrap());
+    assert!(!map_1.contains_key("bar").unwrap());
+    assert!(map_1.contains_key("BAR").unwrap());
     assert_eq!(map_1.get("foo").unwrap().unwrap(), 0x12345678);
     assert!(map_1.get("FOO").unwrap().is_none());
     assert!(map_1.get("bar").unwrap().is_none());
     assert_eq!(map_1.get("BAR").unwrap().unwrap(), 0x9ABCDEF0);
 
-    assert!(map_2.contains("foo").unwrap());
-    assert!(map_2.contains("FOO").unwrap());
-    assert!(map_2.contains("bar").unwrap());
-    assert!(map_2.contains("BAR").unwrap());
+    assert!(map_2.contains_key("foo").unwrap());
+    assert!(map_2.contains_key("FOO").unwrap());
+    assert!(map_2.contains_key("bar").unwrap());
+    assert!(map_2.contains_key("BAR").unwrap());
     assert_eq!(map_2.get("foo").unwrap().unwrap(), 0x12345678);
     assert_eq!(map_2.get("FOO").unwrap().unwrap(), 0x12345678);
     assert_eq!(map_2.get("bar").unwrap().unwrap(), 0x9ABCDEF0);
@@ -1795,10 +2085,10 @@ fn test_sqlite_map_string_i64_ignorecase() {
     assert!(map_2.remove("FOO").unwrap());
     assert!(map_2.remove("bar").unwrap());
 
-    assert!(!map_2.contains("foo").unwrap());
-    assert!(!map_2.contains("FOO").unwrap());
-    assert!(!map_2.contains("bar").unwrap());
-    assert!(!map_2.contains("BAR").unwrap());
+    assert!(!map_2.contains_key("foo").unwrap());
+    assert!(!map_2.contains_key("FOO").unwrap());
+    assert!(!map_2.contains_key("bar").unwrap());
+    assert!(!map_2.contains_key("BAR").unwrap());
     assert!(map_2.get("foo").unwrap().is_none());
     assert!(map_2.get("FOO").unwrap().is_none());
     assert!(map_2.get("bar").unwrap().is_none());
@@ -1829,8 +2119,8 @@ fn test_sqlite_map_string_i64_stresstest() {
     {
         let tx = set.transaction().unwrap();
         for i in 0u64..MAX_ITEMS {
-            assert!(tx.contains(hex.encode(mix64(i))).unwrap());
-            assert!(!tx.contains(hex.encode(mix64(MAX_ITEMS.checked_add(i).unwrap()))).unwrap());
+            assert!(tx.contains_key(hex.encode(mix64(i))).unwrap());
+            assert!(!tx.contains_key(hex.encode(mix64(MAX_ITEMS.checked_add(i).unwrap()))).unwrap());
         }
         for i in 0u64..MAX_ITEMS {
             let (key, value) = (hex.encode(mix64(i)), (!mix64(u64::MAX - i)) as i64);

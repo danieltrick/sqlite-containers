@@ -9,31 +9,32 @@ all: clean clippy build test doc
 
 check:
 	cargo fmt --all --check
-	cargo check
-	cargo check --release --all-targets
+	cargo check --locked --all-targets
+	cargo check --locked --all-targets --all-features
 
 clippy: check
-	cargo clippy -- -D warnings
-	cargo clippy --all-features --all-targets -- -D warnings
+	cargo clippy --locked --all-targets -- -D warnings
+	cargo clippy --locked --all-targets --all-features -- -D warnings
 
 fmt:
 	cargo fmt --all
 
 build:
-	cargo build
-	cargo build --release
+	cargo build --locked
+	cargo build --locked --release
 
 test:
 	cargo test --locked
+	cargo test --locked --all-features
 	cargo test --locked --release
-	cargo test --locked --release --features with_rowid
+	cargo test --locked --release --all-features
 
 run: $(EXAMPLES)
 $(EXAMPLES):
 	cargo run --locked --release --example $(patsubst run-%,%,$@)
 
 bench:
-	cargo bench --bench sqlite_containers-bench -- --quick
+	cargo bench --locked --bench sqlite_containers-bench -- --quick
 
 doc:
 	cargo doc --locked
