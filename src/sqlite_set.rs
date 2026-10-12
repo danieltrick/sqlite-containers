@@ -19,9 +19,9 @@ static SQL_CREATE_TBL: LazyLock<BTreeMap<SqlType, String>> = LazyLock::new(|| {
     for sql_type in SQL_TYPES {
         cfg_if! {
             if #[cfg(feature = "with_rowid")] {
-                map.insert(sql_type, format!("CREATE TABLE data (key {} PRIMARY KEY NOT NULL);", sql_type));
+                map.insert(sql_type, format!("CREATE TABLE data (key {sql_type} PRIMARY KEY NOT NULL);"));
             } else {
-                map.insert(sql_type, format!("CREATE TABLE data (key {} PRIMARY KEY NOT NULL) WITHOUT ROWID;", sql_type));
+                map.insert(sql_type, format!("CREATE TABLE data (key {sql_type} PRIMARY KEY NOT NULL) WITHOUT ROWID;"));
             }
         }
     }

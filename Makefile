@@ -13,7 +13,7 @@ check:
 	cargo check --release --all-targets
 
 clippy: check
-	cargo clippy --no-default-features -- -D warnings
+	cargo clippy -- -D warnings
 	cargo clippy --all-features --all-targets -- -D warnings
 
 fmt:

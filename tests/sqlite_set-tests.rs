@@ -770,7 +770,7 @@ fn test_sqlite_set_to_destruction() {
                 sqlite_containers::rusqlite::Error::SqliteFailure(sqlite_error, _) => match sqlite_error.code {
                     sqlite_containers::rusqlite::ErrorCode::OutOfMemory => break,
                     sqlite_containers::rusqlite::ErrorCode::DiskFull => break,
-                    _ => panic!("Unexpected SQLite failure has been encountered! [{}]", sqlite_error),
+                    _ => panic!("Unexpected SQLite failure has been encountered! [{sqlite_error}]"),
                 },
                 _ => panic!("Unexpected SQLiteMap has been encountered!"),
             },
