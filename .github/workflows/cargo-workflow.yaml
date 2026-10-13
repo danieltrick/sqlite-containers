@@ -55,8 +55,10 @@ jobs:
           DEBIAN_FRONTEND: noninteractive
       - if: ${{ startsWith(matrix.platform.host, 'windows') }}
         run: |
-          choco install make --yes --no-progress --stoponfirstfailure --failonunfound
-          Add-Content -Path ${env:GITHUB_PATH} -Value "${env:ProgramData}\chocolatey\lib\make\tools\install\bin"
+          Add-Content -Path ${env:GITHUB_PATH} -Value "${env:GITHUB_WORKSPACE}\etc\tools\gnu-make\win32\bin"
+      - if: ${{ startsWith(matrix.platform.host, 'windows') }}
+        run: |
+          Get-Command make
       - run: make
         env:
           CARGO_BUILD_TARGET: ${{ matrix.platform.target }}

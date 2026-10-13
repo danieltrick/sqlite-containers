@@ -5,11 +5,13 @@
 //! SQLite-based containers for Rust
 //! ================================
 //!
-//! **`sqlite-containers`** provides [*map*](https://en.wikipedia.org/wiki/Associative_array) and [*set*](https://en.wikipedia.org/wiki/Set_(abstract_data_type)) implementations that are backed by **SQLite** [in-memory](https://www.sqlite.org/inmemorydb.html) databases.
+//! ![SQLite-based containers for Rust](https://raw.githubusercontent.com/danieltrick/sqlite-containers/refs/heads/main/etc/images/sqlite-containers.png)
 //!
-//! Intended as drop-in replacements for [`HashMap`](std::collections::HashMap) and [`HashSet`](std::collections::HashSet).
+//! [**`sqlite-containers`**](https://crates.io/crates/sqlite-containers) provides [*map*](https://en.wikipedia.org/wiki/Associative_array) and [*set*](https://en.wikipedia.org/wiki/Set_(abstract_data_type)) implementations that are backed by **SQLite** [in-memory](https://www.sqlite.org/inmemorydb.html) databases.
 //!
-//! Leveraging the power of the SQLite engine, `sqlite-containers` efficiently store billions of elements &#x1F60E;
+//! It is designed as a drop-in replacement for [`HashMap`](std::collections::HashMap) and [`HashSet`](std::collections::HashSet).
+//!
+//! Leveraging the power of the SQLite engine, [`SQLiteMap`] and [`SQLiteSet`] efficiently store billions of elements!
 //!
 //! Quick Start
 //! -----------

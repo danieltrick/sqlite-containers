@@ -51,7 +51,7 @@ fn bench_sqlite_map(c: &mut Criterion) {
 
         b.iter(|| {
             for n in 0..TARGET_ITEM_COUNT {
-                assert!(black_box(sqlite_map.get(hex_1.encode(black_box(mix64(n)))).unwrap().is_some()));
+                assert_eq!(black_box(sqlite_map.get(hex_1.encode(black_box(mix64(n)))).unwrap().unwrap()), hex_2.encode(mix64(!n)));
             }
         });
     });
@@ -67,7 +67,7 @@ fn bench_sqlite_map(c: &mut Criterion) {
         b.iter(|| {
             let tx = sqlite_map.transaction().unwrap();
             for n in 0..TARGET_ITEM_COUNT {
-                assert!(black_box(tx.get(hex_1.encode(black_box(mix64(n)))).unwrap().is_some()));
+                assert_eq!(black_box(tx.get(hex_1.encode(black_box(mix64(n)))).unwrap().unwrap()), hex_2.encode(mix64(!n)));
             }
         });
     });

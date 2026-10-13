@@ -76,10 +76,10 @@ fn test_sqlite_set_i64() {
         assert!(hash.contains(&i64::MIN));
     }
 
-    assert!(set.find(|item| item.eq(&0i64)).unwrap().is_some());
+    assert!(set.find(|item| item.eq(&0i64)).unwrap().is_some_and(|item| item == 0i64));
     assert!(set.find(|item| item.eq(&42i64)).unwrap().is_none());
-    assert!(set.find(|item| item.eq(&i64::MAX)).unwrap().is_some());
-    assert!(set.find(|item| item.eq(&i64::MIN)).unwrap().is_some());
+    assert!(set.find(|item| item.eq(&i64::MAX)).unwrap().is_some_and(|item| item == i64::MAX));
+    assert!(set.find(|item| item.eq(&i64::MIN)).unwrap().is_some_and(|item| item == i64::MIN));
 
     set.clear().unwrap();
 
@@ -150,10 +150,10 @@ fn test_sqlite_set_i64_transacted() {
         assert!(hash.contains(&i64::MIN));
     }
 
-    assert!(tx.find(|item| item.eq(&0i64)).unwrap().is_some());
+    assert!(tx.find(|item| item.eq(&0i64)).unwrap().is_some_and(|item| item == 0i64));
     assert!(tx.find(|item| item.eq(&42i64)).unwrap().is_none());
-    assert!(tx.find(|item| item.eq(&i64::MAX)).unwrap().is_some());
-    assert!(tx.find(|item| item.eq(&i64::MIN)).unwrap().is_some());
+    assert!(tx.find(|item| item.eq(&i64::MAX)).unwrap().is_some_and(|item| item == i64::MAX));
+    assert!(tx.find(|item| item.eq(&i64::MIN)).unwrap().is_some_and(|item| item == i64::MIN));
 
     tx.clear().unwrap();
 
@@ -294,22 +294,30 @@ fn test_sqlite_set_string() {
         assert!(hash.contains("qux"));
     }
 
-    assert!(set.find(|item: &str| item.eq("foo")).unwrap().is_some());
-    assert!(set.find(|item: &str| item.eq_ignore_ascii_case("FOO")).unwrap().is_some());
+    assert!(set.find(|item: &str| item.eq("foo")).unwrap().is_some_and(|item| item.eq("foo")));
+    assert!(set.find(|item: &str| item.eq_ignore_ascii_case("FOO")).unwrap().is_some_and(|item| item.eq("foo")));
     assert!(set.find(|item: &str| item.eq("bar")).unwrap().is_none());
 
     {
         let mut hash = HashSet::new();
-        set.filter("F%", |key| assert!(hash.insert(key))).unwrap();
+        set.glob(false, "f*", |key| assert!(hash.insert(key))).unwrap();
         assert_eq!(hash.len(), 1);
         assert!(hash.contains("foo"));
     }
 
     {
         let mut hash = HashSet::new();
-        set.filter("b_z", |key| assert!(hash.insert(key))).unwrap();
+        set.glob(false, "b?z", |key| assert!(hash.insert(key))).unwrap();
         assert_eq!(hash.len(), 1);
         assert!(hash.contains("baz"));
+    }
+
+    {
+        let mut hash = HashSet::new();
+        set.glob(true, "b?z", |key| assert!(hash.insert(key))).unwrap();
+        assert_eq!(hash.len(), 2);
+        assert!(hash.contains("foo"));
+        assert!(hash.contains("qux"));
     }
 
     set.clear().unwrap();
@@ -397,22 +405,28 @@ fn test_sqlite_set_string_transacted() {
         assert!(hash.contains("qux"));
     }
 
-    assert!(tx.find(|item: &str| item.eq("foo")).unwrap().is_some());
-    assert!(tx.find(|item: &str| item.eq_ignore_ascii_case("FOO")).unwrap().is_some());
+    assert!(tx.find(|item: &str| item.eq("foo")).unwrap().is_some_and(|key| key.eq("foo")));
+    assert!(tx.find(|item: &str| item.eq_ignore_ascii_case("FOO")).unwrap().is_some_and(|key| key.eq("foo")));
     assert!(tx.find(|item: &str| item.eq("bar")).unwrap().is_none());
 
     {
         let mut hash = HashSet::new();
-        tx.filter("F%", |key| assert!(hash.insert(key))).unwrap();
+        tx.glob(false, "f*", |key| assert!(hash.insert(key))).unwrap();
         assert_eq!(hash.len(), 1);
         assert!(hash.contains("foo"));
     }
 
     {
         let mut hash = HashSet::new();
-        tx.filter("b_z", |key| assert!(hash.insert(key))).unwrap();
-        assert_eq!(hash.len(), 1);
-        assert!(hash.contains("baz"));
+        tx.glob(false, "b?z", |key| assert!(hash.insert(key))).unwrap();
+    }
+
+    {
+        let mut hash = HashSet::new();
+        tx.glob(true, "b?z", |key| assert!(hash.insert(key))).unwrap();
+        assert_eq!(hash.len(), 2);
+        assert!(hash.contains("foo"));
+        assert!(hash.contains("qux"));
     }
 
     tx.clear().unwrap();
@@ -584,8 +598,8 @@ fn test_sqlite_set_blob() {
         assert!(hash.contains::<[u8]>(b"qux"));
     }
 
-    assert!(set.find(|item: &[u8]| item.eq(b"foo")).unwrap().is_some());
-    assert!(set.find(|item: &[u8]| item.eq_ignore_ascii_case(b"FOO")).unwrap().is_some());
+    assert!(set.find(|item: &[u8]| item.eq(b"foo")).unwrap().is_some_and(|key| key.eq(b"foo")));
+    assert!(set.find(|item: &[u8]| item.eq_ignore_ascii_case(b"FOO")).unwrap().is_some_and(|key| key.eq(b"foo")));
     assert!(set.find(|item: &[u8]| item.eq(b"bar")).unwrap().is_none());
 
     set.clear().unwrap();
@@ -665,8 +679,8 @@ fn test_sqlite_set_blob_transacted() {
         assert!(hash.contains::<[u8]>(b"qux"));
     }
 
-    assert!(tx.find(|item: &[u8]| item.eq(b"foo")).unwrap().is_some());
-    assert!(tx.find(|item: &[u8]| item.eq_ignore_ascii_case(b"FOO")).unwrap().is_some());
+    assert!(tx.find(|item: &[u8]| item.eq(b"foo")).unwrap().is_some_and(|item| item.eq(b"foo")));
+    assert!(tx.find(|item: &[u8]| item.eq_ignore_ascii_case(b"FOO")).unwrap().is_some_and(|item| item.eq(b"foo")));
     assert!(tx.find(|item: &[u8]| item.eq(b"bar")).unwrap().is_none());
 
     tx.clear().unwrap();
