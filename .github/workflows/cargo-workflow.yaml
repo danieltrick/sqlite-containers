@@ -40,26 +40,41 @@ jobs:
 
     runs-on: ${{ matrix.platform.host }}
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions-rust-lang/setup-rust-toolchain@v2
+      - name: Install Rust Toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v2
         with:
           toolchain: ${{ matrix.rust }}
           target: ${{ matrix.platform.target }}
           components: rustfmt clippy
           cache: false
-      - if: ${{ matrix.platform.target == 'i686-unknown-linux-gnu' }}
+
+      - name: Install Multilib Support
+        if: ${{ matrix.platform.target == 'i686-unknown-linux-gnu' }}
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends gcc-multilib libc6-dev-i386
         env:
           DEBIAN_FRONTEND: noninteractive
-      - if: ${{ startsWith(matrix.platform.host, 'windows') }}
+
+      - name: Add GNU Make to PATH
+        if: ${{ startsWith(matrix.platform.host, 'windows') }}
         run: |
           Add-Content -Path ${env:GITHUB_PATH} -Value "${env:GITHUB_WORKSPACE}\etc\tools\gnu-make\win32\bin"
-      - if: ${{ startsWith(matrix.platform.host, 'windows') }}
+
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Dump Platform Info
+        working-directory: .github/workflows/rustc-info
         run: |
-          Get-Command make
-      - run: make
+          cargo run --locked --quiet
+        env:
+          CARGO_BUILD_TARGET: ${{ matrix.platform.target }}
+          CARGO_PROFILE_RELEASE_DEBUG: true
+          RUST_BACKTRACE: 1
+
+      - name: Test and Build Application
+        run: make
         env:
           CARGO_BUILD_TARGET: ${{ matrix.platform.target }}
           CARGO_PROFILE_RELEASE_DEBUG: true
@@ -74,21 +89,31 @@ jobs:
 
     runs-on: ubuntu-26.04
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions-rust-lang/setup-rust-toolchain@v2
+      - name: Install Rust Toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v2
         with:
           toolchain: 1.99.0
           components: llvm-tools-preview
           cache: false
-      - uses: taiki-e/install-action@cargo-llvm-cov
-      - run: make codecov
+
+      - name: Install Cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
+
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Code Coverage Analysis
+        run: make codecov
         env:
           CARGO_PROFILE_RELEASE_DEBUG: true
           RUST_BACKTRACE: 1
-      - uses: codecov/codecov-action@v7
+
+      - name: Upload to Codecov
+        uses: codecov/codecov-action@v7
         with:
           files: target/codecov-output.info
           verbose: true
+          fail_ci_if_error: true
           token: ${{ secrets.CODECOV_TOKEN }}
 
   # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -101,12 +126,17 @@ jobs:
 
     runs-on: ubuntu-26.04
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions-rust-lang/setup-rust-toolchain@v2
+      - name: Install Rust Toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v2
         with:
           toolchain: 1.99.0
           cache: false
-      - run: make publish
+
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Publish Application to crates.io
+        run: make publish
         env:
           CARGO_PROFILE_RELEASE_DEBUG: true
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
