@@ -21,6 +21,7 @@ rusqlite = "0.40.2"
 [dev-dependencies]
 criterion = { version = "0.8.2", default-features = false }
 hex = "0.4.3"
+rand_xoshiro = "0.8.1"
 
 [[bench]]
 name = "sqlite_containers-bench"

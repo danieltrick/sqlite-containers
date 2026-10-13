@@ -2,7 +2,7 @@
 // This file is part of the 'SQLite-based containers for Rust' project (sqlite-containers)
 // SPDX-License-Identifier: Unlicense
 
-#[path = "../tests/utilities/mod.rs"]
+#[path = "../tests/utilities/utilities.rs"]
 mod utilities;
 
 use crate::utilities::{HexEncoder, mix64};
@@ -22,7 +22,7 @@ fn main() {
 
     println!("Inserting elements, please wait...");
 
-    for n in 0..100_000_000u64 {
+    for n in 0..10_000_000u64 {
         tx.insert(hex.encode(mix64(n))).expect("Insertion failed!");
     }
 

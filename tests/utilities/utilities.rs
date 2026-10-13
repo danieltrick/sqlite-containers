@@ -1,4 +1,4 @@
-// Benchmark Utilities
+// Test Utilities
 // This file is part of the 'SQLite-based containers for Rust' project (sqlite-containers)
 // SPDX-License-Identifier: Unlicense
 
@@ -6,7 +6,7 @@ use hex::encode_to_slice;
 use std::slice;
 
 // ---------------------------------------------------------------------------
-// Utilities
+// HexEncoder
 // ---------------------------------------------------------------------------
 
 pub struct HexEncoder([u8; 16usize]);
@@ -30,6 +30,10 @@ impl HexEncoder {
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// Utilities
+// ---------------------------------------------------------------------------
 
 #[inline]
 pub fn mix64(mut z: u64) -> u64 {

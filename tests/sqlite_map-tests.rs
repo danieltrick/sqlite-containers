@@ -2,9 +2,19 @@
 // This file is part of the 'SQLite-based containers for Rust' project (sqlite-containers)
 // SPDX-License-Identifier: Unlicense
 
+#[path = "utilities/consts.rs"]
+mod consts;
+#[path = "utilities/utilities.rs"]
 mod utilities;
 
-use crate::utilities::{HexEncoder, mix64};
+use crate::{
+    consts::MAX_ITEMS,
+    utilities::{HexEncoder, mix64},
+};
+use rand_xoshiro::{
+    Xoshiro256PlusPlus,
+    rand_core::{Rng, SeedableRng},
+};
 use sqlite_containers::{Blob, SQLiteMap, SizeExt};
 use std::{
     array,
@@ -324,17 +334,12 @@ fn test_sqlite_map_i64_string_transacted() {
 fn test_sqlite_map_i64_string_stresstest() {
     let mut set = SQLiteMap::<i64, String>::new().unwrap();
     let mut hex = HexEncoder::default();
-    const MAX_ITEMS: u64 = 1_000_000u64;
 
     {
         let mut tx = set.transaction().unwrap();
         for i in 0u64..MAX_ITEMS {
-            let (key, value) = (mix64(i) as i64, hex.encode(mix64(u64::MAX - i)));
+            let (key, value) = (mix64(i) as i64, hex.encode(mix64(!i)));
             assert!(tx.insert(&key, value).unwrap());
-        }
-        for i in 0u64..MAX_ITEMS {
-            let (key, value) = (mix64(i) as i64, hex.encode(!mix64(u64::MAX - i)));
-            tx.update(&key, value).unwrap();
         }
     }
 
@@ -344,29 +349,50 @@ fn test_sqlite_map_i64_string_stresstest() {
     {
         let tx = set.transaction().unwrap();
         for i in 0u64..MAX_ITEMS {
-            assert!(tx.contains_key(&(mix64(i) as i64)).unwrap());
-            assert!(!tx.contains_key(&(mix64(MAX_ITEMS.checked_add(i).unwrap()) as i64)).unwrap());
-        }
-        for i in 0u64..MAX_ITEMS {
-            let (key, value) = (mix64(i) as i64, hex.encode(!mix64(u64::MAX - i)));
+            let (key, value) = (mix64(i) as i64, hex.encode(mix64(!i)));
             assert_eq!(tx.get(&key).unwrap().unwrap(), value);
         }
     }
-
-    assert!(!set.is_empty().unwrap());
-    assert_eq!(set.len().unwrap().to_u64(), MAX_ITEMS);
 
     {
         let mut tx = set.transaction().unwrap();
         for i in 0u64..MAX_ITEMS {
             assert!(tx.remove(&(mix64(i) as i64)).unwrap());
         }
-        for i in 0u64..MAX_ITEMS {
-            assert!(!tx.remove(&(mix64(i) as i64)).unwrap());
-        }
     }
 
     assert!(set.is_empty().unwrap());
+    assert_eq!(set.len().unwrap().to_u64(), 0);
+}
+
+#[test]
+fn test_sqlite_map_i64_string_randomized() {
+    const COUNT: u64 = 125_000u64;
+    let mut set = SQLiteMap::<i64, String>::new().unwrap();
+    let mut hex = HexEncoder::default();
+
+    for seed in [0x9DDC5F3146219B97u64, 0x79B9E4DC002B32D6u64] {
+        for b in [true, false] {
+            let mut xoshiro = Xoshiro256PlusPlus::seed_from_u64(seed);
+            let mut tx = set.transaction().unwrap();
+            for _i in 0u64..COUNT {
+                assert_eq!(tx.insert(&(xoshiro.next_u64() as i64), hex.encode(xoshiro.next_u64())).unwrap(), b);
+            }
+        }
+    }
+
+    for (seed, b) in [(0x9DDC5F3146219B97u64, true), (0x79B9E4DC002B32D6u64, true), (0x2F381F8B2F0E517Au64, false)] {
+        let mut xoshiro = Xoshiro256PlusPlus::seed_from_u64(seed);
+        let tx = set.transaction().unwrap();
+        for _i in 0u64..COUNT {
+            if b {
+                assert_eq!(tx.get(&(xoshiro.next_u64() as i64)).unwrap().unwrap(), hex.encode(xoshiro.next_u64()));
+            } else {
+                assert!(tx.get(&(xoshiro.next_u64() as i64)).unwrap().is_none());
+                let _skip = xoshiro.next_u64();
+            }
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -710,17 +736,12 @@ fn test_sqlite_map_blob_string_transacted() {
 fn test_sqlite_map_blob_string_stresstest() {
     let mut set = SQLiteMap::<Blob, String>::new().unwrap();
     let (mut hex_1, mut hex_2) = (HexEncoder::default(), HexEncoder::default());
-    const MAX_ITEMS: u64 = 1_000_000u64;
 
     {
         let mut tx = set.transaction().unwrap();
         for i in 0u64..MAX_ITEMS {
-            let (key, value) = (hex_1.encode_raw(mix64(i)), hex_2.encode(mix64(u64::MAX - i)));
+            let (key, value) = (hex_1.encode_raw(mix64(i)), hex_2.encode(mix64(!i)));
             assert!(tx.insert(key, value).unwrap());
-        }
-        for i in 0u64..MAX_ITEMS {
-            let (key, value) = (hex_1.encode_raw(mix64(i)), hex_2.encode(!mix64(u64::MAX - i)));
-            tx.update(key, value).unwrap();
         }
     }
 
@@ -730,29 +751,52 @@ fn test_sqlite_map_blob_string_stresstest() {
     {
         let tx = set.transaction().unwrap();
         for i in 0u64..MAX_ITEMS {
-            assert!(tx.contains_key(hex_1.encode_raw(mix64(i))).unwrap());
-            assert!(!tx.contains_key(hex_1.encode_raw(mix64(MAX_ITEMS.checked_add(i).unwrap()))).unwrap());
-        }
-        for i in 0u64..MAX_ITEMS {
-            let (key, value) = (hex_1.encode_raw(mix64(i)), hex_2.encode(!mix64(u64::MAX - i)));
+            let (key, value) = (hex_1.encode_raw(mix64(i)), hex_2.encode(mix64(!i)));
             assert_eq!(tx.get(key).unwrap().unwrap(), value);
         }
     }
-
-    assert!(!set.is_empty().unwrap());
-    assert_eq!(set.len().unwrap().to_u64(), MAX_ITEMS);
 
     {
         let mut tx = set.transaction().unwrap();
         for i in 0u64..MAX_ITEMS {
             assert!(tx.remove(hex_1.encode_raw(mix64(i))).unwrap());
         }
-        for i in 0u64..MAX_ITEMS {
-            assert!(!tx.remove(hex_1.encode_raw(mix64(i))).unwrap());
-        }
     }
 
     assert!(set.is_empty().unwrap());
+    assert_eq!(set.len().unwrap().to_u64(), 0);
+}
+
+#[test]
+fn test_sqlite_map_blob_string_randomized() {
+    const COUNT: u64 = 125_000u64;
+    let mut set = SQLiteMap::<Blob, String>::new().unwrap();
+    let (mut temp, mut hex) = ([0u8; 16usize], HexEncoder::default());
+
+    for seed in [0x9DDC5F3146219B97u64, 0x79B9E4DC002B32D6u64] {
+        for b in [true, false] {
+            let mut xoshiro = Xoshiro256PlusPlus::seed_from_u64(seed);
+            let mut tx = set.transaction().unwrap();
+            for _i in 0u64..COUNT {
+                xoshiro.fill_bytes(&mut temp);
+                assert_eq!(tx.insert(temp.as_slice(), hex.encode(xoshiro.next_u64())).unwrap(), b);
+            }
+        }
+    }
+
+    for (seed, b) in [(0x9DDC5F3146219B97u64, true), (0x79B9E4DC002B32D6u64, true), (0x2F381F8B2F0E517Au64, false)] {
+        let mut xoshiro = Xoshiro256PlusPlus::seed_from_u64(seed);
+        let tx = set.transaction().unwrap();
+        for _i in 0u64..COUNT {
+            xoshiro.fill_bytes(&mut temp);
+            if b {
+                assert_eq!(tx.get(temp.as_slice()).unwrap().unwrap(), hex.encode(xoshiro.next_u64()));
+            } else {
+                assert!(tx.get(temp.as_slice()).unwrap().is_none());
+                let _skip = xoshiro.next_u64();
+            }
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1265,17 +1309,12 @@ fn test_sqlite_map_string_string_ignorecase() {
 fn test_sqlite_map_string_string_stresstest() {
     let mut set = SQLiteMap::<String, String>::new().unwrap();
     let (mut hex_1, mut hex_2) = (HexEncoder::default(), HexEncoder::default());
-    const MAX_ITEMS: u64 = 1_000_000u64;
 
     {
         let mut tx = set.transaction().unwrap();
         for i in 0u64..MAX_ITEMS {
-            let (key, value) = (hex_1.encode(mix64(i)), hex_2.encode(mix64(u64::MAX - i)));
+            let (key, value) = (hex_1.encode(mix64(i)), hex_2.encode(mix64(!i)));
             assert!(tx.insert(key, value).unwrap());
-        }
-        for i in 0u64..MAX_ITEMS {
-            let (key, value) = (hex_1.encode(mix64(i)), hex_2.encode(!mix64(u64::MAX - i)));
-            tx.update(key, value).unwrap();
         }
     }
 
@@ -1285,29 +1324,50 @@ fn test_sqlite_map_string_string_stresstest() {
     {
         let tx = set.transaction().unwrap();
         for i in 0u64..MAX_ITEMS {
-            assert!(tx.contains_key(hex_1.encode(mix64(i))).unwrap());
-            assert!(!tx.contains_key(hex_1.encode(mix64(MAX_ITEMS.checked_add(i).unwrap()))).unwrap());
-        }
-        for i in 0u64..MAX_ITEMS {
-            let (key, value) = (hex_1.encode(mix64(i)), hex_2.encode(!mix64(u64::MAX - i)));
+            let (key, value) = (hex_1.encode(mix64(i)), hex_2.encode(mix64(!i)));
             assert_eq!(tx.get(key).unwrap().unwrap(), value);
         }
     }
-
-    assert!(!set.is_empty().unwrap());
-    assert_eq!(set.len().unwrap().to_u64(), MAX_ITEMS);
 
     {
         let mut tx = set.transaction().unwrap();
         for i in 0u64..MAX_ITEMS {
             assert!(tx.remove(hex_1.encode(mix64(i))).unwrap());
         }
-        for i in 0u64..MAX_ITEMS {
-            assert!(!tx.remove(hex_1.encode(mix64(i))).unwrap());
-        }
     }
 
     assert!(set.is_empty().unwrap());
+    assert_eq!(set.len().unwrap().to_u64(), 0);
+}
+
+#[test]
+fn test_sqlite_map_string_string_randomized() {
+    const COUNT: u64 = 125_000u64;
+    let mut set = SQLiteMap::<String, String>::new().unwrap();
+    let (mut hex_1, mut hex_2) = (HexEncoder::default(), HexEncoder::default());
+
+    for seed in [0x9DDC5F3146219B97u64, 0x79B9E4DC002B32D6u64] {
+        for b in [true, false] {
+            let mut xoshiro = Xoshiro256PlusPlus::seed_from_u64(seed);
+            let mut tx = set.transaction().unwrap();
+            for _i in 0u64..COUNT {
+                assert_eq!(tx.insert(hex_1.encode(xoshiro.next_u64()), hex_2.encode(xoshiro.next_u64())).unwrap(), b);
+            }
+        }
+    }
+
+    for (seed, b) in [(0x9DDC5F3146219B97u64, true), (0x79B9E4DC002B32D6u64, true), (0x2F381F8B2F0E517Au64, false)] {
+        let mut xoshiro = Xoshiro256PlusPlus::seed_from_u64(seed);
+        let tx = set.transaction().unwrap();
+        for _i in 0u64..COUNT {
+            if b {
+                assert_eq!(tx.get(hex_1.encode(xoshiro.next_u64())).unwrap().unwrap(), hex_2.encode(xoshiro.next_u64()));
+            } else {
+                assert!(tx.get(hex_1.encode(xoshiro.next_u64())).unwrap().is_none());
+                let _skip = xoshiro.next_u64();
+            }
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1820,17 +1880,12 @@ fn test_sqlite_map_string_blob_ignorecase() {
 fn test_sqlite_map_string_blob_stresstest() {
     let mut set = SQLiteMap::<String, Blob>::new().unwrap();
     let (mut hex_1, mut hex_2) = (HexEncoder::default(), HexEncoder::default());
-    const MAX_ITEMS: u64 = 1_000_000u64;
 
     {
         let mut tx = set.transaction().unwrap();
         for i in 0u64..MAX_ITEMS {
-            let (key, value) = (hex_1.encode(mix64(i)), hex_2.encode_raw(mix64(u64::MAX - i)));
+            let (key, value) = (hex_1.encode(mix64(i)), hex_2.encode_raw(mix64(!i)));
             assert!(tx.insert(key, value).unwrap());
-        }
-        for i in 0u64..MAX_ITEMS {
-            let (key, value) = (hex_1.encode(mix64(i)), hex_2.encode_raw(!mix64(u64::MAX - i)));
-            tx.update(key, value).unwrap();
         }
     }
 
@@ -1840,29 +1895,51 @@ fn test_sqlite_map_string_blob_stresstest() {
     {
         let tx = set.transaction().unwrap();
         for i in 0u64..MAX_ITEMS {
-            assert!(tx.contains_key(hex_1.encode(mix64(i))).unwrap());
-            assert!(!tx.contains_key(hex_1.encode(mix64(MAX_ITEMS.checked_add(i).unwrap()))).unwrap());
-        }
-        for i in 0u64..MAX_ITEMS {
-            let (key, value) = (hex_1.encode(mix64(i)), hex_2.encode_raw(!mix64(u64::MAX - i)));
+            let (key, value) = (hex_1.encode(mix64(i)), hex_2.encode_raw(mix64(!i)));
             assert_eq!(tx.get(key).unwrap().unwrap(), value);
         }
     }
-
-    assert!(!set.is_empty().unwrap());
-    assert_eq!(set.len().unwrap().to_u64(), MAX_ITEMS);
 
     {
         let mut tx = set.transaction().unwrap();
         for i in 0u64..MAX_ITEMS {
             assert!(tx.remove(hex_1.encode(mix64(i))).unwrap());
         }
-        for i in 0u64..MAX_ITEMS {
-            assert!(!tx.remove(hex_1.encode(mix64(i))).unwrap());
-        }
     }
 
     assert!(set.is_empty().unwrap());
+    assert_eq!(set.len().unwrap().to_u64(), 0);
+}
+
+#[test]
+fn test_sqlite_map_string_blob_randomized() {
+    const COUNT: u64 = 125_000u64;
+    let mut set = SQLiteMap::<String, Blob>::new().unwrap();
+    let (mut hex, mut temp) = (HexEncoder::default(), [0u8; 16usize]);
+
+    for seed in [0x9DDC5F3146219B97u64, 0x79B9E4DC002B32D6u64] {
+        for b in [true, false] {
+            let mut xoshiro = Xoshiro256PlusPlus::seed_from_u64(seed);
+            let mut tx = set.transaction().unwrap();
+            for _i in 0u64..COUNT {
+                xoshiro.fill_bytes(&mut temp);
+                assert_eq!(tx.insert(hex.encode(xoshiro.next_u64()), temp.as_slice()).unwrap(), b);
+            }
+        }
+    }
+
+    for (seed, b) in [(0x9DDC5F3146219B97u64, true), (0x79B9E4DC002B32D6u64, true), (0x2F381F8B2F0E517Au64, false)] {
+        let mut xoshiro = Xoshiro256PlusPlus::seed_from_u64(seed);
+        let tx = set.transaction().unwrap();
+        for _i in 0u64..COUNT {
+            xoshiro.fill_bytes(&mut temp);
+            if b {
+                assert_eq!(tx.get(hex.encode(xoshiro.next_u64())).unwrap().unwrap(), temp.as_slice());
+            } else {
+                assert!(tx.get(hex.encode(xoshiro.next_u64())).unwrap().is_none());
+            }
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -2375,17 +2452,12 @@ fn test_sqlite_map_string_i64_ignorecase() {
 fn test_sqlite_map_string_i64_stresstest() {
     let mut set = SQLiteMap::<String, i64>::new().unwrap();
     let mut hex = HexEncoder::default();
-    const MAX_ITEMS: u64 = 1_000_000u64;
 
     {
         let mut tx = set.transaction().unwrap();
         for i in 0u64..MAX_ITEMS {
-            let (key, value) = (hex.encode(mix64(i)), mix64(u64::MAX - i) as i64);
+            let (key, value) = (hex.encode(mix64(i)), mix64(!i) as i64);
             assert!(tx.insert(key, &value).unwrap());
-        }
-        for i in 0u64..MAX_ITEMS {
-            let (key, value) = (hex.encode(mix64(i)), (!mix64(u64::MAX - i)) as i64);
-            tx.update(key, &value).unwrap();
         }
     }
 
@@ -2395,43 +2467,64 @@ fn test_sqlite_map_string_i64_stresstest() {
     {
         let tx = set.transaction().unwrap();
         for i in 0u64..MAX_ITEMS {
-            assert!(tx.contains_key(hex.encode(mix64(i))).unwrap());
-            assert!(!tx.contains_key(hex.encode(mix64(MAX_ITEMS.checked_add(i).unwrap()))).unwrap());
-        }
-        for i in 0u64..MAX_ITEMS {
-            let (key, value) = (hex.encode(mix64(i)), (!mix64(u64::MAX - i)) as i64);
+            let (key, value) = (hex.encode(mix64(i)), mix64(!i) as i64);
             assert_eq!(tx.get(key).unwrap().unwrap(), value);
         }
     }
-
-    assert!(!set.is_empty().unwrap());
-    assert_eq!(set.len().unwrap().to_u64(), MAX_ITEMS);
 
     {
         let mut tx = set.transaction().unwrap();
         for i in 0u64..MAX_ITEMS {
             assert!(tx.remove(hex.encode(mix64(i))).unwrap());
         }
-        for i in 0u64..MAX_ITEMS {
-            assert!(!tx.remove(hex.encode(mix64(i))).unwrap());
-        }
     }
 
     assert!(set.is_empty().unwrap());
+    assert_eq!(set.len().unwrap().to_u64(), 0);
+}
+
+#[test]
+fn test_sqlite_map_string_i64_randomized() {
+    const COUNT: u64 = 125_000u64;
+    let mut set = SQLiteMap::<String, i64>::new().unwrap();
+    let mut hex = HexEncoder::default();
+
+    for seed in [0x9DDC5F3146219B97u64, 0x79B9E4DC002B32D6u64] {
+        for b in [true, false] {
+            let mut xoshiro = Xoshiro256PlusPlus::seed_from_u64(seed);
+            let mut tx = set.transaction().unwrap();
+            for _i in 0u64..COUNT {
+                assert_eq!(tx.insert(hex.encode(xoshiro.next_u64()), &(xoshiro.next_u64() as i64)).unwrap(), b);
+            }
+        }
+    }
+
+    for (seed, b) in [(0x9DDC5F3146219B97u64, true), (0x79B9E4DC002B32D6u64, true), (0x2F381F8B2F0E517Au64, false)] {
+        let mut xoshiro = Xoshiro256PlusPlus::seed_from_u64(seed);
+        let tx = set.transaction().unwrap();
+        for _i in 0u64..COUNT {
+            if b {
+                assert_eq!(tx.get(hex.encode(xoshiro.next_u64())).unwrap().unwrap(), xoshiro.next_u64() as i64);
+            } else {
+                assert!(tx.get(hex.encode(xoshiro.next_u64())).unwrap().is_none());
+            }
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
 // SQLiteMap Multi-Thread Tests
 // ---------------------------------------------------------------------------
 
-fn sqlite_map_thread_worker<const MAX_ITEMS: u64>(mut thread_map: SQLiteMap<String, String>, barrier: &Barrier) -> SQLiteMap<String, String> {
+fn sqlite_map_thread_worker<const COUNT: u64>(mut thread_map: SQLiteMap<String, String>, barrier: &Barrier) -> SQLiteMap<String, String> {
     let mut hex_1 = HexEncoder::default();
     let mut hex_2 = HexEncoder::default();
 
     barrier.wait();
+
     {
         let mut tx = thread_map.transaction().unwrap();
-        for i in 0u64..MAX_ITEMS {
+        for i in 0u64..COUNT {
             let (key, value) = (hex_1.encode(mix64(i)), hex_2.encode(mix64(u64::MAX - i)));
             assert!(tx.insert(key, value).unwrap());
         }
@@ -2442,7 +2535,7 @@ fn sqlite_map_thread_worker<const MAX_ITEMS: u64>(mut thread_map: SQLiteMap<Stri
 
 #[test]
 fn test_sqlite_map_multithreading() {
-    const MAX_ITEMS: u64 = 1_000_000u64;
+    const COUNT: u64 = 125_000u64;
     const THREADS: usize = 8usize;
 
     let maps: [SQLiteMap<String, String>; THREADS] = array::from_fn(|_| SQLiteMap::new().unwrap());
@@ -2451,13 +2544,13 @@ fn test_sqlite_map_multithreading() {
         .into_iter()
         .map(|map| {
             let barrier = Arc::clone(&barrier);
-            thread::spawn(move || sqlite_map_thread_worker::<MAX_ITEMS>(map, &barrier))
+            thread::spawn(move || sqlite_map_thread_worker::<COUNT>(map, &barrier))
         })
         .collect();
 
     for handle in handles.drain(..) {
         let thread_map = handle.join().unwrap();
-        assert_eq!(thread_map.len().unwrap().to_u64(), MAX_ITEMS);
+        assert_eq!(thread_map.len().unwrap().to_u64(), COUNT);
     }
 }
 

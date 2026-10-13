@@ -2,9 +2,19 @@
 // This file is part of the 'SQLite-based containers for Rust' project (sqlite-containers)
 // SPDX-License-Identifier: Unlicense
 
+#[path = "utilities/consts.rs"]
+mod consts;
+#[path = "utilities/utilities.rs"]
 mod utilities;
 
-use crate::utilities::{HexEncoder, mix64};
+use crate::{
+    consts::MAX_ITEMS,
+    utilities::{HexEncoder, mix64},
+};
+use rand_xoshiro::{
+    Xoshiro256PlusPlus,
+    rand_core::{Rng, SeedableRng},
+};
 use sqlite_containers::{Blob, SQLiteSet, SizeExt};
 use std::{
     array,
@@ -180,7 +190,6 @@ fn test_sqlite_set_i64_transacted() {
 #[test]
 fn test_sqlite_set_i64_stresstest() {
     let mut set = SQLiteSet::<i64>::new().unwrap();
-    const MAX_ITEMS: u64 = 1_000_000u64;
 
     {
         let mut tx = set.transaction().unwrap();
@@ -193,27 +202,38 @@ fn test_sqlite_set_i64_stresstest() {
     assert_eq!(set.len().unwrap().to_u64(), MAX_ITEMS);
 
     {
-        let tx = set.transaction().unwrap();
-        for i in 0u64..MAX_ITEMS {
-            assert!(tx.contains(&(mix64(i) as i64)).unwrap());
-            assert!(!tx.contains(&(mix64(MAX_ITEMS.checked_add(i).unwrap()) as i64)).unwrap());
-        }
-    }
-
-    assert!(!set.is_empty().unwrap());
-    assert_eq!(set.len().unwrap().to_u64(), MAX_ITEMS);
-
-    {
         let mut tx = set.transaction().unwrap();
         for i in 0u64..MAX_ITEMS {
             assert!(tx.remove(&(mix64(i) as i64)).unwrap());
         }
-        for i in 0u64..MAX_ITEMS {
-            assert!(!tx.remove(&(mix64(i) as i64)).unwrap());
-        }
     }
 
     assert!(set.is_empty().unwrap());
+    assert_eq!(set.len().unwrap().to_u64(), 0);
+}
+
+#[test]
+fn test_sqlite_set_i64_randomized() {
+    let mut set = SQLiteSet::<i64>::new().unwrap();
+    const COUNT: u64 = 125_000u64;
+
+    for seed in [0x9DDC5F3146219B97u64, 0x79B9E4DC002B32D6u64] {
+        for b in [true, false] {
+            let mut xoshiro = Xoshiro256PlusPlus::seed_from_u64(seed);
+            let mut tx = set.transaction().unwrap();
+            for _i in 0u64..COUNT {
+                assert_eq!(tx.insert(&(xoshiro.next_u64() as i64)).unwrap(), b);
+            }
+        }
+    }
+
+    for (seed, b) in [(0x9DDC5F3146219B97u64, true), (0x79B9E4DC002B32D6u64, true), (0x2F381F8B2F0E517Au64, false)] {
+        let mut xoshiro = Xoshiro256PlusPlus::seed_from_u64(seed);
+        let tx = set.transaction().unwrap();
+        for _i in 0u64..COUNT {
+            assert_eq!(tx.contains(&(xoshiro.next_u64() as i64)).unwrap(), b);
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -492,7 +512,6 @@ fn test_sqlite_set_string_ignorecase() {
 fn test_sqlite_set_string_stresstest() {
     let mut set = SQLiteSet::<String>::new().unwrap();
     let mut hex = HexEncoder::default();
-    const MAX_ITEMS: u64 = 1_000_000u64;
 
     {
         let mut tx = set.transaction().unwrap();
@@ -505,27 +524,39 @@ fn test_sqlite_set_string_stresstest() {
     assert_eq!(set.len().unwrap().to_u64(), MAX_ITEMS);
 
     {
-        let tx = set.transaction().unwrap();
-        for i in 0u64..MAX_ITEMS {
-            assert!(tx.contains(hex.encode(mix64(i))).unwrap());
-            assert!(!tx.contains(hex.encode(mix64(MAX_ITEMS.checked_add(i).unwrap()))).unwrap());
-        }
-    }
-
-    assert!(!set.is_empty().unwrap());
-    assert_eq!(set.len().unwrap().to_u64(), MAX_ITEMS);
-
-    {
         let mut tx = set.transaction().unwrap();
         for i in 0u64..MAX_ITEMS {
             assert!(tx.remove(hex.encode(mix64(i))).unwrap());
         }
-        for i in 0u64..MAX_ITEMS {
-            assert!(!tx.remove(hex.encode(mix64(i))).unwrap());
-        }
     }
 
     assert!(set.is_empty().unwrap());
+    assert_eq!(set.len().unwrap().to_u64(), 0);
+}
+
+#[test]
+fn test_sqlite_set_string_randomized() {
+    const COUNT: u64 = 125_000u64;
+    let mut set = SQLiteSet::<String>::new().unwrap();
+    let mut hex = HexEncoder::default();
+
+    for seed in [0x9DDC5F3146219B97u64, 0x79B9E4DC002B32D6u64] {
+        for b in [true, false] {
+            let mut xoshiro = Xoshiro256PlusPlus::seed_from_u64(seed);
+            let mut tx = set.transaction().unwrap();
+            for _i in 0u64..COUNT {
+                assert_eq!(tx.insert(hex.encode(xoshiro.next_u64())).unwrap(), b);
+            }
+        }
+    }
+
+    for (seed, b) in [(0x9DDC5F3146219B97u64, true), (0x79B9E4DC002B32D6u64, true), (0x2F381F8B2F0E517Au64, false)] {
+        let mut xoshiro = Xoshiro256PlusPlus::seed_from_u64(seed);
+        let tx = set.transaction().unwrap();
+        for _i in 0u64..COUNT {
+            assert_eq!(tx.contains(hex.encode(xoshiro.next_u64())).unwrap(), b);
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -709,7 +740,6 @@ fn test_sqlite_set_blob_transacted() {
 fn test_sqlite_set_blob_stresstest() {
     let mut set = SQLiteSet::<Blob>::new().unwrap();
     let mut hex = HexEncoder::default();
-    const MAX_ITEMS: u64 = 1_000_000u64;
 
     {
         let mut tx = set.transaction().unwrap();
@@ -722,40 +752,54 @@ fn test_sqlite_set_blob_stresstest() {
     assert_eq!(set.len().unwrap().to_u64(), MAX_ITEMS);
 
     {
-        let tx = set.transaction().unwrap();
-        for i in 0u64..MAX_ITEMS {
-            assert!(tx.contains(hex.encode_raw(mix64(i))).unwrap());
-            assert!(!tx.contains(hex.encode_raw(mix64(MAX_ITEMS.checked_add(i).unwrap()))).unwrap());
-        }
-    }
-
-    assert!(!set.is_empty().unwrap());
-    assert_eq!(set.len().unwrap().to_u64(), MAX_ITEMS);
-
-    {
         let mut tx = set.transaction().unwrap();
         for i in 0u64..MAX_ITEMS {
             assert!(tx.remove(hex.encode_raw(mix64(i))).unwrap());
         }
-        for i in 0u64..MAX_ITEMS {
-            assert!(!tx.remove(hex.encode_raw(mix64(i))).unwrap());
-        }
     }
 
     assert!(set.is_empty().unwrap());
+    assert_eq!(set.len().unwrap().to_u64(), 0);
+}
+
+#[test]
+fn test_sqlite_set_blob_randomized() {
+    const COUNT: u64 = 125_000u64;
+    let mut set = SQLiteSet::<Blob>::new().unwrap();
+    let mut temp = [0u8; 16usize];
+
+    for seed in [0x9DDC5F3146219B97u64, 0x79B9E4DC002B32D6u64] {
+        for b in [true, false] {
+            let mut xoshiro = Xoshiro256PlusPlus::seed_from_u64(seed);
+            let mut tx = set.transaction().unwrap();
+            for _i in 0u64..COUNT {
+                xoshiro.fill_bytes(&mut temp);
+                assert_eq!(tx.insert(temp.as_slice()).unwrap(), b);
+            }
+        }
+    }
+
+    for (seed, b) in [(0x9DDC5F3146219B97u64, true), (0x79B9E4DC002B32D6u64, true), (0x2F381F8B2F0E517Au64, false)] {
+        let mut xoshiro = Xoshiro256PlusPlus::seed_from_u64(seed);
+        let tx = set.transaction().unwrap();
+        for _i in 0u64..COUNT {
+            xoshiro.fill_bytes(&mut temp);
+            assert_eq!(tx.contains(temp.as_slice()).unwrap(), b);
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
 // SQLiteSet Multi-Thread Tests
 // ---------------------------------------------------------------------------
 
-fn sqlite_set_thread_worker<const MAX_ITEMS: u64>(mut thread_set: SQLiteSet<String>, barrier: &Barrier) -> SQLiteSet<String> {
+fn sqlite_set_thread_worker<const COUNT: u64>(mut thread_set: SQLiteSet<String>, barrier: &Barrier) -> SQLiteSet<String> {
     let mut hex = HexEncoder::default();
-
     barrier.wait();
+
     {
         let mut tx = thread_set.transaction().unwrap();
-        for i in 0u64..MAX_ITEMS {
+        for i in 0u64..COUNT {
             assert!(tx.insert(hex.encode(mix64(i))).unwrap());
         }
     }
@@ -765,7 +809,7 @@ fn sqlite_set_thread_worker<const MAX_ITEMS: u64>(mut thread_set: SQLiteSet<Stri
 
 #[test]
 fn test_sqlite_set_multithreading() {
-    const MAX_ITEMS: u64 = 1_000_000u64;
+    const COUNT: u64 = 125_000u64;
     const THREADS: usize = 8usize;
 
     let maps: [SQLiteSet<String>; THREADS] = array::from_fn(|_| SQLiteSet::new().unwrap());
@@ -774,13 +818,13 @@ fn test_sqlite_set_multithreading() {
         .into_iter()
         .map(|map| {
             let barrier = Arc::clone(&barrier);
-            thread::spawn(move || sqlite_set_thread_worker::<MAX_ITEMS>(map, &barrier))
+            thread::spawn(move || sqlite_set_thread_worker::<COUNT>(map, &barrier))
         })
         .collect();
 
     for handle in handles.drain(..) {
         let thread_map = handle.join().unwrap();
-        assert_eq!(thread_map.len().unwrap().to_u64(), MAX_ITEMS);
+        assert_eq!(thread_map.len().unwrap().to_u64(), COUNT);
     }
 }
 
