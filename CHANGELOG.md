@@ -4,11 +4,21 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/).
 
-## [1.0.0] - 2026-10-09
+## [2.1.0] - 2026-10-15
 
 ### Added
 
-- This is the first public release of this project.
+- Added functions `SQLiteSet::with_file()` and `SQLiteSet::with_file_nocase()`.
+- Added functions `SQLiteMap::with_file()` and `SQLiteMap::with_file_nocase()`.
+- Added functions `version()` and `sqlite_version()`.
+
+### Changed
+
+- Function `SQLiteSet::filter()` has been replaced with `SQLiteSet::glob()`.
+- Function `SQLiteMap::filter_keys()` has been replaced with `SQLiteSet::glob_keys()`.
+- Function `SQLiteMap::filter_entries()` has been replaced with `SQLiteSet::glob_entries()`.
+- Functions `SQLiteSet::is_empty()` and `SQLiteMap::is_empty()` have been improved.
+- Integration tests have been significantly improved.
 
 ## [2.0.0] - 2026-10-13
 
@@ -27,3 +37,9 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/).
 ### Removed
 
 - `SQLiteSet` and `SQLiteMap` **no** longer implement the `Default` trait.
+
+## [1.0.0] - 2026-10-09
+
+### Added
+
+- This is the first public release of this project.
