@@ -48,6 +48,7 @@ static SQL_CREATE_NOC: LazyLock<BTreeMap<SqlType, String>> = LazyLock::new(|| {
 });
 
 const SQL_COUNT_KEYS: &str = concatcp!("SELECT COUNT(*) FROM ", TABLE_NAME, ";");
+const SQL_EXIST_KEYS: &str = concatcp!("SELECT EXISTS (SELECT 1 FROM ", TABLE_NAME, ");");
 const SQL_INSERT_KEY: &str = concatcp!("INSERT INTO ", TABLE_NAME, " (key, value) VALUES (?1, ?2);");
 const SQL_UPSERT_KEY: &str = concatcp!("INSERT INTO ", TABLE_NAME, " (key, value) VALUES (?1, ?2) ON CONFLICT(key) DO UPDATE SET value = excluded.value;");
 const SQL_EXISTS_KEY: &str = concatcp!("SELECT 1 FROM ", TABLE_NAME, " WHERE key = ? LIMIT 1;");
@@ -433,7 +434,9 @@ where
     /// Returns `true` if the map contains **no** keys; otherwise returns `false`.
     #[inline]
     pub fn is_empty(&self) -> Result<bool, Error> {
-        Ok(self.len()? == 0)
+        let mut statement = self.connection.prepare_cached(SQL_EXIST_KEYS)?;
+        let any_elements: bool = statement.query_one([], |row| row.get(0))?;
+        Ok(!any_elements)
     }
 
     /// Removes *all* keys from the map.
@@ -679,7 +682,9 @@ where
     /// This function is equivalent to [`SQLiteMap::is_empty()`].
     #[inline]
     pub fn is_empty(&self) -> Result<bool, Error> {
-        Ok(self.len()? == 0)
+        let mut statement = self.transaction.prepare_cached(SQL_EXIST_KEYS)?;
+        let any_elements: bool = statement.query_one([], |row| row.get(0))?;
+        Ok(!any_elements)
     }
 
     /// This function is equivalent to [`SQLiteMap::clear()`].

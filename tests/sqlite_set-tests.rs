@@ -827,8 +827,8 @@ fn test_sqlite_set_filebased() {
     assert!(fs::exists(&file_path_1).unwrap());
     assert!(fs::exists(&file_path_2).unwrap());
 
-    {
-        let set = SQLiteSet::<String>::with_file(&file_path_1).unwrap();
+    for no_case in [false, true] {
+        let set = if !no_case { SQLiteSet::<String>::with_file(&file_path_1).unwrap() } else { SQLiteSet::<String>::with_file_nocase(&file_path_1).unwrap() };
         assert!(set.contains("foo").unwrap());
         assert!(!set.contains("FOO").unwrap());
         assert!(!set.contains("bar").unwrap());
@@ -837,8 +837,8 @@ fn test_sqlite_set_filebased() {
         assert!(!set.contains("qux").unwrap());
     }
 
-    {
-        let set = SQLiteSet::<String>::with_file_nocase(&file_path_2).unwrap();
+    for no_case in [false, true] {
+        let set = if !no_case { SQLiteSet::<String>::with_file(&file_path_2).unwrap() } else { SQLiteSet::<String>::with_file_nocase(&file_path_2).unwrap() };
         assert!(!set.contains("foo").unwrap());
         assert!(set.contains("bar").unwrap());
         assert!(set.contains("BAR").unwrap());

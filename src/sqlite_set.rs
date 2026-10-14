@@ -40,6 +40,7 @@ cfg_if! {
 }
 
 const SQL_COUNT_KEYS: &str = concatcp!("SELECT COUNT(*) FROM ", TABLE_NAME, ";");
+const SQL_EXIST_KEYS: &str = concatcp!("SELECT EXISTS (SELECT 1 FROM ", TABLE_NAME, ");");
 const SQL_INSERT_KEY: &str = concatcp!("INSERT INTO ", TABLE_NAME, " (key) VALUES (?1);");
 const SQL_EXISTS_KEY: &str = concatcp!("SELECT 1 FROM ", TABLE_NAME, " WHERE key = ?1 LIMIT 1;");
 const SQL_EXISTS_NOC: &str = concatcp!("SELECT 1 FROM ", TABLE_NAME, " WHERE key COLLATE NOCASE = ? LIMIT 1;");
@@ -301,7 +302,9 @@ where
     /// Returns `true` if the set contains **no** keys; otherwise returns `false`.
     #[inline]
     pub fn is_empty(&self) -> Result<bool, Error> {
-        Ok(self.len()? == 0)
+        let mut statement = self.connection.prepare_cached(SQL_EXIST_KEYS)?;
+        let any_elements: bool = statement.query_one([], |row| row.get(0))?;
+        Ok(!any_elements)
     }
 
     /// Removes *all* keys from the set.
@@ -460,7 +463,9 @@ where
     /// This function is equivalent to [`SQLiteSet::is_empty()`].
     #[inline]
     pub fn is_empty(&self) -> Result<bool, Error> {
-        Ok(self.len()? == 0)
+        let mut statement = self.transaction.prepare_cached(SQL_EXIST_KEYS)?;
+        let any_elements: bool = statement.query_one([], |row| row.get(0))?;
+        Ok(!any_elements)
     }
 
     /// This function is equivalent to [`SQLiteSet::clear()`].

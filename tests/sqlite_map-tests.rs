@@ -2519,10 +2519,10 @@ fn test_sqlite_map_string_i64_randomized() {
 // ---------------------------------------------------------------------------
 
 #[test]
-fn test_sqlite_set_filebased() {
+fn test_sqlite_map_filebased() {
     let temp_dir = tempdir_in(env!["CARGO_TARGET_TMPDIR"]).unwrap();
-    let file_path_1 = temp_dir.path().join("sqlite_set-1.db");
-    let file_path_2 = temp_dir.path().join("sqlite_set-2.db");
+    let file_path_1 = temp_dir.path().join("sqlite_map-1.db");
+    let file_path_2 = temp_dir.path().join("sqlite_map-2.db");
 
     assert!(!fs::exists(&file_path_1).unwrap());
     assert!(!fs::exists(&file_path_2).unwrap());
@@ -2550,8 +2550,12 @@ fn test_sqlite_set_filebased() {
     assert!(fs::exists(&file_path_1).unwrap());
     assert!(fs::exists(&file_path_2).unwrap());
 
-    {
-        let set = SQLiteMap::<String, String>::with_file(&file_path_1).unwrap();
+    for no_case in [false, true] {
+        let set = if !no_case {
+            SQLiteMap::<String, String>::with_file(&file_path_1).unwrap()
+        } else {
+            SQLiteMap::<String, String>::with_file_nocase(&file_path_1).unwrap()
+        };
         assert!(set.get("foo").unwrap().is_some_and(|value| value.eq("12345678")));
         assert!(set.get("FOO").unwrap().is_none());
         assert!(set.get("bar").unwrap().is_none());
@@ -2560,8 +2564,12 @@ fn test_sqlite_set_filebased() {
         assert!(set.get("qux").unwrap().is_none());
     }
 
-    {
-        let set = SQLiteMap::<String, String>::with_file_nocase(&file_path_2).unwrap();
+    for no_case in [false, true] {
+        let set = if !no_case {
+            SQLiteMap::<String, String>::with_file(&file_path_2).unwrap()
+        } else {
+            SQLiteMap::<String, String>::with_file_nocase(&file_path_2).unwrap()
+        };
         assert!(set.get("foo").unwrap().is_none());
         assert!(set.get("bar").unwrap().is_some_and(|value| value.eq("hgfedcba")));
         assert!(set.get("BAR").unwrap().is_some_and(|value| value.eq("hgfedcba")));
