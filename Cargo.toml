@@ -18,6 +18,7 @@ with_rowid = []
 cfg-if = "1.0.5"
 const_format = "0.2.36"
 rusqlite = "0.40.2"
+semver = "1.0.28"
 
 [dev-dependencies]
 criterion = { version = "0.8.2", default-features = false }

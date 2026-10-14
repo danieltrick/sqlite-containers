@@ -2,9 +2,13 @@
 // This file is part of the SQLite-based containers for Rust project (sqlite-containers)
 // SPDX-License-Identifier: Unlicense
 
-use crate::rusqlite::{
-    Error as RusqliteError, ErrorCode, OpenFlags,
-    types::{FromSql, ToSql, Type as RusqliteType},
+use crate::{
+    rusqlite::{
+        Error as RusqliteError, ErrorCode, OpenFlags,
+        types::{FromSql, ToSql, Type as RusqliteType},
+        version_number,
+    },
+    semver::Version,
 };
 use cfg_if::cfg_if;
 use std::{fmt::Display, sync::LazyLock};
@@ -223,6 +227,21 @@ pub fn check_constraint_violation(error: RusqliteError) -> Result<bool, Error> {
     }
 }
 
+/// Returns the package version of the `sqlite-containers` package.
+pub fn version() -> &'static Version {
+    static PKG_VERSION: LazyLock<Version> = LazyLock::new(|| Version::parse(env!["CARGO_PKG_VERSION"]).expect("Failed to parse version!"));
+    &PKG_VERSION
+}
+
+/// Returns the version of the underlying native SQLite library.
+pub fn sqlite_version() -> &'static Version {
+    static SQLITE_VERSION: LazyLock<Version> = LazyLock::new(|| {
+        let version = version_number() as u64;
+        Version::new(version / 1000000u64, (version % 1000000u64) / 1000u64, version % 1000u64)
+    });
+    &SQLITE_VERSION
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -303,5 +322,19 @@ mod test {
 
         let error_3 = check_constraint_violation(RusqliteError::SqliteFailure(FfiError::new(SQLITE_NOMEM), None));
         assert!(matches!(error_3, Err(Error(..))));
+    }
+
+    #[test]
+    fn test_get_version() {
+        let (pkg_version, sqlite_version) = (version(), sqlite_version());
+        eprintln!("pkg_version: {pkg_version:?}");
+        eprintln!("sqlite_version: {sqlite_version:?}");
+
+        assert_eq!(pkg_version.to_string(), env!["CARGO_PKG_VERSION"]);
+        assert!(
+            (sqlite_version.major > 3)
+                || ((sqlite_version.major == 3) && (sqlite_version.minor > 34))
+                || ((sqlite_version.major == 3) && (sqlite_version.minor == 34) && (sqlite_version.minor >= 1))
+        );
     }
 }

@@ -70,8 +70,9 @@ mod common;
 mod sqlite_map;
 mod sqlite_set;
 
-pub use crate::common::{Blob, CharType, Error, Size, SizeExt, Type};
+pub use crate::common::{Blob, CharType, Error, Size, SizeExt, Type, sqlite_version, version};
 pub use crate::sqlite_map::{SQLiteMap, SQLiteMapTransaction};
 pub use crate::sqlite_set::{SQLiteSet, SQLiteSetTransaction};
 
 pub use rusqlite;
+pub use semver;
