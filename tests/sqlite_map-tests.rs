@@ -19,9 +19,11 @@ use sqlite_containers::{Blob, SQLiteMap, SizeExt};
 use std::{
     array,
     collections::{HashMap, HashSet},
+    fs,
     sync::{Arc, Barrier, mpsc::sync_channel},
     thread,
 };
+use tempfile::tempdir_in;
 
 // ---------------------------------------------------------------------------
 // SQLiteMap<i64, String> Tests
@@ -2509,6 +2511,63 @@ fn test_sqlite_map_string_i64_randomized() {
                 assert!(tx.get(hex.encode(xoshiro.next_u64())).unwrap().is_none());
             }
         }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// SQLiteSet File-based Test
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_sqlite_set_filebased() {
+    let temp_dir = tempdir_in(env!["CARGO_TARGET_TMPDIR"]).unwrap();
+    let file_path_1 = temp_dir.path().join("sqlite_set-1.db");
+    let file_path_2 = temp_dir.path().join("sqlite_set-2.db");
+
+    assert!(!fs::exists(&file_path_1).unwrap());
+    assert!(!fs::exists(&file_path_2).unwrap());
+
+    {
+        let mut set = SQLiteMap::<String, String>::with_file(&file_path_1).unwrap();
+        {
+            let mut tx = set.transaction().unwrap();
+            assert!(tx.insert("foo", "12345678").unwrap());
+            assert!(tx.insert("baz", "87654321").unwrap());
+            assert!(tx.insert("BAZ", "abcdefgh").unwrap());
+        }
+    }
+
+    {
+        let mut set = SQLiteMap::<String, String>::with_file_nocase(&file_path_2).unwrap();
+        {
+            let mut tx = set.transaction().unwrap();
+            assert!(tx.insert("bar", "hgfedcba").unwrap());
+            assert!(tx.insert("qux", "stuvwxyz").unwrap());
+            assert!(!tx.insert("QUX", "zyxwvuts").unwrap());
+        }
+    }
+
+    assert!(fs::exists(&file_path_1).unwrap());
+    assert!(fs::exists(&file_path_2).unwrap());
+
+    {
+        let set = SQLiteMap::<String, String>::with_file(&file_path_1).unwrap();
+        assert!(set.get("foo").unwrap().is_some_and(|value| value.eq("12345678")));
+        assert!(set.get("FOO").unwrap().is_none());
+        assert!(set.get("bar").unwrap().is_none());
+        assert!(set.get("baz").unwrap().is_some_and(|value| value.eq("87654321")));
+        assert!(set.get("BAZ").unwrap().is_some_and(|value| value.eq("abcdefgh")));
+        assert!(set.get("qux").unwrap().is_none());
+    }
+
+    {
+        let set = SQLiteMap::<String, String>::with_file_nocase(&file_path_2).unwrap();
+        assert!(set.get("foo").unwrap().is_none());
+        assert!(set.get("bar").unwrap().is_some_and(|value| value.eq("hgfedcba")));
+        assert!(set.get("BAR").unwrap().is_some_and(|value| value.eq("hgfedcba")));
+        assert!(set.get("baz").unwrap().is_none());
+        assert!(set.get("qux").unwrap().is_some_and(|value| value.eq("stuvwxyz")));
+        assert!(set.get("QUX").unwrap().is_some_and(|value| value.eq("stuvwxyz")));
     }
 }
 

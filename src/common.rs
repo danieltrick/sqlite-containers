@@ -3,14 +3,21 @@
 // SPDX-License-Identifier: Unlicense
 
 use crate::rusqlite::{
-    Error as RusqliteError, ErrorCode,
+    Error as RusqliteError, ErrorCode, OpenFlags,
     types::{FromSql, ToSql, Type as RusqliteType},
 };
 use cfg_if::cfg_if;
-use std::fmt::Display;
+use std::{fmt::Display, sync::LazyLock};
 
 /// Binary Large Object (BLOB), represented as a [`Vec<u8>`](std::vec::Vec).
 pub type Blob = Vec<u8>;
+
+/// Flags to be used for [`Connection::open_with_flags()`](rusqlite::Connection::open_with_flags).
+pub static OPEN_FLAGS: LazyLock<OpenFlags> = LazyLock::new(|| {
+    let mut flags = OpenFlags::default();
+    flags.remove(OpenFlags::SQLITE_OPEN_URI);
+    flags
+});
 
 // ---------------------------------------------------------------------------
 // Sealed Type

@@ -4,24 +4,27 @@
 
 use crate::{
     CharType, Error, Size, SizeExt, Type,
-    common::{SQL_TYPE_TEXT, SQL_TYPES, SqlType, check_constraint_violation},
+    common::{OPEN_FLAGS, SQL_TYPE_TEXT, SQL_TYPES, SqlType, check_constraint_violation},
     rusqlite::{Connection, ToSql, Transaction},
 };
 use cfg_if::cfg_if;
-use std::{borrow::Borrow, collections::BTreeMap, marker::PhantomData, sync::LazyLock};
+use const_format::concatcp;
+use std::{borrow::Borrow, collections::BTreeMap, marker::PhantomData, path::Path, sync::LazyLock};
 
 // ---------------------------------------------------------------------------
 // Statements
 // ---------------------------------------------------------------------------
+
+const TABLE_NAME: &str = "rusqlite_set_v2";
 
 static SQL_CREATE_TBL: LazyLock<BTreeMap<SqlType, String>> = LazyLock::new(|| {
     let mut map = BTreeMap::<SqlType, String>::new();
     for sql_type in SQL_TYPES {
         cfg_if! {
             if #[cfg(feature = "with_rowid")] {
-                map.insert(sql_type, format!("CREATE TABLE data (key {sql_type} PRIMARY KEY NOT NULL);"));
+                map.insert(sql_type, format!("CREATE TABLE IF NOT EXISTS {TABLE_NAME} (key {sql_type} PRIMARY KEY NOT NULL);"));
             } else {
-                map.insert(sql_type, format!("CREATE TABLE data (key {sql_type} PRIMARY KEY NOT NULL) WITHOUT ROWID;"));
+                map.insert(sql_type, format!("CREATE TABLE IF NOT EXISTS {TABLE_NAME} (key {sql_type} PRIMARY KEY NOT NULL) WITHOUT ROWID;"));
             }
         }
     }
@@ -30,22 +33,22 @@ static SQL_CREATE_TBL: LazyLock<BTreeMap<SqlType, String>> = LazyLock::new(|| {
 
 cfg_if! {
     if #[cfg(feature = "with_rowid")] {
-        const SQL_CREATE_NOC: &str = "CREATE TABLE data (key TEXT PRIMARY KEY NOT NULL COLLATE NOCASE);";
+        const SQL_CREATE_NOC: &str = concatcp!("CREATE TABLE IF NOT EXISTS ", TABLE_NAME, " (key TEXT PRIMARY KEY NOT NULL COLLATE NOCASE);");
     } else {
-        const SQL_CREATE_NOC: &str = "CREATE TABLE data (key TEXT PRIMARY KEY NOT NULL COLLATE NOCASE) WITHOUT ROWID;";
+        const SQL_CREATE_NOC: &str = concatcp!("CREATE TABLE IF NOT EXISTS ", TABLE_NAME, " (key TEXT PRIMARY KEY NOT NULL COLLATE NOCASE) WITHOUT ROWID;");
     }
 }
 
-const SQL_COUNT_KEYS: &str = "SELECT COUNT(*) FROM data;";
-const SQL_INSERT_KEY: &str = "INSERT INTO data (key) VALUES (?1);";
-const SQL_EXISTS_KEY: &str = "SELECT 1 FROM data WHERE key = ?1 LIMIT 1;";
-const SQL_EXISTS_NOC: &str = "SELECT 1 FROM data WHERE key COLLATE NOCASE = ? LIMIT 1;";
-const SQL_QUERY_KEYS: &str = "SELECT key FROM data;";
-const SQL_GLOBA_KEYS: &str = "SELECT key FROM data WHERE key GLOB ?1;";
-const SQL_GLOBN_KEYS: &str = "SELECT key FROM data WHERE key NOT GLOB ?1;";
-const SQL_DELETE_KEY: &str = "DELETE FROM data WHERE key = ?1;";
-const SQL_DELETE_NOC: &str = "DELETE FROM data WHERE key COLLATE NOCASE = ?1;";
-const SQL_DELETE_ALL: &str = "DELETE FROM data;";
+const SQL_COUNT_KEYS: &str = concatcp!("SELECT COUNT(*) FROM ", TABLE_NAME, ";");
+const SQL_INSERT_KEY: &str = concatcp!("INSERT INTO ", TABLE_NAME, " (key) VALUES (?1);");
+const SQL_EXISTS_KEY: &str = concatcp!("SELECT 1 FROM ", TABLE_NAME, " WHERE key = ?1 LIMIT 1;");
+const SQL_EXISTS_NOC: &str = concatcp!("SELECT 1 FROM ", TABLE_NAME, " WHERE key COLLATE NOCASE = ? LIMIT 1;");
+const SQL_QUERY_KEYS: &str = concatcp!("SELECT key FROM ", TABLE_NAME, ";");
+const SQL_GLOBA_KEYS: &str = concatcp!("SELECT key FROM ", TABLE_NAME, " WHERE key GLOB ?1;");
+const SQL_GLOBN_KEYS: &str = concatcp!("SELECT key FROM ", TABLE_NAME, " WHERE key NOT GLOB ?1;");
+const SQL_DELETE_KEY: &str = concatcp!("DELETE FROM ", TABLE_NAME, " WHERE key = ?1;");
+const SQL_DELETE_NOC: &str = concatcp!("DELETE FROM ", TABLE_NAME, " WHERE key COLLATE NOCASE = ?1;");
+const SQL_DELETE_ALL: &str = concatcp!("DELETE FROM ", TABLE_NAME, ";");
 
 // ---------------------------------------------------------------------------
 // SQLiteSet
@@ -76,35 +79,69 @@ impl<T> SQLiteSet<T>
 where
     T: Type,
 {
-    /// Creates a new, empty SQLite-backed hash set with case-sensitive keys.
+    /// Creates a new, empty hash set with case-sensitive keys, backed by an *in-memory* SQLite database.
     #[inline]
     pub fn new() -> Result<Self, Error> {
-        Ok(Self { _type: PhantomData, connection: Self::initialize_connection::<false>()? })
+        Ok(Self { _type: PhantomData, connection: Self::initialize_connection::<false, &Path>(None)? })
     }
 
-    /// Creates a new, empty SQLite-backed hash set with case-insensitive keys.
+    /// Creates a new, empty hash set with case-insensitive keys, backed by an *in-memory* SQLite database.
     ///
-    /// Note that only ASCII characters are case folded. SQLite does **not** attempt to do full UTF case folding!
+    /// Only ASCII characters are case folded. SQLite does **not** attempt to do full UTF case folding!
     #[inline]
     pub fn with_nocase() -> Result<Self, Error>
     where
         T: CharType,
     {
-        Ok(Self { _type: PhantomData, connection: Self::initialize_connection::<true>()? })
+        Ok(Self { _type: PhantomData, connection: Self::initialize_connection::<true, &Path>(None)? })
     }
 
+    /// Creates a new or re-opens an existing hash set, backed by a *file-based* SQLite database.
+    ///
+    /// A new set is created with case-sensitive keys. However, if the database file already exists, its case-sensitivity is preserved.
     #[inline]
-    fn initialize_connection<const NO_CASE: bool>() -> Result<Connection, Error> {
-        let connection = Connection::open_in_memory()?;
+    pub fn with_file<P>(path: P) -> Result<Self, Error>
+    where
+        P: AsRef<Path>,
+    {
+        Ok(Self { _type: PhantomData, connection: Self::initialize_connection::<false, _>(Some(path))? })
+    }
+
+    /// Creates a new or re-opens an existing hash set, backed by a *file-based* SQLite database.
+    ///
+    /// A new set is created with case-insensitive keys. However, if the database file already exists, its case-sensitivity is preserved.
+    ///
+    /// Only ASCII characters are case folded. SQLite does **not** attempt to do full UTF case folding!
+    #[inline]
+    pub fn with_file_nocase<P>(path: P) -> Result<Self, Error>
+    where
+        T: CharType,
+        P: AsRef<Path>,
+    {
+        Ok(Self { _type: PhantomData, connection: Self::initialize_connection::<true, _>(Some(path))? })
+    }
+
+    #[inline(always)]
+    fn initialize_connection<const NO_CASE: bool, P>(path_option: Option<P>) -> Result<Connection, Error>
+    where
+        P: AsRef<Path>,
+    {
+        let connection = if let Some(path) = path_option.as_ref() { Connection::open_with_flags(path, *OPEN_FLAGS)? } else { Connection::open_in_memory()? };
+
         connection.pragma_update(None, "journal_mode", "OFF")?;
         connection.pragma_update(None, "synchronous", "OFF")?;
-        connection.pragma_update(None, "temp_store", "MEMORY")?;
+
+        if path_option.is_some() {
+            connection.pragma_update(None, "temp_store", "MEMORY")?;
+        }
+
         if !NO_CASE {
             connection.execute(SQL_CREATE_TBL.get(&T::SQL_TYPE).unwrap(), [])?;
         } else {
             assert_eq!(T::SQL_TYPE, SQL_TYPE_TEXT);
             connection.execute(SQL_CREATE_NOC, [])?;
         }
+
         Ok(connection)
     }
 

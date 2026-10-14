@@ -19,9 +19,11 @@ use sqlite_containers::{Blob, SQLiteSet, SizeExt};
 use std::{
     array,
     collections::HashSet,
+    fs,
     sync::{Arc, Barrier, mpsc::sync_channel},
     thread,
 };
+use tempfile::tempdir_in;
 
 // ---------------------------------------------------------------------------
 // SQLiteSet<i64> Tests
@@ -786,6 +788,63 @@ fn test_sqlite_set_blob_randomized() {
             xoshiro.fill_bytes(&mut temp);
             assert_eq!(tx.contains(temp.as_slice()).unwrap(), b);
         }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// SQLiteSet File-based Test
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_sqlite_set_filebased() {
+    let temp_dir = tempdir_in(env!["CARGO_TARGET_TMPDIR"]).unwrap();
+    let file_path_1 = temp_dir.path().join("sqlite_set-1.db");
+    let file_path_2 = temp_dir.path().join("sqlite_set-2.db");
+
+    assert!(!fs::exists(&file_path_1).unwrap());
+    assert!(!fs::exists(&file_path_2).unwrap());
+
+    {
+        let mut set = SQLiteSet::<String>::with_file(&file_path_1).unwrap();
+        {
+            let mut tx = set.transaction().unwrap();
+            assert!(tx.insert("foo").unwrap());
+            assert!(tx.insert("baz").unwrap());
+            assert!(tx.insert("BAZ").unwrap());
+        }
+    }
+
+    {
+        let mut set = SQLiteSet::<String>::with_file_nocase(&file_path_2).unwrap();
+        {
+            let mut tx = set.transaction().unwrap();
+            assert!(tx.insert("bar").unwrap());
+            assert!(tx.insert("qux").unwrap());
+            assert!(!tx.insert("QUX").unwrap());
+        }
+    }
+
+    assert!(fs::exists(&file_path_1).unwrap());
+    assert!(fs::exists(&file_path_2).unwrap());
+
+    {
+        let set = SQLiteSet::<String>::with_file(&file_path_1).unwrap();
+        assert!(set.contains("foo").unwrap());
+        assert!(!set.contains("FOO").unwrap());
+        assert!(!set.contains("bar").unwrap());
+        assert!(set.contains("baz").unwrap());
+        assert!(set.contains("BAZ").unwrap());
+        assert!(!set.contains("qux").unwrap());
+    }
+
+    {
+        let set = SQLiteSet::<String>::with_file_nocase(&file_path_2).unwrap();
+        assert!(!set.contains("foo").unwrap());
+        assert!(set.contains("bar").unwrap());
+        assert!(set.contains("BAR").unwrap());
+        assert!(!set.contains("baz").unwrap());
+        assert!(set.contains("qux").unwrap());
+        assert!(set.contains("QUX").unwrap());
     }
 }
 
