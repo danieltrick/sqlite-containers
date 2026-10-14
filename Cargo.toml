@@ -24,7 +24,9 @@ semver = "1.0.28"
 criterion = { version = "0.8.2", default-features = false }
 hex = "0.4.3"
 rand_xoshiro = "0.8.1"
+random_word = { version = "0.5.2", features = ["de","en"] }
 tempfile = "3.27.0"
+xxhash-rust = { version = "0.8.12", features = ["xxh64"] }
 
 [[bench]]
 name = "sqlite_containers-bench"

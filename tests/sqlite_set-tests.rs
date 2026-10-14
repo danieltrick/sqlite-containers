@@ -24,6 +24,7 @@ use std::{
     thread,
 };
 use tempfile::tempdir_in;
+use xxhash_rust::xxh64::xxh64;
 
 // ---------------------------------------------------------------------------
 // SQLiteSet<i64> Tests
@@ -234,6 +235,37 @@ fn test_sqlite_set_i64_randomized() {
         let tx = set.transaction().unwrap();
         for _i in 0u64..COUNT {
             assert_eq!(tx.contains(&(xoshiro.next_u64() as i64)).unwrap(), b);
+        }
+    }
+}
+
+#[test]
+fn test_sqlite_set_i64_string_words() {
+    for lang in [random_word::Lang::De, random_word::Lang::En] {
+        let word_list = random_word::all(lang);
+        for seed_1 in 0u64..3u64 {
+            let mut map = SQLiteSet::<i64>::new().unwrap();
+            {
+                let mut tx = map.transaction().unwrap();
+                for &word in word_list {
+                    let hash = xxh64(word.as_bytes(), seed_1) as i64;
+                    assert!(tx.insert(&hash).unwrap());
+                }
+            }
+            for seed_2 in 0u64..3u64 {
+                let tx = map.transaction().unwrap();
+                if seed_1 == seed_2 {
+                    for &word in word_list {
+                        let hash = xxh64(word.as_bytes(), seed_2) as i64;
+                        assert!(tx.contains(&hash).unwrap());
+                    }
+                } else {
+                    for &word in word_list {
+                        let hash = xxh64(word.as_bytes(), seed_2) as i64;
+                        assert!(!tx.contains(&hash).unwrap());
+                    }
+                }
+            }
         }
     }
 }

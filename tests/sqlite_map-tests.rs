@@ -24,6 +24,7 @@ use std::{
     thread,
 };
 use tempfile::tempdir_in;
+use xxhash_rust::xxh64::xxh64;
 
 // ---------------------------------------------------------------------------
 // SQLiteMap<i64, String> Tests
@@ -392,6 +393,39 @@ fn test_sqlite_map_i64_string_randomized() {
             } else {
                 assert!(tx.get(&(xoshiro.next_u64() as i64)).unwrap().is_none());
                 let _skip = xoshiro.next_u64();
+            }
+        }
+    }
+}
+
+#[test]
+fn test_sqlite_map_i64_string_words() {
+    for lang in [random_word::Lang::De, random_word::Lang::En] {
+        let word_list = random_word::all(lang);
+        for seed_1 in 0u64..3u64 {
+            let mut map = SQLiteMap::<i64, String>::new().unwrap();
+            {
+                let mut tx = map.transaction().unwrap();
+                for &word in word_list {
+                    let hash = xxh64(word.as_bytes(), seed_1) as i64;
+                    assert!(tx.insert(&hash, word).unwrap());
+                }
+            }
+            for seed_2 in 0u64..3u64 {
+                let tx = map.transaction().unwrap();
+                if seed_1 == seed_2 {
+                    for &word in word_list {
+                        let hash = xxh64(word.as_bytes(), seed_2) as i64;
+                        assert!(tx.contains_key(&hash).unwrap());
+                        assert_eq!(tx.get(&hash).unwrap().unwrap(), word);
+                    }
+                } else {
+                    for &word in word_list {
+                        let hash = xxh64(word.as_bytes(), seed_2) as i64;
+                        assert!(!tx.contains_key(&hash).unwrap());
+                        assert!(tx.get(&hash).unwrap().is_none());
+                    }
+                }
             }
         }
     }
