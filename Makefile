@@ -3,7 +3,7 @@
 
 EXAMPLES := $(addprefix run-,$(basename $(notdir $(wildcard examples/*.rs))))
 
-.PHONY: all bench build check clean clippy codecov doc fmt publish run test upgrade $(EXAMPLES)
+.PHONY: all audit bench build check clean clippy codecov doc fmt publish run test upgrade $(EXAMPLES)
 
 all: clean clippy build test doc
 
@@ -42,6 +42,9 @@ doc:
 upgrade:
 	cargo upgrade -i
 	cargo update
+
+audit:
+	cargo audit -Dwarnings
 
 codecov:
 	cargo llvm-cov --locked --lcov --output-path target/codecov-output.info
