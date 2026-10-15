@@ -327,14 +327,18 @@ mod test {
     #[test]
     fn test_get_version() {
         let (pkg_version, sqlite_version) = (version(), sqlite_version());
+
         eprintln!("pkg_version: {pkg_version:?}");
         eprintln!("sqlite_version: {sqlite_version:?}");
 
         assert_eq!(pkg_version.to_string(), env!["CARGO_PKG_VERSION"]);
-        assert!(
-            (sqlite_version.major > 3)
-                || ((sqlite_version.major == 3) && (sqlite_version.minor > 34))
-                || ((sqlite_version.major == 3) && (sqlite_version.minor == 34) && (sqlite_version.minor >= 1))
-        );
+        assert!(version_to_u64(sqlite_version) > 0x3_000022_000000u64);
+    }
+
+    fn version_to_u64(v: &Version) -> u64 {
+        assert!(v.major <= 0x00FFFF);
+        assert!(v.minor <= 0xFFFFFF);
+        assert!(v.patch <= 0xFFFFFF);
+        (v.major << 48) | (v.minor << 24) | v.patch
     }
 }

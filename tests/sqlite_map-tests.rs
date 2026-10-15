@@ -24,7 +24,6 @@ use std::{
     thread,
 };
 use tempfile::tempdir_in;
-use xxhash_rust::xxh64::xxh64;
 
 // ---------------------------------------------------------------------------
 // SQLiteMap<i64, String> Tests
@@ -398,11 +397,13 @@ fn test_sqlite_map_i64_string_randomized() {
     }
 }
 
+#[cfg(not(debug_assertions))]
 #[test]
 fn test_sqlite_map_i64_string_words() {
+    use xxhash_rust::xxh64::xxh64;
     for lang in [random_word::Lang::De, random_word::Lang::En] {
         let word_list = random_word::all(lang);
-        for seed_1 in 0u64..3u64 {
+        for seed_1 in 0u64..5u64 {
             let mut map = SQLiteMap::<i64, String>::new().unwrap();
             {
                 let mut tx = map.transaction().unwrap();
@@ -411,7 +412,7 @@ fn test_sqlite_map_i64_string_words() {
                     assert!(tx.insert(&hash, word).unwrap());
                 }
             }
-            for seed_2 in 0u64..3u64 {
+            for seed_2 in 0u64..5u64 {
                 let tx = map.transaction().unwrap();
                 if seed_1 == seed_2 {
                     for &word in word_list {
