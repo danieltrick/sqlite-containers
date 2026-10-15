@@ -2667,13 +2667,36 @@ fn test_sqlite_map_updatehook() {
     let mut hex_1 = HexEncoder::default();
     let mut hex_2 = HexEncoder::default();
 
+    #[cfg(feature = "hooks")]
+    let mut action_counter = [0u64, 0u64];
+
     let p_sieve = primal::Sieve::new(125_000usize);
     let upper_bound = p_sieve.upper_bound() as u64;
 
     for i in 0u64..=upper_bound {
         if !p_sieve.is_prime(i.try_into().unwrap()) {
             let (key, value) = (hex_1.encode(mix64(i)), hex_2.encode(mix64(!i)));
-            assert!(map.insert(key, value).unwrap());
+            cfg_if! {
+                if #[cfg(feature = "hooks")] {
+                    assert_eq!(map.update(key, value).unwrap(), Action::Insert);
+                    action_counter[0] = action_counter[0].checked_add(1u64).unwrap();
+                } else {
+                    assert_eq!(map.update(key, value).unwrap(), Action::Unknown);
+                }
+            }
+        } else {
+            cfg_if! {
+                if #[cfg(feature = "hooks")] {
+                    action_counter[1] = action_counter[1].checked_add(1u64).unwrap();
+                }
+            }
+        }
+    }
+
+    cfg_if! {
+        if #[cfg(feature = "hooks")] {
+            assert_ne!(action_counter[0], 0u64);
+            assert_ne!(action_counter[1], 0u64);
         }
     }
 
@@ -2683,12 +2706,21 @@ fn test_sqlite_map_updatehook() {
             if #[cfg(feature = "hooks")] {
                 if !p_sieve.is_prime(i.try_into().unwrap()) {
                     assert_eq!(map.update(key, value).unwrap(), Action::Update);
+                    action_counter[0] = action_counter[0].checked_sub(1u64).unwrap();
                 } else {
                     assert_eq!(map.update(key, value).unwrap(), Action::Insert);
+                    action_counter[1] = action_counter[1].checked_sub(1u64).unwrap();
                 }
             } else {
                 assert_eq!(map.update(key, value).unwrap(), Action::Unknown);
             }
+        }
+    }
+
+    cfg_if! {
+        if #[cfg(feature = "hooks")] {
+            assert_eq!(action_counter[0], 0u64);
+            assert_eq!(action_counter[1], 0u64);
         }
     }
 }
@@ -2699,6 +2731,9 @@ fn test_sqlite_map_updatehook_transacted() {
     let mut hex_1 = HexEncoder::default();
     let mut hex_2 = HexEncoder::default();
 
+    #[cfg(feature = "hooks")]
+    let mut action_counter = [0u64, 0u64];
+
     let p_sieve = primal::Sieve::new(125_000usize);
     let upper_bound = p_sieve.upper_bound() as u64;
 
@@ -2707,8 +2742,28 @@ fn test_sqlite_map_updatehook_transacted() {
         for i in 0u64..=upper_bound {
             if !p_sieve.is_prime(i.try_into().unwrap()) {
                 let (key, value) = (hex_1.encode(mix64(i)), hex_2.encode(mix64(!i)));
-                assert!(tx.insert(key, value).unwrap());
+                cfg_if! {
+                    if #[cfg(feature = "hooks")] {
+                        assert_eq!(tx.update(key, value).unwrap(), Action::Insert);
+                        action_counter[0] = action_counter[0].checked_add(1u64).unwrap();
+                    } else {
+                        assert_eq!(tx.update(key, value).unwrap(), Action::Unknown);
+                    }
+                }
+            } else {
+                cfg_if! {
+                    if #[cfg(feature = "hooks")] {
+                        action_counter[1] = action_counter[1].checked_add(1u64).unwrap();
+                    }
+                }
             }
+        }
+    }
+
+    cfg_if! {
+        if #[cfg(feature = "hooks")] {
+            assert_ne!(action_counter[0], 0u64);
+            assert_ne!(action_counter[1], 0u64);
         }
     }
 
@@ -2720,13 +2775,22 @@ fn test_sqlite_map_updatehook_transacted() {
                 if #[cfg(feature = "hooks")] {
                     if !p_sieve.is_prime(i.try_into().unwrap()) {
                         assert_eq!(tx.update(key, value).unwrap(), Action::Update);
+                        action_counter[0] = action_counter[0].checked_sub(1u64).unwrap();
                     } else {
                         assert_eq!(tx.update(key, value).unwrap(), Action::Insert);
+                        action_counter[1] = action_counter[1].checked_sub(1u64).unwrap();
                     }
                 } else {
                     assert_eq!(tx.update(key, value).unwrap(), Action::Unknown);
                 }
             }
+        }
+    }
+
+    cfg_if! {
+        if #[cfg(feature = "hooks")] {
+            assert_eq!(action_counter[0], 0u64);
+            assert_eq!(action_counter[1], 0u64);
         }
     }
 }

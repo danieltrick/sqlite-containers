@@ -18,11 +18,15 @@ use std::{borrow::Borrow, collections::BTreeMap, marker::PhantomData, path::Path
 /// Represents the outcome of an [`update()`](SQLiteMap::update) operation.
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Action {
-    /// It is *unknown* whether a new key-value pair was inserted or an existing key was updated.
+    /// It is *unknown* whether a new key-value pair was inserted or the value associated with an existing key was updated.
+    ///
+    /// This is the expected return value, if the [`hooks`](crate#optional-features) feature is **not** enabled.
     Unknown,
     /// Indicates that a new key-value pair was inserted.
     Insert,
     /// Indicates that the value associated with an existing key was updated.
+    ///
+    /// Please note that [`Action::Update`](Self::Update) does **not** guarantee that the value associated with the key has actually changed &ndash; it is possible to “update” the associated value of a key to a new value that is equal to the previously associated value.
     Update,
 }
 
@@ -30,14 +34,14 @@ cfg_if! {
     if #[cfg(feature = "hooks")] {
         use crate::rusqlite::hooks::Action as RusqliteAction;
         use std::sync::{Arc, atomic::{Ordering::Relaxed, AtomicI32}};
-        type LastActionType = Arc<AtomicI32>;
+        struct LastActionHolder(Arc<AtomicI32>);
 
-        impl From<&LastActionType> for Action {
+        impl Action {
             #[inline]
-            fn from(value: &LastActionType) -> Self {
+            fn from(value: &LastActionHolder) -> Self {
                 const ACTION_SQLITE_INSERT: i32 = RusqliteAction::SQLITE_INSERT as i32;
                 const ACTION_SQLITE_UPDATE: i32 = RusqliteAction::SQLITE_UPDATE as i32;
-                match value.load(Relaxed) {
+                match value.0.load(Relaxed) {
                     ACTION_SQLITE_INSERT => Action::Insert,
                     ACTION_SQLITE_UPDATE => Action::Update,
                     _ => Action::Unknown,
@@ -45,22 +49,28 @@ cfg_if! {
             }
         }
 
-        #[inline(always)]
-        fn initialize_last_action() -> LastActionType {
-            Arc::new(AtomicI32::new(RusqliteAction::UNKNOWN as i32))
+        impl Default for LastActionHolder {
+            #[inline]
+            fn default() -> Self {
+                Self(Arc::new(AtomicI32::new(RusqliteAction::UNKNOWN as i32)))
+            }
         }
     } else {
-        type LastActionType = ();
+        struct LastActionHolder;
 
-        impl From<&LastActionType> for Action {
-            #[inline]
-            fn from(_: &LastActionType) -> Self {
+        impl Action {
+            #[inline(always)]
+            const fn from(_: &LastActionHolder) -> Self {
                 Action::Unknown
             }
         }
 
-        #[inline(always)]
-        fn initialize_last_action() {}
+        impl LastActionHolder {
+            #[inline(always)]
+            pub const fn default() -> Self {
+                Self
+            }
+        }
     }
 }
 
@@ -142,7 +152,7 @@ where
 {
     _types: (PhantomData<K>, PhantomData<V>),
     connection: Connection,
-    last_action: LastActionType,
+    last_action: LastActionHolder,
 }
 
 impl<K, V> SQLiteMap<K, V>
@@ -154,7 +164,7 @@ where
     #[allow(clippy::let_unit_value)]
     #[inline]
     pub fn new() -> Result<Self, Error> {
-        let last_action = initialize_last_action();
+        let last_action = LastActionHolder::default();
         Ok(Self { _types: (PhantomData, PhantomData), connection: Self::initialize_connection::<false, &Path>(None, &last_action)?, last_action })
     }
 
@@ -167,7 +177,7 @@ where
     where
         K: CharType,
     {
-        let last_action = initialize_last_action();
+        let last_action = LastActionHolder::default();
         Ok(Self { _types: (PhantomData, PhantomData), connection: Self::initialize_connection::<true, &Path>(None, &last_action)?, last_action })
     }
 
@@ -180,7 +190,7 @@ where
     where
         P: AsRef<Path>,
     {
-        let last_action = initialize_last_action();
+        let last_action = LastActionHolder::default();
         Ok(Self { _types: (PhantomData, PhantomData), connection: Self::initialize_connection::<false, _>(Some(path), &last_action)?, last_action })
     }
 
@@ -189,19 +199,18 @@ where
     /// A new map is created with case-insensitive keys. However, if the database file already exists, its case-sensitivity is preserved.
     ///
     /// Only ASCII characters are case folded. SQLite does **not** attempt to do full UTF case folding!
-    #[allow(clippy::let_unit_value)]
     #[inline]
     pub fn with_file_nocase<P>(path: P) -> Result<Self, Error>
     where
         K: CharType,
         P: AsRef<Path>,
     {
-        let last_action = initialize_last_action();
+        let last_action = LastActionHolder::default();
         Ok(Self { _types: (PhantomData, PhantomData), connection: Self::initialize_connection::<true, _>(Some(path), &last_action)?, last_action })
     }
 
-    #[inline(always)]
-    fn initialize_connection<const NO_CASE: bool, P>(path_option: Option<P>, last_action: &LastActionType) -> Result<Connection, Error>
+    #[inline]
+    fn initialize_connection<const NO_CASE: bool, P>(path_option: Option<P>, last_action: &LastActionHolder) -> Result<Connection, Error>
     where
         P: AsRef<Path>,
     {
@@ -227,9 +236,9 @@ where
 
     cfg_if! {
         if #[cfg(feature = "hooks")] {
-            #[inline(always)]
-            fn install_hook(connection: &Connection, last_action: &LastActionType) {
-                let last_action = Arc::clone(last_action);
+            #[inline]
+            fn install_hook(connection: &Connection, last_action: &LastActionHolder) {
+                let last_action = Arc::clone(&last_action.0);
                 connection
                     .update_hook(Some(move |action, _db: &str, _table: &str, _rowid: i64| {
                         last_action.store(action as i32, Relaxed);
@@ -238,7 +247,7 @@ where
             }
         } else {
             #[inline(always)]
-            fn install_hook(_: &Connection, _: &LastActionType) {}
+            fn install_hook(_: &Connection, _: &LastActionHolder) {}
         }
     }
 
@@ -291,7 +300,7 @@ where
     {
         let mut statement = self.connection.prepare_cached(SQL_UPSERT_KEY)?;
         statement.execute(params![key, value])?;
-        Ok((&self.last_action).into())
+        Ok(Action::from(&self.last_action))
     }
 
     /// Checks whether the map contains the specified key.
@@ -546,7 +555,7 @@ where
 {
     _types: (PhantomData<K>, PhantomData<V>),
     transaction: Transaction<'a>,
-    last_action: &'a LastActionType,
+    last_action: &'a LastActionHolder,
 }
 
 impl<'a, K, V> SQLiteMapTransaction<'a, K, V>
@@ -555,7 +564,7 @@ where
     V: Type,
 {
     #[inline]
-    fn from(connection: &'a mut Connection, last_action: &'a LastActionType) -> Result<Self, Error> {
+    fn from(connection: &'a mut Connection, last_action: &'a LastActionHolder) -> Result<Self, Error> {
         let mut transaction = connection.transaction()?;
         transaction.set_drop_behavior(rusqlite::DropBehavior::Commit);
         Ok(Self { _types: (PhantomData, PhantomData), transaction, last_action })
@@ -592,7 +601,7 @@ where
     {
         let mut statement = self.transaction.prepare_cached(SQL_UPSERT_KEY)?;
         statement.execute(params![key, value])?;
-        Ok(self.last_action.into())
+        Ok(Action::from(self.last_action))
     }
 
     /// This function is equivalent to [`SQLiteMap::contains_key()`].
