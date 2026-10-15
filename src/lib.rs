@@ -34,8 +34,6 @@
 //! println!("{} element(s) successfully inserted.", sqlite_set.len().unwrap());
 //! ```
 //!
-//! &#128073; For more details, please refer to the [`SQLiteMap`] and [`SQLiteSet`] documentation!
-//!
 //! Usage instructions
 //! ------------------
 //!
@@ -46,15 +44,15 @@
 //! sqlite-containers = "2.1.0"
 //! ```
 //!
-//! #### Features
+//! ### Optional Features
 //!
-//! * The **`bundled`** feature, which is *enabled* by default, automatically compiles and links in an up to date version of SQLite for you. This avoids many common build issues, and avoids depending on the version of SQLite on the users system.
+//! `sqlite-containers` provides several optional features:
 //!
-//!   Use `default-features = false`, if you want to disable this default behavior and instead use the "system" SQLite library.
-//!
-//! * The **`with_rowid`** feature, which is *disabled* by default, prevents `sqlite-containers` from using the [`WITHOUT ROWID`](https://www.sqlite.org/withoutrowid.html) optimization, allowing SQLite to implicitly create the special "rowid" column. By default, i.e., if the `with_rowid` feature is **not** explicitly enabled, `WITHOUT ROWID` *will* be used and thus the creation of a "rowid" column is suppressed.
-//!
-//!   Please note that, in most cases, using the `WITHOUT ROWID` optimization (the default) should improve the performance. This means that enabling the `with_rowid` feature is **not** normally recommended! Nonetheless, there are situations where `with_rowid` can actually be beneficial, so it is definitely worth trying for fine-tuning the performance of your application.
+//! Feature          | Default  | Description
+//! ---------------- | -------- | -----------
+//! **`bundled`**    | &#x2705; | If this feature is enabled (the default), `sqlite-containers` automatically compiles and links in an up to date version of the SQLite library for you. This avoids many common build issues, and avoids depending on the version of SQLite on the users system. Use `default-features = false`, if you want to disable this default behavior and instead use the "system" SQLite library.
+//! **`with_rowid`** | &#x274C; | This feature prevents `sqlite-containers` from using the [`WITHOUT ROWID`](https://www.sqlite.org/withoutrowid.html) optimization, allowing SQLite to implicitly create the special "rowid" column. By default, i.e., if the `with_rowid` feature is **not** explicitly enabled, `WITHOUT ROWID` *will* be used and thus the creation of a "rowid" column is suppressed. Please note that, in most cases, using the `WITHOUT ROWID` optimization (the default) should improve the performance. This means that enabling the `with_rowid` feature is **not** normally recommended! Nonetheless, in some situations `with_rowid` can be beneficial.
+//! **`hooks`**      | &#x274C; | If this feature is enabled, the [`update()`](SQLiteMap::update) function returns additional information that would otherwise be unavailable. Please note that this feature implies the `with_rowid` feature. Enabling this feature may slightly degrade performance, so it should *only* be used if it is actually needed.
 //!
 //! Acknowledgement
 //! ---------------
@@ -71,7 +69,7 @@ mod sqlite_map;
 mod sqlite_set;
 
 pub use crate::common::{Blob, CharType, Error, Size, SizeExt, Type, sqlite_version, version};
-pub use crate::sqlite_map::{SQLiteMap, SQLiteMapTransaction};
+pub use crate::sqlite_map::{Action, SQLiteMap, SQLiteMapTransaction};
 pub use crate::sqlite_set::{SQLiteSet, SQLiteSetTransaction};
 
 pub use rusqlite;

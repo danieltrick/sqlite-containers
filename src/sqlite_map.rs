@@ -12,6 +12,59 @@ use const_format::concatcp;
 use std::{borrow::Borrow, collections::BTreeMap, marker::PhantomData, path::Path, sync::LazyLock};
 
 // ---------------------------------------------------------------------------
+// Action Type
+// ---------------------------------------------------------------------------
+
+/// Represents the outcome of an [`update()`](SQLiteMap::update) operation.
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Action {
+    /// It is *unknown* whether a new key-value pair was inserted or an existing key was updated.
+    Unknown,
+    /// Indicates that a new key-value pair was inserted.
+    Insert,
+    /// Indicates that the value associated with an existing key was updated.
+    Update,
+}
+
+cfg_if! {
+    if #[cfg(feature = "hooks")] {
+        use crate::rusqlite::hooks::Action as RusqliteAction;
+        use std::sync::{Arc, atomic::{Ordering::Relaxed, AtomicI32}};
+        type LastActionType = Arc<AtomicI32>;
+
+        impl From<&LastActionType> for Action {
+            #[inline]
+            fn from(value: &LastActionType) -> Self {
+                const ACTION_SQLITE_INSERT: i32 = RusqliteAction::SQLITE_INSERT as i32;
+                const ACTION_SQLITE_UPDATE: i32 = RusqliteAction::SQLITE_UPDATE as i32;
+                match value.load(Relaxed) {
+                    ACTION_SQLITE_INSERT => Action::Insert,
+                    ACTION_SQLITE_UPDATE => Action::Update,
+                    _ => Action::Unknown,
+                }
+            }
+        }
+
+        #[inline(always)]
+        fn initialize_last_action() -> LastActionType {
+            Arc::new(AtomicI32::new(RusqliteAction::UNKNOWN as i32))
+        }
+    } else {
+        type LastActionType = ();
+
+        impl From<&LastActionType> for Action {
+            #[inline]
+            fn from(_: &LastActionType) -> Self {
+                Action::Unknown
+            }
+        }
+
+        #[inline(always)]
+        fn initialize_last_action() {}
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Statements
 // ---------------------------------------------------------------------------
 
@@ -89,6 +142,7 @@ where
 {
     _types: (PhantomData<K>, PhantomData<V>),
     connection: Connection,
+    last_action: LastActionType,
 }
 
 impl<K, V> SQLiteMap<K, V>
@@ -97,31 +151,37 @@ where
     V: Type,
 {
     /// Creates a new, empty hash map with case-sensitive keys, backed by an *in-memory* SQLite database.
+    #[allow(clippy::let_unit_value)]
     #[inline]
     pub fn new() -> Result<Self, Error> {
-        Ok(Self { _types: (PhantomData, PhantomData), connection: Self::initialize_connection::<false, &Path>(None)? })
+        let last_action = initialize_last_action();
+        Ok(Self { _types: (PhantomData, PhantomData), connection: Self::initialize_connection::<false, &Path>(None, &last_action)?, last_action })
     }
 
     /// Creates a new, empty hash map with case-insensitive keys, backed by an *in-memory* SQLite database.
     ///
     /// Only ASCII characters are case folded. SQLite does **not** attempt to do full UTF case folding!
+    #[allow(clippy::let_unit_value)]
     #[inline]
     pub fn with_nocase() -> Result<Self, Error>
     where
         K: CharType,
     {
-        Ok(Self { _types: (PhantomData, PhantomData), connection: Self::initialize_connection::<true, &Path>(None)? })
+        let last_action = initialize_last_action();
+        Ok(Self { _types: (PhantomData, PhantomData), connection: Self::initialize_connection::<true, &Path>(None, &last_action)?, last_action })
     }
 
     /// Creates a new or re-opens an existing hash map, backed by a *file-based* SQLite database.
     ///
     /// A new map is created with case-sensitive keys. However, if the database file already exists, its case-sensitivity is preserved.
+    #[allow(clippy::let_unit_value)]
     #[inline]
     pub fn with_file<P>(path: P) -> Result<Self, Error>
     where
         P: AsRef<Path>,
     {
-        Ok(Self { _types: (PhantomData, PhantomData), connection: Self::initialize_connection::<false, _>(Some(path))? })
+        let last_action = initialize_last_action();
+        Ok(Self { _types: (PhantomData, PhantomData), connection: Self::initialize_connection::<false, _>(Some(path), &last_action)?, last_action })
     }
 
     /// Creates a new or re-opens an existing hash map, backed by a *file-based* SQLite database.
@@ -129,17 +189,19 @@ where
     /// A new map is created with case-insensitive keys. However, if the database file already exists, its case-sensitivity is preserved.
     ///
     /// Only ASCII characters are case folded. SQLite does **not** attempt to do full UTF case folding!
+    #[allow(clippy::let_unit_value)]
     #[inline]
     pub fn with_file_nocase<P>(path: P) -> Result<Self, Error>
     where
         K: CharType,
         P: AsRef<Path>,
     {
-        Ok(Self { _types: (PhantomData, PhantomData), connection: Self::initialize_connection::<true, _>(Some(path))? })
+        let last_action = initialize_last_action();
+        Ok(Self { _types: (PhantomData, PhantomData), connection: Self::initialize_connection::<true, _>(Some(path), &last_action)?, last_action })
     }
 
     #[inline(always)]
-    fn initialize_connection<const NO_CASE: bool, P>(path_option: Option<P>) -> Result<Connection, Error>
+    fn initialize_connection<const NO_CASE: bool, P>(path_option: Option<P>, last_action: &LastActionType) -> Result<Connection, Error>
     where
         P: AsRef<Path>,
     {
@@ -159,7 +221,25 @@ where
             connection.execute(SQL_CREATE_NOC.get(&V::SQL_TYPE).unwrap(), [])?;
         }
 
+        Self::install_hook(&connection, last_action);
         Ok(connection)
+    }
+
+    cfg_if! {
+        if #[cfg(feature = "hooks")] {
+            #[inline(always)]
+            fn install_hook(connection: &Connection, last_action: &LastActionType) {
+                let last_action = Arc::clone(last_action);
+                connection
+                    .update_hook(Some(move |action, _db: &str, _table: &str, _rowid: i64| {
+                        last_action.store(action as i32, Relaxed);
+                    }))
+                    .unwrap();
+            }
+        } else {
+            #[inline(always)]
+            fn install_hook(_: &Connection, _: &LastActionType) {}
+        }
     }
 
     /// Starts a new SQLite transaction for this map.
@@ -169,7 +249,7 @@ where
     /// Returns the new [`SQLiteMapTransaction`] instance.
     #[inline]
     pub fn transaction(&mut self) -> Result<SQLiteMapTransaction<'_, K, V>, Error> {
-        SQLiteMapTransaction::from(&mut self.connection)
+        SQLiteMapTransaction::from(&mut self.connection, &self.last_action)
     }
 
     /// Inserts the given key-value pair into the map, if the specified key does *not* exist yet.
@@ -198,9 +278,11 @@ where
     ///
     /// If the map does *not* already contain the specified key, then the key is inserted automatically.
     ///
-    /// **Note:** Due to limitations in SQLite, it is *not* possible to determine whether the key was inserted or updated.
+    /// Provided that the [`hooks`](crate#optional-features) feature is enabled, the function returns either [`Action::Insert`] or [`Action::Update`], depending on whether a new key-value pair was inserted or the associated value of an existing key was updated
+    ///
+    /// If `hooks` is **not** enabled, the function *always* returns [`Action::Unknown`], but, apart from that, it works identically &#128522;
     #[inline]
-    pub fn update<Q, R>(&mut self, key: &Q, value: &R) -> Result<(), Error>
+    pub fn update<Q, R>(&mut self, key: &Q, value: &R) -> Result<Action, Error>
     where
         K: Borrow<Q>,
         Q: ?Sized + ToSql,
@@ -209,7 +291,7 @@ where
     {
         let mut statement = self.connection.prepare_cached(SQL_UPSERT_KEY)?;
         statement.execute(params![key, value])?;
-        Ok(())
+        Ok((&self.last_action).into())
     }
 
     /// Checks whether the map contains the specified key.
@@ -464,6 +546,7 @@ where
 {
     _types: (PhantomData<K>, PhantomData<V>),
     transaction: Transaction<'a>,
+    last_action: &'a LastActionType,
 }
 
 impl<'a, K, V> SQLiteMapTransaction<'a, K, V>
@@ -472,10 +555,10 @@ where
     V: Type,
 {
     #[inline]
-    fn from(connection: &'a mut Connection) -> Result<Self, Error> {
+    fn from(connection: &'a mut Connection, last_action: &'a LastActionType) -> Result<Self, Error> {
         let mut transaction = connection.transaction()?;
         transaction.set_drop_behavior(rusqlite::DropBehavior::Commit);
-        Ok(Self { _types: (PhantomData, PhantomData), transaction })
+        Ok(Self { _types: (PhantomData, PhantomData), transaction, last_action })
     }
 
     /// Drops the `SQLiteMapTransaction`, thereby committing the SQLite transaction.
@@ -500,7 +583,7 @@ where
 
     /// This function is equivalent to [`SQLiteMap::update()`].
     #[inline]
-    pub fn update<Q, R>(&mut self, key: &Q, value: &R) -> Result<(), Error>
+    pub fn update<Q, R>(&mut self, key: &Q, value: &R) -> Result<Action, Error>
     where
         K: Borrow<Q>,
         Q: ?Sized + ToSql,
@@ -509,7 +592,7 @@ where
     {
         let mut statement = self.transaction.prepare_cached(SQL_UPSERT_KEY)?;
         statement.execute(params![key, value])?;
-        Ok(())
+        Ok(self.last_action.into())
     }
 
     /// This function is equivalent to [`SQLiteMap::contains_key()`].

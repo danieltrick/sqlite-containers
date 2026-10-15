@@ -11,11 +11,12 @@ use crate::{
     consts::MAX_ITEMS,
     utilities::{HexEncoder, mix64},
 };
+use cfg_if::cfg_if;
 use rand_xoshiro::{
     Xoshiro256PlusPlus,
     rand_core::{Rng, SeedableRng},
 };
-use sqlite_containers::{Blob, SQLiteMap, SizeExt};
+use sqlite_containers::{Action, Blob, SQLiteMap, SizeExt};
 use std::{
     array,
     collections::{HashMap, HashSet},
@@ -2657,6 +2658,80 @@ fn test_sqlite_map_multithreading() {
 }
 
 // ---------------------------------------------------------------------------
+// SQLiteMap Update-Hook Test
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_sqlite_map_updatehook() {
+    let mut map = SQLiteMap::<String, String>::new().unwrap();
+    let mut hex_1 = HexEncoder::default();
+    let mut hex_2 = HexEncoder::default();
+
+    let p_sieve = primal::Sieve::new(125_000usize);
+    let upper_bound = p_sieve.upper_bound() as u64;
+
+    for i in 0u64..=upper_bound {
+        if !p_sieve.is_prime(i.try_into().unwrap()) {
+            let (key, value) = (hex_1.encode(mix64(i)), hex_2.encode(mix64(!i)));
+            assert!(map.insert(key, value).unwrap());
+        }
+    }
+
+    for i in 0u64..=upper_bound {
+        let (key, value) = (hex_1.encode(mix64(i)), hex_2.encode(!mix64(!i)));
+        cfg_if! {
+            if #[cfg(feature = "hooks")] {
+                if !p_sieve.is_prime(i.try_into().unwrap()) {
+                    assert_eq!(map.update(key, value).unwrap(), Action::Update);
+                } else {
+                    assert_eq!(map.update(key, value).unwrap(), Action::Insert);
+                }
+            } else {
+                assert_eq!(map.update(key, value).unwrap(), Action::Unknown);
+            }
+        }
+    }
+}
+
+#[test]
+fn test_sqlite_map_updatehook_transacted() {
+    let mut map = SQLiteMap::<String, String>::new().unwrap();
+    let mut hex_1 = HexEncoder::default();
+    let mut hex_2 = HexEncoder::default();
+
+    let p_sieve = primal::Sieve::new(125_000usize);
+    let upper_bound = p_sieve.upper_bound() as u64;
+
+    {
+        let mut tx = map.transaction().unwrap();
+        for i in 0u64..=upper_bound {
+            if !p_sieve.is_prime(i.try_into().unwrap()) {
+                let (key, value) = (hex_1.encode(mix64(i)), hex_2.encode(mix64(!i)));
+                assert!(tx.insert(key, value).unwrap());
+            }
+        }
+    }
+
+    {
+        let mut tx = map.transaction().unwrap();
+        for i in 0u64..=upper_bound {
+            let (key, value) = (hex_1.encode(mix64(i)), hex_2.encode(!mix64(!i)));
+            cfg_if! {
+                if #[cfg(feature = "hooks")] {
+                    if !p_sieve.is_prime(i.try_into().unwrap()) {
+                        assert_eq!(tx.update(key, value).unwrap(), Action::Update);
+                    } else {
+                        assert_eq!(tx.update(key, value).unwrap(), Action::Insert);
+                    }
+                } else {
+                    assert_eq!(tx.update(key, value).unwrap(), Action::Unknown);
+                }
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // SQLiteMap Test to Destruction
 // ---------------------------------------------------------------------------
 
@@ -2670,7 +2745,7 @@ fn test_sqlite_map_to_destruction() {
         let mut hex_1 = HexEncoder::default();
         let mut hex_2 = HexEncoder::default();
         for i in 0u64..=u64::MAX {
-            let (key, value) = (hex_1.encode(mix64(i)), hex_2.encode(mix64(u64::MAX - i)));
+            let (key, value) = (hex_1.encode(mix64(i)), hex_2.encode(mix64(!i)));
             if channel_tx.send((key.to_owned(), value.to_owned())).is_err() {
                 break;
             }

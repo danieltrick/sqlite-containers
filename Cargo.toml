@@ -12,6 +12,7 @@ readme = "README-package.md"
 [features]
 default = ["bundled"]
 bundled = ["rusqlite/bundled"]
+hooks = ["with_rowid", "rusqlite/hooks"]
 with_rowid = []
 
 [dependencies]
@@ -23,6 +24,7 @@ semver = "1.0.28"
 [dev-dependencies]
 criterion = { version = "0.8.2", default-features = false }
 hex = "0.4.3"
+primal = "0.3.3"
 rand_xoshiro = "0.8.1"
 random_word = { version = "0.5.2", features = ["de","en"] }
 tempfile = "3.27.0"
