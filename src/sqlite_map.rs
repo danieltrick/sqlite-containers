@@ -787,3 +787,36 @@ where
         Ok(())
     }
 }
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[cfg(feature = "hooks")]
+    #[test]
+    fn test_actions() {
+        let action_holder = LastActionHolder::default();
+        for value in [RusqliteAction::SQLITE_INSERT, RusqliteAction::SQLITE_UPDATE, RusqliteAction::UNKNOWN] {
+            action_holder.0.store(value as i32, Relaxed);
+            match Action::from(&action_holder) {
+                Action::Insert => assert_eq!(value, RusqliteAction::SQLITE_INSERT),
+                Action::Update => assert_eq!(value, RusqliteAction::SQLITE_UPDATE),
+                Action::Unknown => {
+                    assert_ne!(value, RusqliteAction::SQLITE_INSERT);
+                    assert_ne!(value, RusqliteAction::SQLITE_UPDATE);
+                }
+            }
+        }
+    }
+
+    #[cfg(not(feature = "hooks"))]
+    #[test]
+    fn test_actions() {
+        let action_holder = LastActionHolder::default();
+        assert!(matches!(Action::from(&action_holder), Action::Unknown));
+    }
+}
