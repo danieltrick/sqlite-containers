@@ -53,6 +53,7 @@
 //! **`bundled`**    | &#x2705; | If this feature is enabled (the default), `sqlite-containers` automatically compiles and links in an up to date version of the SQLite library for you. This avoids many common build issues, and avoids depending on the version of SQLite on the users system. Use `default-features = false`, if you want to disable this default behavior and instead use the "system" SQLite library.
 //! **`with_rowid`** | &#x274C; | This feature prevents `sqlite-containers` from using the [`WITHOUT ROWID`](https://www.sqlite.org/withoutrowid.html) optimization, allowing SQLite to implicitly create the special "rowid" column. By default, i.e., if the `with_rowid` feature is **not** explicitly enabled, `WITHOUT ROWID` *will* be used and thus the creation of a "rowid" column is suppressed. Please note that, in most cases, using the `WITHOUT ROWID` optimization (the default) should improve the performance. This means that enabling the `with_rowid` feature is **not** normally recommended! Nonetheless, in some situations `with_rowid` can be beneficial.
 //! **`hooks`**      | &#x274C; | If this feature is enabled, the [`update()`](SQLiteMap::update) function returns additional information that would otherwise be unavailable. Please note that this feature implies the `with_rowid` feature. Enabling this feature may slightly degrade performance, so it should *only* be used if it is actually needed.
+//! **`backup`**     | &#x274C; | If this feature is enabled, the [`try_clone()`](TryClone::try_clone) function can be used to create a **copy** of an existing container instance, which otherwise fails with [`Error::Unsupported`]. Please note that this feature implies the `rusqlite` feature of the same name; requires SQLite 3.6.11 or newer.
 //!
 //! Acknowledgement
 //! ---------------
@@ -68,7 +69,7 @@ mod common;
 mod sqlite_map;
 mod sqlite_set;
 
-pub use crate::common::{Blob, CharType, Error, Size, SizeExt, Type, sqlite_version, version};
+pub use crate::common::{Blob, CharType, Error, Size, SizeExt, TryClone, Type, sqlite_version, version};
 pub use crate::sqlite_map::{Action, SQLiteMap, SQLiteMapTransaction};
 pub use crate::sqlite_set::{SQLiteSet, SQLiteSetTransaction};
 

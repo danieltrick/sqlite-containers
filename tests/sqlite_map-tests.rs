@@ -16,7 +16,7 @@ use rand_xoshiro::{
     Xoshiro256PlusPlus,
     rand_core::{Rng, SeedableRng},
 };
-use sqlite_containers::{Action, Blob, Error, SQLiteMap, SizeExt};
+use sqlite_containers::{Action, Blob, Error, SQLiteMap, SizeExt, TryClone};
 use std::{
     array,
     collections::{HashMap, HashSet},
@@ -2786,6 +2786,80 @@ fn test_sqlite_map_updatehook_transacted() {
         if #[cfg(feature = "hooks")] {
             assert_eq!(action_counter[0], 0u64);
             assert_eq!(action_counter[1], 0u64);
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// SQLiteMap Clone Test
+// ---------------------------------------------------------------------------
+
+cfg_if! {
+    if #[cfg(feature = "backup")] {
+        #[test]
+        fn test_sqlite_map_clone() {
+            let mut map = SQLiteMap::<String, String>::new().unwrap();
+
+            {
+                let mut tx = map.transaction().unwrap();
+                assert!(tx.insert("foo", "12345678").unwrap());
+                assert!(tx.insert("baz", "87654321").unwrap());
+                assert!(tx.insert("BAZ", "abcdefgh").unwrap());
+            }
+
+            let mut map_clone = map.try_clone().unwrap();
+
+            {
+                let mut tx = map.transaction().unwrap();
+                assert!(tx.insert("bar", "hgfedcba").unwrap());
+                assert!(tx.insert("QUX", "stuvwxyz").unwrap());
+                assert!(tx.update("foo", "deadbeef").is_ok());
+            }
+
+            {
+                let mut tx = map_clone.transaction().unwrap();
+                assert!(tx.insert("BAR", "zyxwvuts").unwrap());
+                assert!(tx.insert("qux", "cafebabe").unwrap());
+                assert!(tx.update("baz", "abad1dea").is_ok());
+            }
+
+            assert!(map.get("foo").unwrap().is_some_and(|value| value.eq("deadbeef")));
+            assert!(map.get("baz").unwrap().is_some_and(|value| value.eq("87654321")));
+            assert!(map.get("BAZ").unwrap().is_some_and(|value| value.eq("abcdefgh")));
+            assert!(map.get("bar").unwrap().is_some_and(|value| value.eq("hgfedcba")));
+            assert!(map.get("BAR").unwrap().is_none());
+            assert!(map.get("QUX").unwrap().is_some_and(|value| value.eq("stuvwxyz")));
+            assert!(map.get("qux").unwrap().is_none());
+
+            assert!(map_clone.get("foo").unwrap().is_some_and(|value| value.eq("12345678")));
+            assert!(map_clone.get("baz").unwrap().is_some_and(|value| value.eq("abad1dea")));
+            assert!(map_clone.get("BAZ").unwrap().is_some_and(|value| value.eq("abcdefgh")));
+            assert!(map_clone.get("bar").unwrap().is_none());
+            assert!(map_clone.get("BAR").unwrap().is_some_and(|value| value.eq("zyxwvuts")));
+            assert!(map_clone.get("QUX").unwrap().is_none());
+            assert!(map_clone.get("qux").unwrap().is_some_and(|value| value.eq("cafebabe")));
+
+            cfg_if! {
+                if #[cfg(feature = "hooks")] {
+                    let mut tx = map_clone.transaction().unwrap();
+                    assert_eq!(tx.update("xyz", "deadc0de").unwrap(), Action::Insert);
+                    assert_eq!(tx.update("xyz", "c0deba5e").unwrap(), Action::Update);
+                }
+            }
+        }
+    } else {
+        #[test]
+        fn test_sqlite_map_clone() {
+            let mut map = SQLiteMap::<String, String>::new().unwrap();
+
+            {
+                let mut tx = map.transaction().unwrap();
+                assert!(tx.insert("foo", "12345678").unwrap());
+                assert!(tx.insert("baz", "87654321").unwrap());
+                assert!(tx.insert("BAZ", "abcdefgh").unwrap());
+            }
+
+            assert!(matches!(map.try_clone(), Err(Error::Unsupported)));
         }
     }
 }

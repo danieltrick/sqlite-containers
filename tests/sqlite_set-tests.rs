@@ -11,11 +11,12 @@ use crate::{
     consts::MAX_ITEMS,
     utilities::{HexEncoder, mix64},
 };
+use cfg_if::cfg_if;
 use rand_xoshiro::{
     Xoshiro256PlusPlus,
     rand_core::{Rng, SeedableRng},
 };
-use sqlite_containers::{Blob, Error, SQLiteSet, SizeExt};
+use sqlite_containers::{Blob, Error, SQLiteSet, SizeExt, TryClone};
 use std::{
     array,
     collections::HashSet,
@@ -920,6 +921,70 @@ fn test_sqlite_set_multithreading() {
     for handle in handles.drain(..) {
         let thread_map = handle.join().unwrap();
         assert_eq!(thread_map.len().unwrap().to_u64(), COUNT);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// SQLiteSet Clone Test
+// ---------------------------------------------------------------------------
+
+cfg_if! {
+    if #[cfg(feature = "backup")] {
+        #[test]
+        fn test_sqlite_set_clone() {
+            let mut set = SQLiteSet::<String>::new().unwrap();
+
+            {
+                let mut tx = set.transaction().unwrap();
+                assert!(tx.insert("foo").unwrap());
+                assert!(tx.insert("baz").unwrap());
+                assert!(tx.insert("BAZ").unwrap());
+            }
+
+            let mut set_clone = set.try_clone().unwrap();
+
+            {
+                let mut tx = set.transaction().unwrap();
+                assert!(tx.insert("bar").unwrap());
+                assert!(tx.insert("QUX").unwrap());
+            }
+
+            {
+                let mut tx = set_clone.transaction().unwrap();
+                assert!(tx.insert("BAR").unwrap());
+                assert!(tx.insert("qux").unwrap());
+            }
+
+            assert!(set.contains("foo").unwrap());
+            assert!(set.contains("baz").unwrap());
+            assert!(set.contains("BAZ").unwrap());
+            assert!(set.contains("bar").unwrap());
+            assert!(!set.contains("BAR").unwrap());
+            assert!(set.contains("QUX").unwrap());
+            assert!(!set.contains("qux").unwrap());
+
+            assert!(set_clone.contains("foo").unwrap());
+            assert!(set_clone.contains("baz").unwrap());
+            assert!(set_clone.contains("BAZ").unwrap());
+            assert!(!set_clone.contains("bar").unwrap());
+            assert!(set_clone.contains("BAR").unwrap());
+            assert!(!set_clone.contains("QUX").unwrap());
+            assert!(set_clone.contains("qux").unwrap());
+        }
+    } else {
+        #[test]
+        fn test_sqlite_set_clone() {
+            let mut set = SQLiteSet::<String>::new().unwrap();
+
+            {
+                let mut tx = set.transaction().unwrap();
+                assert!(tx.insert("foo").unwrap());
+                assert!(tx.insert("baz").unwrap());
+                assert!(tx.insert("BAZ").unwrap());
+            }
+
+            assert!(matches!(set.try_clone(), Err(Error::Unsupported)));
+        }
     }
 }
 

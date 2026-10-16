@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Unlicense
 
 use crate::{
-    CharType, Error, Size, SizeExt, Type,
+    CharType, Error, Size, SizeExt, TryClone, Type,
     common::{OPEN_FLAGS, SQL_TYPE_TEXT, SQL_TYPES, SqlType, check_constraint_violation, verify_schema},
     rusqlite::{Connection, OptionalExtension, ToSql, Transaction, params},
 };
@@ -165,8 +165,7 @@ where
     #[allow(clippy::let_unit_value)]
     #[inline]
     pub fn new() -> Result<Self, Error> {
-        let last_action = LastActionHolder::default();
-        Ok(Self { _types: (PhantomData, PhantomData), connection: Self::initialize_connection::<false, &Path>(None, &last_action)?, last_action })
+        Self::from_connection(Self::create_connection::<false, &Path>(None)?)
     }
 
     /// Creates a new, empty hash map with case-insensitive keys, backed by an *in-memory* SQLite database.
@@ -178,8 +177,7 @@ where
     where
         K: CharType,
     {
-        let last_action = LastActionHolder::default();
-        Ok(Self { _types: (PhantomData, PhantomData), connection: Self::initialize_connection::<true, &Path>(None, &last_action)?, last_action })
+        Self::from_connection(Self::create_connection::<true, &Path>(None)?)
     }
 
     /// Creates a new or re-opens an existing hash map with case-sensitive keys, backed by a *file-based* SQLite database.
@@ -193,8 +191,7 @@ where
     where
         P: AsRef<Path>,
     {
-        let last_action = LastActionHolder::default();
-        Ok(Self { _types: (PhantomData, PhantomData), connection: Self::initialize_connection::<false, _>(Some(path), &last_action)?, last_action })
+        Self::from_connection(Self::create_connection::<false, _>(Some(path))?)
     }
 
     /// Creates a new or re-opens an existing hash map with case-insensitive keys, backed by a *file-based* SQLite database.
@@ -210,19 +207,19 @@ where
         K: CharType,
         P: AsRef<Path>,
     {
-        let last_action = LastActionHolder::default();
-        Ok(Self { _types: (PhantomData, PhantomData), connection: Self::initialize_connection::<true, _>(Some(path), &last_action)?, last_action })
+        Self::from_connection(Self::create_connection::<true, _>(Some(path))?)
     }
 
     #[inline]
-    fn initialize_connection<const NO_CASE: bool, P>(path_option: Option<P>, last_action: &LastActionHolder) -> Result<Connection, Error>
+    fn create_connection<const NO_CASE: bool, P>(path_option: Option<P>) -> Result<Connection, Error>
     where
         P: AsRef<Path>,
     {
-        let connection = if let Some(path) = path_option.as_ref() { Connection::open_with_flags(path, *OPEN_FLAGS)? } else { Connection::open_in_memory()? };
-
-        connection.pragma_update(None, "journal_mode", "OFF")?;
-        connection.pragma_update(None, "synchronous", "OFF")?;
+        let connection = Self::initialize_connection(if let Some(path) = path_option.as_ref() {
+            Connection::open_with_flags(path, *OPEN_FLAGS)?
+        } else {
+            Connection::open_in_memory()?
+        })?;
 
         let sql_create_table = if !NO_CASE {
             SQL_CREATE_TBL.get(&(K::SQL_TYPE, V::SQL_TYPE)).unwrap()
@@ -240,13 +237,26 @@ where
             }
         }
 
-        Self::install_hook(&connection, last_action);
         Ok(connection)
+    }
+
+    #[inline(always)]
+    fn initialize_connection(connection: Connection) -> Result<Connection, Error> {
+        connection.pragma_update(None, "synchronous", "OFF")?;
+        connection.pragma_update(None, "journal_mode", "OFF")?;
+        Ok(connection)
+    }
+
+    #[inline(always)]
+    fn from_connection(connection: Connection) -> Result<Self, Error> {
+        let last_action = LastActionHolder::default();
+        Self::install_hook(&connection, &last_action);
+        Ok(Self { _types: (PhantomData, PhantomData), connection, last_action })
     }
 
     cfg_if! {
         if #[cfg(feature = "hooks")] {
-            #[inline]
+            #[inline(always)]
             fn install_hook(connection: &Connection, last_action: &LastActionHolder) {
                 let last_action = Arc::clone(&last_action.0);
                 connection
@@ -546,6 +556,44 @@ where
         let mut statement = self.connection.prepare_cached(SQL_DELETE_ALL)?;
         statement.execute([])?;
         Ok(())
+    }
+}
+
+cfg_if! {
+    if #[cfg(feature = "backup")] {
+        impl<K, V> TryClone for SQLiteMap<K, V>
+        where
+            K: Type,
+            V: Type,
+        {
+            type Error = Error;
+
+            /// Creates an exact, independent *copy* of the given map instance.
+            ///
+            /// This function fails with [`Error::Unsupported`](crate::Error::Unsupported), if the optional [`backup`](crate#optional-features) feature is **not** enabled &#128549;
+            #[inline]
+            fn try_clone(&self) -> Result<Self, Self::Error> {
+                let mut connection_cloned = Self::initialize_connection(Connection::open_in_memory()?)?;
+                crate::common::backup_db(&self.connection, &mut connection_cloned)?;
+                Self::from_connection(connection_cloned)
+            }
+        }
+    } else {
+        impl<K, V> TryClone for SQLiteMap<K, V>
+        where
+            K: Type,
+            V: Type,
+        {
+            type Error = Error;
+
+            /// Creates an exact, independent *copy* of the given map instance.
+            ///
+            /// This function fails with [`Error::Unsupported`](crate::Error::Unsupported), if the optional [`backup`](crate#optional-features) feature is **not** enabled &#128549;
+            #[inline]
+            fn try_clone(&self) -> Result<Self, Self::Error> {
+                Err(Error::Unsupported)
+            }
+        }
     }
 }
 

@@ -11,7 +11,10 @@ use crate::{
     semver::Version,
 };
 use cfg_if::cfg_if;
-use std::{fmt::Display, sync::LazyLock};
+use std::{
+    fmt::{Debug, Display},
+    sync::LazyLock,
+};
 
 /// Binary Large Object (BLOB), represented as a [`Vec<u8>`](std::vec::Vec).
 pub type Blob = Vec<u8>;
@@ -194,7 +197,7 @@ impl SizeExt for Size {
 // SQLite Error
 // ---------------------------------------------------------------------------
 
-/// Indicates that the container operation has failed.
+/// Error type that indicates that a container operation has failed.
 ///
 /// Container operations are generally infallible. However, because our containers are backed by SQLite databases, they may still fail due to an internal SQLite error. Such errors can indicate a bug, but may also occur in out-of-memory situations.
 #[allow(dead_code)]
@@ -204,6 +207,8 @@ pub enum Error {
     SqlError(RusqliteError),
     /// An attempt was made to open an existing database (container), but the existing database schema is incompatible.
     InvalidSchema,
+    /// An attempt was made to use a feature that is **not** supported by this build of `sqlite-containers`.
+    Unsupported,
 }
 
 impl Error {
@@ -220,6 +225,29 @@ impl From<RusqliteError> for Error {
     #[inline]
     fn from(inner: RusqliteError) -> Self {
         Self::SqlError(inner)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// TryClone Trait
+// ---------------------------------------------------------------------------
+
+/// This is the *failable* version of the standard [`Clone`](std::clone::Clone) trait.
+pub trait TryClone: Sized {
+    type Error: Debug;
+    /// This is the *failable* version of the standard [`clone()`](std::clone::Clone::clone) function.
+    fn try_clone(&self) -> Result<Self, Self::Error>;
+}
+
+cfg_if! {
+    if #[cfg(feature = "backup")] {
+        use crate::rusqlite::{Connection, backup::Backup};
+        use std::time::Duration;
+
+        pub(crate) fn backup_db(src: &Connection, dst: &mut Connection) -> Result<(), Error> {
+            let backup = Backup::new(src, dst)?;
+            Ok(backup.run_to_completion(1000i32, Duration::ZERO, None)?)
+        }
     }
 }
 

@@ -12,6 +12,7 @@ readme = "README-package.md"
 [features]
 default = ["bundled"]
 bundled = ["rusqlite/bundled"]
+backup = ["rusqlite/backup"]
 hooks = ["with_rowid", "rusqlite/hooks"]
 with_rowid = []
 
