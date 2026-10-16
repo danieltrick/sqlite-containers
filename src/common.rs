@@ -194,30 +194,41 @@ impl SizeExt for Size {
 // SQLite Error
 // ---------------------------------------------------------------------------
 
-/// Indicates that the operation failed due to an SQLite error.
+/// Indicates that the container operation has failed.
 ///
 /// Container operations are generally infallible. However, because our containers are backed by SQLite databases, they may still fail due to an internal SQLite error. Such errors can indicate a bug, but may also occur in out-of-memory situations.
-///
-/// Wraps the underlying [`RusqliteError`](crate::rusqlite::Error).
 #[allow(dead_code)]
 #[derive(Debug)]
-pub struct Error(RusqliteError);
+pub enum Error {
+    /// Indicates that the operation failed because of an SQLite error; wraps the underlying [`RusqliteError`](crate::rusqlite::Error).
+    SqlError(RusqliteError),
+    /// An attempt was made to open an existing database (container), but the existing database schema is incompatible.
+    InvalidSchema,
+}
 
 impl Error {
-    pub fn into_inner(self) -> RusqliteError {
-        self.0
+    /// Returns the wrapped [`RusqliteError`](crate::rusqlite::Error), if this `Error` originates from SQLite; otherwise `None` is returned.
+    pub fn into_inner(self) -> Option<RusqliteError> {
+        match self {
+            Error::SqlError(inner) => Some(inner),
+            _ => None,
+        }
     }
 }
 
 impl From<RusqliteError> for Error {
     #[inline]
-    fn from(error: RusqliteError) -> Self {
-        Self(error)
+    fn from(inner: RusqliteError) -> Self {
+        Self::SqlError(inner)
     }
 }
 
-#[inline]
-pub fn check_constraint_violation(error: RusqliteError) -> Result<bool, Error> {
+// ---------------------------------------------------------------------------
+// Helper Functions
+// ---------------------------------------------------------------------------
+
+#[inline(always)]
+pub(crate) fn check_constraint_violation(error: RusqliteError) -> Result<bool, Error> {
     match error {
         RusqliteError::SqliteFailure(sql_error, _) => match sql_error.code {
             ErrorCode::ConstraintViolation => Ok(false),
@@ -226,6 +237,24 @@ pub fn check_constraint_violation(error: RusqliteError) -> Result<bool, Error> {
         _ => Err(error.into()),
     }
 }
+
+#[inline(always)]
+fn trim_schema_str(sql: &str) -> &str {
+    const PREFIX: (&str, &str) = ("CREATE TABLE", "IF NOT EXISTS");
+    let sql = sql.trim_ascii();
+    let sql = sql.strip_prefix(PREFIX.0).map(str::trim_ascii_start).unwrap_or(sql);
+    let sql = sql.strip_prefix(PREFIX.1).map(str::trim_ascii_start).unwrap_or(sql);
+    sql.strip_suffix(';').map(str::trim_ascii_end).unwrap_or(sql)
+}
+
+#[inline(always)]
+pub(crate) fn verify_schema(sql_create: &str, sql_schema: &str) -> bool {
+    trim_schema_str(sql_create).eq(trim_schema_str(sql_schema))
+}
+
+// ---------------------------------------------------------------------------
+// Version Getters
+// ---------------------------------------------------------------------------
 
 /// Returns the package version of the `sqlite-containers` package.
 pub fn version() -> &'static Version {
@@ -303,25 +332,28 @@ mod test {
     #[test]
     fn test_error() {
         let error_1 = Error::from(RusqliteError::InvalidQuery);
-        assert_eq!(error_1.into_inner(), RusqliteError::InvalidQuery);
+        assert!(matches!(error_1.into_inner(), Some(RusqliteError::InvalidQuery)));
 
         let error_2 = Error::from(RusqliteError::InvalidPath(PathBuf::from("filename.txt")));
-        assert!(matches!(error_2.into_inner(), RusqliteError::InvalidPath(_)));
+        assert!(matches!(error_2.into_inner(), Some(RusqliteError::InvalidPath(_))));
 
         let error_3 = Error::from(RusqliteError::SqliteFailure(FfiError::new(SQLITE_NOMEM), Some("Memory allocation fail!".to_owned())));
-        assert!(matches!(error_3.into_inner(), RusqliteError::SqliteFailure(FfiError { code: FfiErrorCode::OutOfMemory, .. }, Some(_))));
+        assert!(matches!(error_3.into_inner(), Some(RusqliteError::SqliteFailure(FfiError { code: FfiErrorCode::OutOfMemory, .. }, Some(_)))));
+
+        let error_4 = Error::InvalidSchema;
+        assert!(error_4.into_inner().is_none());
     }
 
     #[test]
     fn test_check_constraint_violation() {
         let error_1 = check_constraint_violation(RusqliteError::InvalidQuery);
-        assert!(matches!(error_1, Err(Error(..))));
+        assert!(matches!(error_1, Err(Error::SqlError(..))));
 
         let error_2 = check_constraint_violation(RusqliteError::SqliteFailure(FfiError::new(SQLITE_CONSTRAINT), None));
         assert!(matches!(error_2, Ok(false)));
 
         let error_3 = check_constraint_violation(RusqliteError::SqliteFailure(FfiError::new(SQLITE_NOMEM), None));
-        assert!(matches!(error_3, Err(Error(..))));
+        assert!(matches!(error_3, Err(Error::SqlError(..))));
     }
 
     #[test]

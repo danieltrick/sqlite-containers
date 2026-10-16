@@ -4,7 +4,7 @@
 
 use crate::{
     CharType, Error, Size, SizeExt, Type,
-    common::{OPEN_FLAGS, SQL_TYPE_TEXT, SQL_TYPES, SqlType, check_constraint_violation},
+    common::{OPEN_FLAGS, SQL_TYPE_TEXT, SQL_TYPES, SqlType, check_constraint_violation, verify_schema},
     rusqlite::{Connection, OptionalExtension, ToSql, Transaction, params},
 };
 use cfg_if::cfg_if;
@@ -110,6 +110,7 @@ static SQL_CREATE_NOC: LazyLock<BTreeMap<SqlType, String>> = LazyLock::new(|| {
     map
 });
 
+const SQL_GET_SCHEMA: &str = concatcp!("SELECT sql FROM sqlite_schema WHERE type = 'table' AND name = '", TABLE_NAME, "';");
 const SQL_COUNT_KEYS: &str = concatcp!("SELECT COUNT(*) FROM ", TABLE_NAME, ";");
 const SQL_EXIST_KEYS: &str = concatcp!("SELECT EXISTS (SELECT 1 FROM ", TABLE_NAME, ");");
 const SQL_INSERT_KEY: &str = concatcp!("INSERT INTO ", TABLE_NAME, " (key, value) VALUES (?1, ?2);");
@@ -181,9 +182,11 @@ where
         Ok(Self { _types: (PhantomData, PhantomData), connection: Self::initialize_connection::<true, &Path>(None, &last_action)?, last_action })
     }
 
-    /// Creates a new or re-opens an existing hash map, backed by a *file-based* SQLite database.
+    /// Creates a new or re-opens an existing hash map with case-sensitive keys, backed by a *file-based* SQLite database.
     ///
-    /// A new map is created with case-sensitive keys. However, if the database file already exists, its case-sensitivity is preserved.
+    /// The database file is created, if it does *not* exist yet.
+    ///
+    /// Fails with [`Error::InvalidSchema`], if the schema of the existing database file does **not** match the expected schema.
     #[allow(clippy::let_unit_value)]
     #[inline]
     pub fn with_file<P>(path: P) -> Result<Self, Error>
@@ -194,9 +197,11 @@ where
         Ok(Self { _types: (PhantomData, PhantomData), connection: Self::initialize_connection::<false, _>(Some(path), &last_action)?, last_action })
     }
 
-    /// Creates a new or re-opens an existing hash map, backed by a *file-based* SQLite database.
+    /// Creates a new or re-opens an existing hash map with case-insensitive keys, backed by a *file-based* SQLite database.
     ///
-    /// A new map is created with case-insensitive keys. However, if the database file already exists, its case-sensitivity is preserved.
+    /// The database file is created, if it does *not* exist yet.
+    ///
+    /// Fails with [`Error::InvalidSchema`], if the schema of the existing database file does **not** match the expected schema.
     ///
     /// Only ASCII characters are case folded. SQLite does **not** attempt to do full UTF case folding!
     #[inline]
@@ -219,15 +224,20 @@ where
         connection.pragma_update(None, "journal_mode", "OFF")?;
         connection.pragma_update(None, "synchronous", "OFF")?;
 
-        if path_option.is_some() {
-            connection.pragma_update(None, "temp_store", "MEMORY")?;
-        }
-
-        if !NO_CASE {
-            connection.execute(SQL_CREATE_TBL.get(&(K::SQL_TYPE, V::SQL_TYPE)).unwrap(), [])?;
+        let sql_create_table = if !NO_CASE {
+            SQL_CREATE_TBL.get(&(K::SQL_TYPE, V::SQL_TYPE)).unwrap()
         } else {
-            assert_eq!(K::SQL_TYPE, SQL_TYPE_TEXT);
-            connection.execute(SQL_CREATE_NOC.get(&V::SQL_TYPE).unwrap(), [])?;
+            debug_assert_eq!(K::SQL_TYPE, SQL_TYPE_TEXT);
+            SQL_CREATE_NOC.get(&V::SQL_TYPE).unwrap()
+        };
+
+        connection.execute(sql_create_table, [])?;
+
+        if cfg!(debug_assertions) || path_option.is_some() {
+            let sql_schema_table: String = connection.query_one(SQL_GET_SCHEMA, [], |row| row.get(0))?;
+            if !verify_schema(sql_create_table, &sql_schema_table) {
+                return Err(Error::InvalidSchema);
+            }
         }
 
         Self::install_hook(&connection, last_action);

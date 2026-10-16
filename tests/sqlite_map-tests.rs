@@ -16,7 +16,7 @@ use rand_xoshiro::{
     Xoshiro256PlusPlus,
     rand_core::{Rng, SeedableRng},
 };
-use sqlite_containers::{Action, Blob, SQLiteMap, SizeExt};
+use sqlite_containers::{Action, Blob, Error, SQLiteMap, SizeExt};
 use std::{
     array,
     collections::{HashMap, HashSet},
@@ -2586,12 +2586,8 @@ fn test_sqlite_map_filebased() {
     assert!(fs::exists(&file_path_1).unwrap());
     assert!(fs::exists(&file_path_2).unwrap());
 
-    for no_case in [false, true] {
-        let set = if !no_case {
-            SQLiteMap::<String, String>::with_file(&file_path_1).unwrap()
-        } else {
-            SQLiteMap::<String, String>::with_file_nocase(&file_path_1).unwrap()
-        };
+    {
+        let set = SQLiteMap::<String, String>::with_file(&file_path_1).unwrap();
         assert!(set.get("foo").unwrap().is_some_and(|value| value.eq("12345678")));
         assert!(set.get("FOO").unwrap().is_none());
         assert!(set.get("bar").unwrap().is_none());
@@ -2600,12 +2596,8 @@ fn test_sqlite_map_filebased() {
         assert!(set.get("qux").unwrap().is_none());
     }
 
-    for no_case in [false, true] {
-        let set = if !no_case {
-            SQLiteMap::<String, String>::with_file(&file_path_2).unwrap()
-        } else {
-            SQLiteMap::<String, String>::with_file_nocase(&file_path_2).unwrap()
-        };
+    {
+        let set = SQLiteMap::<String, String>::with_file_nocase(&file_path_2).unwrap();
         assert!(set.get("foo").unwrap().is_none());
         assert!(set.get("bar").unwrap().is_some_and(|value| value.eq("hgfedcba")));
         assert!(set.get("BAR").unwrap().is_some_and(|value| value.eq("hgfedcba")));
@@ -2613,6 +2605,9 @@ fn test_sqlite_map_filebased() {
         assert!(set.get("qux").unwrap().is_some_and(|value| value.eq("stuvwxyz")));
         assert!(set.get("QUX").unwrap().is_some_and(|value| value.eq("stuvwxyz")));
     }
+
+    assert!(matches!(SQLiteMap::<String, String>::with_file_nocase(&file_path_1), Err(Error::InvalidSchema)));
+    assert!(matches!(SQLiteMap::<String, String>::with_file(&file_path_2), Err(Error::InvalidSchema)));
 }
 
 // ---------------------------------------------------------------------------
@@ -2822,7 +2817,7 @@ fn test_sqlite_map_to_destruction() {
         let (key, value) = channel_rx.recv().expect("Out of items!");
         match tx.insert(&key, &value) {
             Err(error) => match error.into_inner() {
-                sqlite_containers::rusqlite::Error::SqliteFailure(sqlite_error, _) => match sqlite_error.code {
+                Some(sqlite_containers::rusqlite::Error::SqliteFailure(sqlite_error, _)) => match sqlite_error.code {
                     sqlite_containers::rusqlite::ErrorCode::OutOfMemory => break,
                     sqlite_containers::rusqlite::ErrorCode::DiskFull => break,
                     _ => panic!("Unexpected SQLite failure has been encountered! [{sqlite_error}]"),

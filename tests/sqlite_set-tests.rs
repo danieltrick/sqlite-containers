@@ -15,7 +15,7 @@ use rand_xoshiro::{
     Xoshiro256PlusPlus,
     rand_core::{Rng, SeedableRng},
 };
-use sqlite_containers::{Blob, SQLiteSet, SizeExt};
+use sqlite_containers::{Blob, Error, SQLiteSet, SizeExt};
 use std::{
     array,
     collections::HashSet,
@@ -860,8 +860,8 @@ fn test_sqlite_set_filebased() {
     assert!(fs::exists(&file_path_1).unwrap());
     assert!(fs::exists(&file_path_2).unwrap());
 
-    for no_case in [false, true] {
-        let set = if !no_case { SQLiteSet::<String>::with_file(&file_path_1).unwrap() } else { SQLiteSet::<String>::with_file_nocase(&file_path_1).unwrap() };
+    {
+        let set = SQLiteSet::<String>::with_file(&file_path_1).unwrap();
         assert!(set.contains("foo").unwrap());
         assert!(!set.contains("FOO").unwrap());
         assert!(!set.contains("bar").unwrap());
@@ -870,8 +870,8 @@ fn test_sqlite_set_filebased() {
         assert!(!set.contains("qux").unwrap());
     }
 
-    for no_case in [false, true] {
-        let set = if !no_case { SQLiteSet::<String>::with_file(&file_path_2).unwrap() } else { SQLiteSet::<String>::with_file_nocase(&file_path_2).unwrap() };
+    {
+        let set = SQLiteSet::<String>::with_file_nocase(&file_path_2).unwrap();
         assert!(!set.contains("foo").unwrap());
         assert!(set.contains("bar").unwrap());
         assert!(set.contains("BAR").unwrap());
@@ -879,6 +879,9 @@ fn test_sqlite_set_filebased() {
         assert!(set.contains("qux").unwrap());
         assert!(set.contains("QUX").unwrap());
     }
+
+    assert!(matches!(SQLiteSet::<String>::with_file_nocase(&file_path_1), Err(Error::InvalidSchema)));
+    assert!(matches!(SQLiteSet::<String>::with_file(&file_path_2), Err(Error::InvalidSchema)));
 }
 
 // ---------------------------------------------------------------------------
@@ -945,7 +948,7 @@ fn test_sqlite_set_to_destruction() {
         let key = channel_rx.recv().expect("Out of items!");
         match tx.insert(&key) {
             Err(error) => match error.into_inner() {
-                sqlite_containers::rusqlite::Error::SqliteFailure(sqlite_error, _) => match sqlite_error.code {
+                Some(sqlite_containers::rusqlite::Error::SqliteFailure(sqlite_error, _)) => match sqlite_error.code {
                     sqlite_containers::rusqlite::ErrorCode::OutOfMemory => break,
                     sqlite_containers::rusqlite::ErrorCode::DiskFull => break,
                     _ => panic!("Unexpected SQLite failure has been encountered! [{sqlite_error}]"),
