@@ -48,6 +48,9 @@ jobs:
           components: rustfmt clippy
           cache: false
 
+      - name: Install Nextest
+        uses: taiki-e/install-action@nextest
+
       - name: Install Multilib Support
         if: ${{ matrix.platform.target == 'i686-unknown-linux-gnu' }}
         run: |

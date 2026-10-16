@@ -24,10 +24,10 @@ build:
 	cargo build --locked --release
 
 test:
-	cargo test --locked
-	cargo test --locked --all-features
-	cargo test --locked --release
-	cargo test --locked --release --all-features
+	cargo nextest run --locked
+	cargo nextest run --locked --all-features
+	cargo nextest run --locked --release
+	cargo nextest run --locked --release --all-features
 
 run: $(EXAMPLES)
 $(EXAMPLES):

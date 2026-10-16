@@ -1,0 +1,4 @@
+[profile.default]
+test-threads = 1
+run-extra-args = ["--test-threads=1"]
+slow-timeout = { period = "1h" }
