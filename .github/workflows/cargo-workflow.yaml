@@ -70,7 +70,7 @@ jobs:
           fetch-depth: 0
 
       - name: Dump Platform Info
-        working-directory: .github/workflows/rustc-info
+        working-directory: .github/workflows/tools/rustc-info
         run: cargo run --locked --quiet
         env:
           CARGO_BUILD_TARGET: ${{ matrix.platform.target }}

@@ -1,0 +1,32 @@
+name: Monitor
+
+permissions:
+  contents: read
+
+on:
+  schedule:
+    - cron: '13 1 * * *'
+
+jobs:
+  # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  # Monitor
+  # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  build:
+    name: Monitor
+    runs-on: ubuntu-26.04
+    steps:
+      - name: Install Rust Toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v2
+        with:
+          toolchain: 1.99.0
+          cache: false
+
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Monitor Script
+        working-directory: .github/workflows/tools/monitor
+        run: cargo build
+        env:
+          CARGO_PROFILE_RELEASE_DEBUG: true
+          RUST_BACKTRACE: 1
