@@ -885,6 +885,47 @@ fn test_sqlite_set_filebased() {
     assert!(matches!(SQLiteSet::<String>::with_file(&file_path_2), Err(Error::InvalidSchema)));
 }
 
+#[cfg(not(feature = "no_check"))]
+#[test]
+fn test_sqlite_set_filebased_integrity() {
+    use std::{
+        fs::OpenOptions,
+        io::{Read, Seek, SeekFrom, Write},
+    };
+
+    let temp_dir = tempdir_in(env!["CARGO_TARGET_TMPDIR"]).unwrap();
+    let file_path = temp_dir.path().join("sqlite_set.db");
+
+    assert!(!fs::exists(&file_path).unwrap());
+
+    {
+        let mut set = SQLiteSet::<String>::with_file(&file_path).unwrap();
+        {
+            let mut tx = set.transaction().unwrap();
+            assert!(tx.insert("foo").unwrap());
+            assert!(tx.insert("Foo").unwrap());
+            assert!(tx.insert("bar").unwrap());
+            assert!(tx.insert("BAR").unwrap());
+            assert!(tx.insert("baz").unwrap());
+            assert!(tx.insert("BAZ").unwrap());
+        }
+    }
+
+    {
+        const FILE_OFFSET: u64 = 4097u64;
+        let mut byte = [0u8; 1usize];
+        let mut file = OpenOptions::new().read(true).write(true).open(&file_path).unwrap();
+        file.seek(SeekFrom::Start(FILE_OFFSET)).unwrap();
+        file.read_exact(&mut byte).unwrap();
+        byte[0] ^= 0xFFu8;
+        file.seek(SeekFrom::Start(FILE_OFFSET)).unwrap();
+        file.write_all(&byte).unwrap();
+        file.sync_all().unwrap();
+    }
+
+    assert!(matches!(SQLiteSet::<String>::with_file(&file_path), Err(Error::IntegrityCheck)));
+}
+
 // ---------------------------------------------------------------------------
 // SQLiteSet Multi-Thread Tests
 // ---------------------------------------------------------------------------

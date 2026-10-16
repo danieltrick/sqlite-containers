@@ -47,7 +47,8 @@ audit:
 	cargo audit -Dwarnings
 
 codecov:
-	cargo llvm-cov --locked --all-features --lcov --output-path target/codecov-output.info
+	cargo llvm-cov --locked --lcov --output-path target/codecov-output-1.info
+	cargo llvm-cov --locked --all-features --lcov --output-path target/codecov-output-2.info
 
 publish:
 	cargo publish --locked

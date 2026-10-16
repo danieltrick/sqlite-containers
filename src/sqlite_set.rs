@@ -138,6 +138,11 @@ where
             Connection::open_in_memory()?
         })?;
 
+        #[cfg(not(feature = "no_check"))]
+        if path_option.is_some() {
+            crate::common::integrity_check(&connection)?;
+        }
+
         let sql_create_table = if !NO_CASE {
             SQL_CREATE_TBL.get(&T::SQL_TYPE).unwrap()
         } else {
@@ -147,7 +152,7 @@ where
 
         connection.execute(sql_create_table, [])?;
 
-        if cfg!(debug_assertions) || path_option.is_some() {
+        if path_option.is_some() {
             let sql_schema_table: String = connection.query_one(SQL_GET_SCHEMA, [], |row| row.get(0))?;
             if !verify_schema(sql_create_table, &sql_schema_table) {
                 return Err(Error::InvalidSchema);

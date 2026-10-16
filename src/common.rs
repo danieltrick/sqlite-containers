@@ -4,7 +4,7 @@
 
 use crate::{
     rusqlite::{
-        Error as RusqliteError, ErrorCode, OpenFlags,
+        Connection, Error as RusqliteError, ErrorCode, OpenFlags,
         types::{FromSql, ToSql, Type as RusqliteType},
         version_number,
     },
@@ -205,8 +205,10 @@ impl SizeExt for Size {
 pub enum Error {
     /// Indicates that the operation failed because of an SQLite error; wraps the underlying [`RusqliteError`](crate::rusqlite::Error).
     SqlError(RusqliteError),
-    /// An attempt was made to open an existing database (container), but the existing database schema is incompatible.
+    /// An attempt was made to open an existing container (database), but the existing database schema is incompatible.
     InvalidSchema,
+    /// The [integrity check](https://www.sqlite.org/pragma.html#pragma_integrity_check) for the *file-based* container (database) file has failed. Take care!
+    IntegrityCheck,
     /// An attempt was made to use a feature that is **not** supported by this build of `sqlite-containers`.
     Unsupported,
 }
@@ -241,7 +243,7 @@ pub trait TryClone: Sized {
 
 cfg_if! {
     if #[cfg(feature = "backup")] {
-        use crate::rusqlite::{Connection, backup::Backup};
+        use crate::rusqlite::backup::Backup;
         use std::time::Duration;
 
         pub(crate) fn backup_db(src: &Connection, dst: &mut Connection) -> Result<(), Error> {
@@ -278,6 +280,18 @@ fn trim_schema_str(sql: &str) -> &str {
 #[inline(always)]
 pub(crate) fn verify_schema(sql_create: &str, sql_schema: &str) -> bool {
     trim_schema_str(sql_create).eq(trim_schema_str(sql_schema))
+}
+
+#[cfg(not(feature = "no_check"))]
+#[inline(always)]
+pub(crate) fn integrity_check(connection: &Connection) -> Result<(), Error> {
+    use rusqlite::OptionalExtension;
+
+    const SQL_CHECK_DATA: &str = "PRAGMA integrity_check;";
+    match connection.query_row(SQL_CHECK_DATA, [], |row| row.get::<_, String>(0)).optional()? {
+        Some(value) if value.eq_ignore_ascii_case("ok") => Ok(()),
+        _ => Err(Error::IntegrityCheck),
+    }
 }
 
 // ---------------------------------------------------------------------------
