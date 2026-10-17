@@ -37,7 +37,7 @@ bench:
 	cargo bench --locked --bench sqlite_containers-bench -- --quick
 
 doc:
-	cargo doc --locked
+	cargo doc --locked --all-features
 
 upgrade:
 	cargo upgrade -i

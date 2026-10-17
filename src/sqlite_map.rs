@@ -4,7 +4,7 @@
 
 use crate::{
     CharType, Error, Size, SizeExt, TryClone, Type,
-    common::{OPEN_FLAGS, OPEN_FLAGS_NOCREATE, SQL_TYPE_TEXT, SQL_TYPES, SqlType, check_constraint_violation, verify_schema},
+    common::{OPEN_FLAGS, OPEN_FLAGS_NOCREATE, OPEN_FLAGS_RDONLY, SQL_TYPE_TEXT, SQL_TYPES, SqlType, check_constraint_violation, verify_schema},
     rusqlite::{Connection, OptionalExtension, ToSql, Transaction, params},
 };
 use cfg_if::cfg_if;
@@ -165,7 +165,7 @@ where
     #[allow(clippy::let_unit_value)]
     #[inline]
     pub fn new() -> Result<Self, Error> {
-        Self::from_connection(Self::create_connection::<false, &Path>(None, false)?)
+        Self::from_connection(Self::create_connection::<false, &Path>(None, false, false)?)
     }
 
     /// Creates a new, empty hash map with case-insensitive keys, backed by an *in-memory* SQLite database.
@@ -177,46 +177,49 @@ where
     where
         K: CharType,
     {
-        Self::from_connection(Self::create_connection::<true, &Path>(None, false)?)
+        Self::from_connection(Self::create_connection::<true, &Path>(None, false, false)?)
     }
 
     /// Creates a new or re-opens an existing hash map with case-sensitive keys, backed by a *file-based* SQLite database.
     ///
-    /// If `can_create` is `true` and the database file does *not* exist yet, then a new empty one is created.
+    /// If `readonly` is `true`, the database file is opened in “read-only” mode.
     ///
-    /// Fails with [`Error::InvalidSchema`], if the schema of the existing database file does **not** match the expected schema.
-    #[allow(clippy::let_unit_value)]
+    /// If `can_create` is `true` (and if `readonly` is `false`), a new empty database file is created, if the file does *not* exist yet.
+    ///
+    /// Returns [`Error::InvalidSchema`], if the database file already exists but its schema does **not** match the schema expected by this type of map. This means that you **must** re-open a database file with the *same* type of map that was used to create it.
     #[inline]
-    pub fn from_file<P>(path: P, can_create: bool) -> Result<Self, Error>
+    pub fn from_file<P>(path: P, readonly: bool, can_create: bool) -> Result<Self, Error>
     where
         P: AsRef<Path>,
     {
-        Self::from_connection(Self::create_connection::<false, _>(Some(path), can_create)?)
+        Self::from_connection(Self::create_connection::<false, _>(Some(path), readonly, can_create)?)
     }
 
     /// Creates a new or re-opens an existing hash map with case-insensitive keys, backed by a *file-based* SQLite database.
     ///
-    /// If `can_create` is `true` and the database file does *not* exist yet, then a new empty one is created.
+    /// If `readonly` is `true`, the database file is opened in “read-only” mode.
     ///
-    /// Fails with [`Error::InvalidSchema`], if the schema of the existing database file does **not** match the expected schema.
+    /// If `can_create` is `true` (and if `readonly` is `false`), a new empty database file is created if the file does *not* exist yet.
+    ///
+    /// Returns [`Error::InvalidSchema`], if the database file already exists but its schema does **not** match the schema expected by this type of map. This means that you **must** re-open a database file with the *same* type of map that was used to create it.
     ///
     /// Only ASCII characters are case folded. SQLite does **not** attempt to do full UTF case folding!
     #[inline]
-    pub fn from_file_nocase<P>(path: P, can_create: bool) -> Result<Self, Error>
+    pub fn from_file_nocase<P>(path: P, readonly: bool, can_create: bool) -> Result<Self, Error>
     where
         K: CharType,
         P: AsRef<Path>,
     {
-        Self::from_connection(Self::create_connection::<true, _>(Some(path), can_create)?)
+        Self::from_connection(Self::create_connection::<true, _>(Some(path), readonly, can_create)?)
     }
 
     #[inline]
-    fn create_connection<const NO_CASE: bool, P>(path_option: Option<P>, can_create: bool) -> Result<Connection, Error>
+    fn create_connection<const NO_CASE: bool, P>(path_option: Option<P>, readonly: bool, can_create: bool) -> Result<Connection, Error>
     where
         P: AsRef<Path>,
     {
         let connection = Self::initialize_connection(if let Some(path) = path_option.as_ref() {
-            Connection::open_with_flags(path, if can_create { *OPEN_FLAGS } else { *OPEN_FLAGS_NOCREATE })?
+            Connection::open_with_flags(path, if !readonly { if can_create { *OPEN_FLAGS } else { *OPEN_FLAGS_NOCREATE } } else { *OPEN_FLAGS_RDONLY })?
         } else {
             Connection::open_in_memory()?
         })?;
@@ -562,6 +565,19 @@ where
         statement.execute([])?;
         Ok(())
     }
+
+    #[cfg(feature = "backup")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "backup")))]
+    #[inline]
+    /// Stores all contents of this map in the specified database file.
+    pub fn to_file<P>(&self, path: P) -> Result<(), Error>
+    where
+        P: AsRef<Path>,
+    {
+        let mut connection_out = Self::initialize_connection(Connection::open_with_flags(path, *OPEN_FLAGS)?)?;
+        crate::common::backup_db(&self.connection, &mut connection_out)?;
+        Ok(())
+    }
 }
 
 cfg_if! {
@@ -594,6 +610,7 @@ cfg_if! {
             /// Creates an exact, independent *copy* of the given map instance.
             ///
             /// This function fails with [`Error::Unsupported`](crate::Error::Unsupported), if the optional [`backup`](crate#optional-features) feature is **not** enabled &#128549;
+            #[cfg_attr(docsrs, doc(cfg(feature = "backup")))]
             #[inline]
             fn try_clone(&self) -> Result<Self, Self::Error> {
                 Err(Error::Unsupported)

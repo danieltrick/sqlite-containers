@@ -252,16 +252,16 @@ fn test_sqlite_set_i64_string_words() {
     for lang in [random_word::Lang::De, random_word::Lang::En] {
         let word_list = random_word::all(lang);
         for seed_1 in 0u64..5u64 {
-            let mut map = SQLiteSet::<i64>::new().unwrap();
+            let mut set = SQLiteSet::<i64>::new().unwrap();
             {
-                let mut tx = map.transaction().unwrap();
+                let mut tx = set.transaction().unwrap();
                 for &word in word_list {
                     let hash = xxh64(word.as_bytes(), seed_1) as i64;
                     assert!(tx.insert(&hash).unwrap());
                 }
             }
             for seed_2 in 0u64..5u64 {
-                let tx = map.transaction().unwrap();
+                let tx = set.transaction().unwrap();
                 if seed_1 == seed_2 {
                     for &word in word_list {
                         let hash = xxh64(word.as_bytes(), seed_2) as i64;
@@ -845,16 +845,25 @@ fn test_sqlite_set_filebased() {
     assert!(!fs::exists(&file_path_2).unwrap());
 
     assert!(matches!(
-        SQLiteSet::<String>::from_file(&file_path_1, false),
+        SQLiteSet::<String>::from_file(&file_path_1, false, false),
         Err(Error::SqlError(RusqliteError::SqliteFailure(FfiError { code: FfiErrorCode::CannotOpen, .. }, _)))
     ));
     assert!(matches!(
-        SQLiteSet::<String>::from_file(&file_path_2, false),
+        SQLiteSet::<String>::from_file(&file_path_2, false, false),
+        Err(Error::SqlError(RusqliteError::SqliteFailure(FfiError { code: FfiErrorCode::CannotOpen, .. }, _)))
+    ));
+
+    assert!(matches!(
+        SQLiteSet::<String>::from_file(&file_path_1, true, true),
+        Err(Error::SqlError(RusqliteError::SqliteFailure(FfiError { code: FfiErrorCode::CannotOpen, .. }, _)))
+    ));
+    assert!(matches!(
+        SQLiteSet::<String>::from_file(&file_path_2, true, true),
         Err(Error::SqlError(RusqliteError::SqliteFailure(FfiError { code: FfiErrorCode::CannotOpen, .. }, _)))
     ));
 
     {
-        let mut set = SQLiteSet::<String>::from_file(&file_path_1, true).unwrap();
+        let mut set = SQLiteSet::<String>::from_file(&file_path_1, false, true).unwrap();
         {
             let mut tx = set.transaction().unwrap();
             assert!(tx.insert("foo").unwrap());
@@ -864,7 +873,7 @@ fn test_sqlite_set_filebased() {
     }
 
     {
-        let mut set = SQLiteSet::<String>::from_file_nocase(&file_path_2, true).unwrap();
+        let mut set = SQLiteSet::<String>::from_file_nocase(&file_path_2, false, true).unwrap();
         {
             let mut tx = set.transaction().unwrap();
             assert!(tx.insert("bar").unwrap());
@@ -877,27 +886,40 @@ fn test_sqlite_set_filebased() {
     assert!(fs::exists(&file_path_2).unwrap());
 
     {
-        let set = SQLiteSet::<String>::from_file(&file_path_1, false).unwrap();
+        let mut set = SQLiteSet::<String>::from_file(&file_path_1, true, false).unwrap();
+        assert!(set.contains("foo").unwrap());
+        assert!(matches!(set.insert("xyz"), Err(Error::SqlError(RusqliteError::SqliteFailure(FfiError { code: FfiErrorCode::ReadOnly, .. }, _)))));
+    }
+
+    {
+        let mut set = SQLiteSet::<String>::from_file(&file_path_1, false, false).unwrap();
+        assert!(set.insert("xyz").unwrap());
+    }
+
+    {
+        let set = SQLiteSet::<String>::from_file(&file_path_1, false, false).unwrap();
         assert!(set.contains("foo").unwrap());
         assert!(!set.contains("FOO").unwrap());
         assert!(!set.contains("bar").unwrap());
         assert!(set.contains("baz").unwrap());
         assert!(set.contains("BAZ").unwrap());
         assert!(!set.contains("qux").unwrap());
+        assert!(set.contains("xyz").unwrap());
     }
 
     {
-        let set = SQLiteSet::<String>::from_file_nocase(&file_path_2, false).unwrap();
+        let set = SQLiteSet::<String>::from_file_nocase(&file_path_2, false, false).unwrap();
         assert!(!set.contains("foo").unwrap());
         assert!(set.contains("bar").unwrap());
         assert!(set.contains("BAR").unwrap());
         assert!(!set.contains("baz").unwrap());
         assert!(set.contains("qux").unwrap());
         assert!(set.contains("QUX").unwrap());
+        assert!(!set.contains("xyz").unwrap());
     }
 
-    assert!(matches!(SQLiteSet::<String>::from_file_nocase(&file_path_1, false), Err(Error::InvalidSchema)));
-    assert!(matches!(SQLiteSet::<String>::from_file(&file_path_2, false), Err(Error::InvalidSchema)));
+    assert!(matches!(SQLiteSet::<String>::from_file_nocase(&file_path_1, false, false), Err(Error::InvalidSchema)));
+    assert!(matches!(SQLiteSet::<String>::from_file(&file_path_2, false, false), Err(Error::InvalidSchema)));
 }
 
 #[cfg(feature = "checked")]
@@ -914,7 +936,7 @@ fn test_sqlite_set_filebased_integrity() {
     assert!(!fs::exists(&file_path).unwrap());
 
     {
-        let mut set = SQLiteSet::<String>::from_file(&file_path, true).unwrap();
+        let mut set = SQLiteSet::<String>::from_file(&file_path, false, true).unwrap();
         {
             let mut tx = set.transaction().unwrap();
             assert!(tx.insert("foo").unwrap());
@@ -938,7 +960,42 @@ fn test_sqlite_set_filebased_integrity() {
         file.sync_all().unwrap();
     }
 
-    assert!(matches!(SQLiteSet::<String>::from_file(&file_path, false), Err(Error::IntegrityCheck)));
+    assert!(matches!(SQLiteSet::<String>::from_file(&file_path, false, false), Err(Error::IntegrityCheck)));
+}
+
+#[cfg(feature = "backup")]
+#[test]
+fn test_sqlite_set_filebased_tofile() {
+    let temp_dir = tempdir_in(env!["CARGO_TARGET_TMPDIR"]).unwrap();
+    let file_path = temp_dir.path().join("sqlite_set.db");
+
+    assert!(!fs::exists(&file_path).unwrap());
+
+    {
+        let mut set = SQLiteSet::<String>::new().unwrap();
+        {
+            let mut tx = set.transaction().unwrap();
+            assert!(tx.insert("foo").unwrap());
+            assert!(tx.insert("FOO").unwrap());
+            assert!(tx.insert("bar").unwrap());
+            assert!(tx.insert("BAR").unwrap());
+            assert!(tx.insert("baz").unwrap());
+            assert!(tx.insert("BAZ").unwrap());
+        }
+        set.to_file(&file_path).unwrap();
+    }
+
+    {
+        let set = SQLiteSet::<String>::from_file(&file_path, false, false).unwrap();
+        assert!(set.contains("foo").unwrap());
+        assert!(set.contains("FOO").unwrap());
+        assert!(set.contains("bar").unwrap());
+        assert!(set.contains("BAR").unwrap());
+        assert!(set.contains("baz").unwrap());
+        assert!(set.contains("BAZ").unwrap());
+        assert!(!set.contains("qux").unwrap());
+        assert!(!set.contains("xyz").unwrap());
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -964,19 +1021,19 @@ fn test_sqlite_set_multithreading() {
     const COUNT: u64 = 125_000u64;
     const THREADS: usize = 8usize;
 
-    let maps: [SQLiteSet<String>; THREADS] = array::from_fn(|_| SQLiteSet::new().unwrap());
+    let sets: [SQLiteSet<String>; THREADS] = array::from_fn(|_| SQLiteSet::new().unwrap());
     let barrier = Arc::new(Barrier::new(THREADS));
-    let mut handles: Vec<_> = maps
+    let mut handles: Vec<_> = sets
         .into_iter()
-        .map(|map| {
+        .map(|set| {
             let barrier = Arc::clone(&barrier);
-            thread::spawn(move || sqlite_set_thread_worker::<COUNT>(map, &barrier))
+            thread::spawn(move || sqlite_set_thread_worker::<COUNT>(set, &barrier))
         })
         .collect();
 
     for handle in handles.drain(..) {
-        let thread_map = handle.join().unwrap();
-        assert_eq!(thread_map.len().unwrap().to_u64(), COUNT);
+        let thread_set = handle.join().unwrap();
+        assert_eq!(thread_set.len().unwrap().to_u64(), COUNT);
     }
 }
 
@@ -1074,7 +1131,7 @@ fn test_sqlite_set_to_destruction() {
                     sqlite_containers::rusqlite::ErrorCode::DiskFull => break,
                     _ => panic!("Unexpected SQLite failure has been encountered! [{sqlite_error}]"),
                 },
-                _ => panic!("Unexpected SQLiteMap has been encountered!"),
+                _ => panic!("Unexpected SQLiteSet error has been encountered!"),
             },
             Ok(success) => assert!(success),
         }

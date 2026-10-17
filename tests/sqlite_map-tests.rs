@@ -341,22 +341,22 @@ fn test_sqlite_map_i64_string_transacted() {
 
 #[test]
 fn test_sqlite_map_i64_string_stresstest() {
-    let mut set = SQLiteMap::<i64, String>::new().unwrap();
+    let mut map = SQLiteMap::<i64, String>::new().unwrap();
     let mut hex = HexEncoder::default();
 
     {
-        let mut tx = set.transaction().unwrap();
+        let mut tx = map.transaction().unwrap();
         for i in 0u64..MAX_ITEMS {
             let (key, value) = (mix64(i) as i64, hex.encode(mix64(!i)));
             assert!(tx.insert(&key, value).unwrap());
         }
     }
 
-    assert!(!set.is_empty().unwrap());
-    assert_eq!(set.len().unwrap().to_u64(), MAX_ITEMS);
+    assert!(!map.is_empty().unwrap());
+    assert_eq!(map.len().unwrap().to_u64(), MAX_ITEMS);
 
     {
-        let tx = set.transaction().unwrap();
+        let tx = map.transaction().unwrap();
         for i in 0u64..MAX_ITEMS {
             let (key, value) = (mix64(i) as i64, hex.encode(mix64(!i)));
             assert_eq!(tx.get(&key).unwrap().unwrap(), value);
@@ -364,26 +364,26 @@ fn test_sqlite_map_i64_string_stresstest() {
     }
 
     {
-        let mut tx = set.transaction().unwrap();
+        let mut tx = map.transaction().unwrap();
         for i in 0u64..MAX_ITEMS {
             assert!(tx.remove(&(mix64(i) as i64)).unwrap());
         }
     }
 
-    assert!(set.is_empty().unwrap());
-    assert_eq!(set.len().unwrap().to_u64(), 0);
+    assert!(map.is_empty().unwrap());
+    assert_eq!(map.len().unwrap().to_u64(), 0);
 }
 
 #[test]
 fn test_sqlite_map_i64_string_randomized() {
     const COUNT: u64 = 125_000u64;
-    let mut set = SQLiteMap::<i64, String>::new().unwrap();
+    let mut map = SQLiteMap::<i64, String>::new().unwrap();
     let mut hex = HexEncoder::default();
 
     for seed in [0x9DDC5F3146219B97u64, 0x79B9E4DC002B32D6u64] {
         for b in [true, false] {
             let mut xoshiro = Xoshiro256PlusPlus::seed_from_u64(seed);
-            let mut tx = set.transaction().unwrap();
+            let mut tx = map.transaction().unwrap();
             for _i in 0u64..COUNT {
                 assert_eq!(tx.insert(&(xoshiro.next_u64() as i64), hex.encode(xoshiro.next_u64())).unwrap(), b);
             }
@@ -392,7 +392,7 @@ fn test_sqlite_map_i64_string_randomized() {
 
     for (seed, b) in [(0x9DDC5F3146219B97u64, true), (0x79B9E4DC002B32D6u64, true), (0x2F381F8B2F0E517Au64, false)] {
         let mut xoshiro = Xoshiro256PlusPlus::seed_from_u64(seed);
-        let tx = set.transaction().unwrap();
+        let tx = map.transaction().unwrap();
         for _i in 0u64..COUNT {
             if b {
                 assert_eq!(tx.get(&(xoshiro.next_u64() as i64)).unwrap().unwrap(), hex.encode(xoshiro.next_u64()));
@@ -778,22 +778,22 @@ fn test_sqlite_map_blob_string_transacted() {
 
 #[test]
 fn test_sqlite_map_blob_string_stresstest() {
-    let mut set = SQLiteMap::<Blob, String>::new().unwrap();
+    let mut map = SQLiteMap::<Blob, String>::new().unwrap();
     let (mut hex_1, mut hex_2) = (HexEncoder::default(), HexEncoder::default());
 
     {
-        let mut tx = set.transaction().unwrap();
+        let mut tx = map.transaction().unwrap();
         for i in 0u64..MAX_ITEMS {
             let (key, value) = (hex_1.encode_raw(mix64(i)), hex_2.encode(mix64(!i)));
             assert!(tx.insert(key, value).unwrap());
         }
     }
 
-    assert!(!set.is_empty().unwrap());
-    assert_eq!(set.len().unwrap().to_u64(), MAX_ITEMS);
+    assert!(!map.is_empty().unwrap());
+    assert_eq!(map.len().unwrap().to_u64(), MAX_ITEMS);
 
     {
-        let tx = set.transaction().unwrap();
+        let tx = map.transaction().unwrap();
         for i in 0u64..MAX_ITEMS {
             let (key, value) = (hex_1.encode_raw(mix64(i)), hex_2.encode(mix64(!i)));
             assert_eq!(tx.get(key).unwrap().unwrap(), value);
@@ -801,26 +801,26 @@ fn test_sqlite_map_blob_string_stresstest() {
     }
 
     {
-        let mut tx = set.transaction().unwrap();
+        let mut tx = map.transaction().unwrap();
         for i in 0u64..MAX_ITEMS {
             assert!(tx.remove(hex_1.encode_raw(mix64(i))).unwrap());
         }
     }
 
-    assert!(set.is_empty().unwrap());
-    assert_eq!(set.len().unwrap().to_u64(), 0);
+    assert!(map.is_empty().unwrap());
+    assert_eq!(map.len().unwrap().to_u64(), 0);
 }
 
 #[test]
 fn test_sqlite_map_blob_string_randomized() {
     const COUNT: u64 = 125_000u64;
-    let mut set = SQLiteMap::<Blob, String>::new().unwrap();
+    let mut map = SQLiteMap::<Blob, String>::new().unwrap();
     let (mut temp, mut hex) = ([0u8; 16usize], HexEncoder::default());
 
     for seed in [0x9DDC5F3146219B97u64, 0x79B9E4DC002B32D6u64] {
         for b in [true, false] {
             let mut xoshiro = Xoshiro256PlusPlus::seed_from_u64(seed);
-            let mut tx = set.transaction().unwrap();
+            let mut tx = map.transaction().unwrap();
             for _i in 0u64..COUNT {
                 xoshiro.fill_bytes(&mut temp);
                 assert_eq!(tx.insert(temp.as_slice(), hex.encode(xoshiro.next_u64())).unwrap(), b);
@@ -830,7 +830,7 @@ fn test_sqlite_map_blob_string_randomized() {
 
     for (seed, b) in [(0x9DDC5F3146219B97u64, true), (0x79B9E4DC002B32D6u64, true), (0x2F381F8B2F0E517Au64, false)] {
         let mut xoshiro = Xoshiro256PlusPlus::seed_from_u64(seed);
-        let tx = set.transaction().unwrap();
+        let tx = map.transaction().unwrap();
         for _i in 0u64..COUNT {
             xoshiro.fill_bytes(&mut temp);
             if b {
@@ -1351,22 +1351,22 @@ fn test_sqlite_map_string_string_ignorecase() {
 
 #[test]
 fn test_sqlite_map_string_string_stresstest() {
-    let mut set = SQLiteMap::<String, String>::new().unwrap();
+    let mut map = SQLiteMap::<String, String>::new().unwrap();
     let (mut hex_1, mut hex_2) = (HexEncoder::default(), HexEncoder::default());
 
     {
-        let mut tx = set.transaction().unwrap();
+        let mut tx = map.transaction().unwrap();
         for i in 0u64..MAX_ITEMS {
             let (key, value) = (hex_1.encode(mix64(i)), hex_2.encode(mix64(!i)));
             assert!(tx.insert(key, value).unwrap());
         }
     }
 
-    assert!(!set.is_empty().unwrap());
-    assert_eq!(set.len().unwrap().to_u64(), MAX_ITEMS);
+    assert!(!map.is_empty().unwrap());
+    assert_eq!(map.len().unwrap().to_u64(), MAX_ITEMS);
 
     {
-        let tx = set.transaction().unwrap();
+        let tx = map.transaction().unwrap();
         for i in 0u64..MAX_ITEMS {
             let (key, value) = (hex_1.encode(mix64(i)), hex_2.encode(mix64(!i)));
             assert_eq!(tx.get(key).unwrap().unwrap(), value);
@@ -1374,26 +1374,26 @@ fn test_sqlite_map_string_string_stresstest() {
     }
 
     {
-        let mut tx = set.transaction().unwrap();
+        let mut tx = map.transaction().unwrap();
         for i in 0u64..MAX_ITEMS {
             assert!(tx.remove(hex_1.encode(mix64(i))).unwrap());
         }
     }
 
-    assert!(set.is_empty().unwrap());
-    assert_eq!(set.len().unwrap().to_u64(), 0);
+    assert!(map.is_empty().unwrap());
+    assert_eq!(map.len().unwrap().to_u64(), 0);
 }
 
 #[test]
 fn test_sqlite_map_string_string_randomized() {
     const COUNT: u64 = 125_000u64;
-    let mut set = SQLiteMap::<String, String>::new().unwrap();
+    let mut map = SQLiteMap::<String, String>::new().unwrap();
     let (mut hex_1, mut hex_2) = (HexEncoder::default(), HexEncoder::default());
 
     for seed in [0x9DDC5F3146219B97u64, 0x79B9E4DC002B32D6u64] {
         for b in [true, false] {
             let mut xoshiro = Xoshiro256PlusPlus::seed_from_u64(seed);
-            let mut tx = set.transaction().unwrap();
+            let mut tx = map.transaction().unwrap();
             for _i in 0u64..COUNT {
                 assert_eq!(tx.insert(hex_1.encode(xoshiro.next_u64()), hex_2.encode(xoshiro.next_u64())).unwrap(), b);
             }
@@ -1402,7 +1402,7 @@ fn test_sqlite_map_string_string_randomized() {
 
     for (seed, b) in [(0x9DDC5F3146219B97u64, true), (0x79B9E4DC002B32D6u64, true), (0x2F381F8B2F0E517Au64, false)] {
         let mut xoshiro = Xoshiro256PlusPlus::seed_from_u64(seed);
-        let tx = set.transaction().unwrap();
+        let tx = map.transaction().unwrap();
         for _i in 0u64..COUNT {
             if b {
                 assert_eq!(tx.get(hex_1.encode(xoshiro.next_u64())).unwrap().unwrap(), hex_2.encode(xoshiro.next_u64()));
@@ -1922,22 +1922,22 @@ fn test_sqlite_map_string_blob_ignorecase() {
 
 #[test]
 fn test_sqlite_map_string_blob_stresstest() {
-    let mut set = SQLiteMap::<String, Blob>::new().unwrap();
+    let mut map = SQLiteMap::<String, Blob>::new().unwrap();
     let (mut hex_1, mut hex_2) = (HexEncoder::default(), HexEncoder::default());
 
     {
-        let mut tx = set.transaction().unwrap();
+        let mut tx = map.transaction().unwrap();
         for i in 0u64..MAX_ITEMS {
             let (key, value) = (hex_1.encode(mix64(i)), hex_2.encode_raw(mix64(!i)));
             assert!(tx.insert(key, value).unwrap());
         }
     }
 
-    assert!(!set.is_empty().unwrap());
-    assert_eq!(set.len().unwrap().to_u64(), MAX_ITEMS);
+    assert!(!map.is_empty().unwrap());
+    assert_eq!(map.len().unwrap().to_u64(), MAX_ITEMS);
 
     {
-        let tx = set.transaction().unwrap();
+        let tx = map.transaction().unwrap();
         for i in 0u64..MAX_ITEMS {
             let (key, value) = (hex_1.encode(mix64(i)), hex_2.encode_raw(mix64(!i)));
             assert_eq!(tx.get(key).unwrap().unwrap(), value);
@@ -1945,26 +1945,26 @@ fn test_sqlite_map_string_blob_stresstest() {
     }
 
     {
-        let mut tx = set.transaction().unwrap();
+        let mut tx = map.transaction().unwrap();
         for i in 0u64..MAX_ITEMS {
             assert!(tx.remove(hex_1.encode(mix64(i))).unwrap());
         }
     }
 
-    assert!(set.is_empty().unwrap());
-    assert_eq!(set.len().unwrap().to_u64(), 0);
+    assert!(map.is_empty().unwrap());
+    assert_eq!(map.len().unwrap().to_u64(), 0);
 }
 
 #[test]
 fn test_sqlite_map_string_blob_randomized() {
     const COUNT: u64 = 125_000u64;
-    let mut set = SQLiteMap::<String, Blob>::new().unwrap();
+    let mut map = SQLiteMap::<String, Blob>::new().unwrap();
     let (mut hex, mut temp) = (HexEncoder::default(), [0u8; 16usize]);
 
     for seed in [0x9DDC5F3146219B97u64, 0x79B9E4DC002B32D6u64] {
         for b in [true, false] {
             let mut xoshiro = Xoshiro256PlusPlus::seed_from_u64(seed);
-            let mut tx = set.transaction().unwrap();
+            let mut tx = map.transaction().unwrap();
             for _i in 0u64..COUNT {
                 xoshiro.fill_bytes(&mut temp);
                 assert_eq!(tx.insert(hex.encode(xoshiro.next_u64()), temp.as_slice()).unwrap(), b);
@@ -1974,7 +1974,7 @@ fn test_sqlite_map_string_blob_randomized() {
 
     for (seed, b) in [(0x9DDC5F3146219B97u64, true), (0x79B9E4DC002B32D6u64, true), (0x2F381F8B2F0E517Au64, false)] {
         let mut xoshiro = Xoshiro256PlusPlus::seed_from_u64(seed);
-        let tx = set.transaction().unwrap();
+        let tx = map.transaction().unwrap();
         for _i in 0u64..COUNT {
             xoshiro.fill_bytes(&mut temp);
             if b {
@@ -2494,22 +2494,22 @@ fn test_sqlite_map_string_i64_ignorecase() {
 
 #[test]
 fn test_sqlite_map_string_i64_stresstest() {
-    let mut set = SQLiteMap::<String, i64>::new().unwrap();
+    let mut map = SQLiteMap::<String, i64>::new().unwrap();
     let mut hex = HexEncoder::default();
 
     {
-        let mut tx = set.transaction().unwrap();
+        let mut tx = map.transaction().unwrap();
         for i in 0u64..MAX_ITEMS {
             let (key, value) = (hex.encode(mix64(i)), mix64(!i) as i64);
             assert!(tx.insert(key, &value).unwrap());
         }
     }
 
-    assert!(!set.is_empty().unwrap());
-    assert_eq!(set.len().unwrap().to_u64(), MAX_ITEMS);
+    assert!(!map.is_empty().unwrap());
+    assert_eq!(map.len().unwrap().to_u64(), MAX_ITEMS);
 
     {
-        let tx = set.transaction().unwrap();
+        let tx = map.transaction().unwrap();
         for i in 0u64..MAX_ITEMS {
             let (key, value) = (hex.encode(mix64(i)), mix64(!i) as i64);
             assert_eq!(tx.get(key).unwrap().unwrap(), value);
@@ -2517,26 +2517,26 @@ fn test_sqlite_map_string_i64_stresstest() {
     }
 
     {
-        let mut tx = set.transaction().unwrap();
+        let mut tx = map.transaction().unwrap();
         for i in 0u64..MAX_ITEMS {
             assert!(tx.remove(hex.encode(mix64(i))).unwrap());
         }
     }
 
-    assert!(set.is_empty().unwrap());
-    assert_eq!(set.len().unwrap().to_u64(), 0);
+    assert!(map.is_empty().unwrap());
+    assert_eq!(map.len().unwrap().to_u64(), 0);
 }
 
 #[test]
 fn test_sqlite_map_string_i64_randomized() {
     const COUNT: u64 = 125_000u64;
-    let mut set = SQLiteMap::<String, i64>::new().unwrap();
+    let mut map = SQLiteMap::<String, i64>::new().unwrap();
     let mut hex = HexEncoder::default();
 
     for seed in [0x9DDC5F3146219B97u64, 0x79B9E4DC002B32D6u64] {
         for b in [true, false] {
             let mut xoshiro = Xoshiro256PlusPlus::seed_from_u64(seed);
-            let mut tx = set.transaction().unwrap();
+            let mut tx = map.transaction().unwrap();
             for _i in 0u64..COUNT {
                 assert_eq!(tx.insert(hex.encode(xoshiro.next_u64()), &(xoshiro.next_u64() as i64)).unwrap(), b);
             }
@@ -2545,7 +2545,7 @@ fn test_sqlite_map_string_i64_randomized() {
 
     for (seed, b) in [(0x9DDC5F3146219B97u64, true), (0x79B9E4DC002B32D6u64, true), (0x2F381F8B2F0E517Au64, false)] {
         let mut xoshiro = Xoshiro256PlusPlus::seed_from_u64(seed);
-        let tx = set.transaction().unwrap();
+        let tx = map.transaction().unwrap();
         for _i in 0u64..COUNT {
             if b {
                 assert_eq!(tx.get(hex.encode(xoshiro.next_u64())).unwrap().unwrap(), xoshiro.next_u64() as i64);
@@ -2557,7 +2557,7 @@ fn test_sqlite_map_string_i64_randomized() {
 }
 
 // ---------------------------------------------------------------------------
-// SQLiteSet File-based Test
+// SQLiteMap File-based Test
 // ---------------------------------------------------------------------------
 
 #[test]
@@ -2570,18 +2570,27 @@ fn test_sqlite_map_filebased() {
     assert!(!fs::exists(&file_path_2).unwrap());
 
     assert!(matches!(
-        SQLiteMap::<String, String>::from_file(&file_path_1, false),
+        SQLiteMap::<String, String>::from_file(&file_path_1, false, false),
         Err(Error::SqlError(RusqliteError::SqliteFailure(FfiError { code: FfiErrorCode::CannotOpen, .. }, _)))
     ));
     assert!(matches!(
-        SQLiteMap::<String, String>::from_file(&file_path_2, false),
+        SQLiteMap::<String, String>::from_file(&file_path_2, false, false),
+        Err(Error::SqlError(RusqliteError::SqliteFailure(FfiError { code: FfiErrorCode::CannotOpen, .. }, _)))
+    ));
+
+    assert!(matches!(
+        SQLiteMap::<String, String>::from_file(&file_path_1, true, true),
+        Err(Error::SqlError(RusqliteError::SqliteFailure(FfiError { code: FfiErrorCode::CannotOpen, .. }, _)))
+    ));
+    assert!(matches!(
+        SQLiteMap::<String, String>::from_file(&file_path_2, true, true),
         Err(Error::SqlError(RusqliteError::SqliteFailure(FfiError { code: FfiErrorCode::CannotOpen, .. }, _)))
     ));
 
     {
-        let mut set = SQLiteMap::<String, String>::from_file(&file_path_1, true).unwrap();
+        let mut map = SQLiteMap::<String, String>::from_file(&file_path_1, false, true).unwrap();
         {
-            let mut tx = set.transaction().unwrap();
+            let mut tx = map.transaction().unwrap();
             assert!(tx.insert("foo", "12345678").unwrap());
             assert!(tx.insert("baz", "87654321").unwrap());
             assert!(tx.insert("BAZ", "abcdefgh").unwrap());
@@ -2589,9 +2598,9 @@ fn test_sqlite_map_filebased() {
     }
 
     {
-        let mut set = SQLiteMap::<String, String>::from_file_nocase(&file_path_2, true).unwrap();
+        let mut map = SQLiteMap::<String, String>::from_file_nocase(&file_path_2, false, true).unwrap();
         {
-            let mut tx = set.transaction().unwrap();
+            let mut tx = map.transaction().unwrap();
             assert!(tx.insert("bar", "hgfedcba").unwrap());
             assert!(tx.insert("qux", "stuvwxyz").unwrap());
             assert!(!tx.insert("QUX", "zyxwvuts").unwrap());
@@ -2602,48 +2611,61 @@ fn test_sqlite_map_filebased() {
     assert!(fs::exists(&file_path_2).unwrap());
 
     {
-        let set = SQLiteMap::<String, String>::from_file(&file_path_1, false).unwrap();
-        assert!(set.get("foo").unwrap().is_some_and(|value| value.eq("12345678")));
-        assert!(set.get("FOO").unwrap().is_none());
-        assert!(set.get("bar").unwrap().is_none());
-        assert!(set.get("baz").unwrap().is_some_and(|value| value.eq("87654321")));
-        assert!(set.get("BAZ").unwrap().is_some_and(|value| value.eq("abcdefgh")));
-        assert!(set.get("qux").unwrap().is_none());
+        let mut map = SQLiteMap::<String, String>::from_file(&file_path_1, true, false).unwrap();
+        assert!(map.get("foo").unwrap().is_some_and(|value| value.eq("12345678")));
+        assert!(matches!(map.insert("xyz", "feedface"), Err(Error::SqlError(RusqliteError::SqliteFailure(FfiError { code: FfiErrorCode::ReadOnly, .. }, _)))));
     }
 
     {
-        let set = SQLiteMap::<String, String>::from_file_nocase(&file_path_2, false).unwrap();
-        assert!(set.get("foo").unwrap().is_none());
-        assert!(set.get("bar").unwrap().is_some_and(|value| value.eq("hgfedcba")));
-        assert!(set.get("BAR").unwrap().is_some_and(|value| value.eq("hgfedcba")));
-        assert!(set.get("baz").unwrap().is_none());
-        assert!(set.get("qux").unwrap().is_some_and(|value| value.eq("stuvwxyz")));
-        assert!(set.get("QUX").unwrap().is_some_and(|value| value.eq("stuvwxyz")));
+        let mut map = SQLiteMap::<String, String>::from_file(&file_path_1, false, false).unwrap();
+        assert!(map.insert("xyz", "feedface").unwrap());
     }
 
-    assert!(matches!(SQLiteMap::<String, String>::from_file_nocase(&file_path_1, false), Err(Error::InvalidSchema)));
-    assert!(matches!(SQLiteMap::<String, String>::from_file(&file_path_2, false), Err(Error::InvalidSchema)));
+    {
+        let map = SQLiteMap::<String, String>::from_file(&file_path_1, false, false).unwrap();
+        assert!(map.get("foo").unwrap().is_some_and(|value| value.eq("12345678")));
+        assert!(map.get("FOO").unwrap().is_none());
+        assert!(map.get("bar").unwrap().is_none());
+        assert!(map.get("baz").unwrap().is_some_and(|value| value.eq("87654321")));
+        assert!(map.get("BAZ").unwrap().is_some_and(|value| value.eq("abcdefgh")));
+        assert!(map.get("qux").unwrap().is_none());
+        assert!(map.get("xyz").unwrap().is_some_and(|value| value.eq("feedface")));
+    }
+
+    {
+        let map = SQLiteMap::<String, String>::from_file_nocase(&file_path_2, false, false).unwrap();
+        assert!(map.get("foo").unwrap().is_none());
+        assert!(map.get("bar").unwrap().is_some_and(|value| value.eq("hgfedcba")));
+        assert!(map.get("BAR").unwrap().is_some_and(|value| value.eq("hgfedcba")));
+        assert!(map.get("baz").unwrap().is_none());
+        assert!(map.get("qux").unwrap().is_some_and(|value| value.eq("stuvwxyz")));
+        assert!(map.get("QUX").unwrap().is_some_and(|value| value.eq("stuvwxyz")));
+        assert!(map.get("xyz").unwrap().is_none());
+    }
+
+    assert!(matches!(SQLiteMap::<String, String>::from_file_nocase(&file_path_1, false, false), Err(Error::InvalidSchema)));
+    assert!(matches!(SQLiteMap::<String, String>::from_file(&file_path_2, false, false), Err(Error::InvalidSchema)));
 }
 
 #[cfg(feature = "checked")]
 #[test]
-fn test_sqlite_set_filebased_integrity() {
+fn test_sqlite_map_filebased_integrity() {
     use std::{
         fs::OpenOptions,
         io::{Read, Seek, SeekFrom, Write},
     };
 
     let temp_dir = tempdir_in(env!["CARGO_TARGET_TMPDIR"]).unwrap();
-    let file_path = temp_dir.path().join("sqlite_set.db");
+    let file_path = temp_dir.path().join("sqlite_map.db");
 
     assert!(!fs::exists(&file_path).unwrap());
 
     {
-        let mut set = SQLiteMap::<String, String>::from_file(&file_path, true).unwrap();
+        let mut map = SQLiteMap::<String, String>::from_file(&file_path, false, true).unwrap();
         {
-            let mut tx = set.transaction().unwrap();
+            let mut tx = map.transaction().unwrap();
             assert!(tx.insert("foo", "12345678").unwrap());
-            assert!(tx.insert("Foo", "12345678").unwrap());
+            assert!(tx.insert("FOO", "87654321").unwrap());
             assert!(tx.insert("bar", "abcdefgh").unwrap());
             assert!(tx.insert("BAR", "hgfedcba").unwrap());
             assert!(tx.insert("baz", "stuvwxyz").unwrap());
@@ -2663,7 +2685,42 @@ fn test_sqlite_set_filebased_integrity() {
         file.sync_all().unwrap();
     }
 
-    assert!(matches!(SQLiteMap::<String, String>::from_file(&file_path, false), Err(Error::IntegrityCheck)));
+    assert!(matches!(SQLiteMap::<String, String>::from_file(&file_path, false, false), Err(Error::IntegrityCheck)));
+}
+
+#[cfg(feature = "backup")]
+#[test]
+fn test_sqlite_map_filebased_tofile() {
+    let temp_dir = tempdir_in(env!["CARGO_TARGET_TMPDIR"]).unwrap();
+    let file_path = temp_dir.path().join("sqlite_map.db");
+
+    assert!(!fs::exists(&file_path).unwrap());
+
+    {
+        let mut map = SQLiteMap::<String, String>::new().unwrap();
+        {
+            let mut tx = map.transaction().unwrap();
+            assert!(tx.insert("foo", "12345678").unwrap());
+            assert!(tx.insert("FOO", "87654321").unwrap());
+            assert!(tx.insert("bar", "abcdefgh").unwrap());
+            assert!(tx.insert("BAR", "hgfedcba").unwrap());
+            assert!(tx.insert("baz", "stuvwxyz").unwrap());
+            assert!(tx.insert("BAZ", "zyxwvuts").unwrap());
+        }
+        map.to_file(&file_path).unwrap();
+    }
+
+    {
+        let map = SQLiteMap::<String, String>::from_file(&file_path, false, false).unwrap();
+        assert!(map.get("foo").unwrap().is_some_and(|value| value.eq("12345678")));
+        assert!(map.get("FOO").unwrap().is_some_and(|value| value.eq("87654321")));
+        assert!(map.get("bar").unwrap().is_some_and(|value| value.eq("abcdefgh")));
+        assert!(map.get("BAR").unwrap().is_some_and(|value| value.eq("hgfedcba")));
+        assert!(map.get("baz").unwrap().is_some_and(|value| value.eq("stuvwxyz")));
+        assert!(map.get("BAZ").unwrap().is_some_and(|value| value.eq("zyxwvuts")));
+        assert!(map.get("qux").unwrap().is_none());
+        assert!(map.get("xyz").unwrap().is_none());
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -2927,7 +2984,7 @@ cfg_if! {
 #[ignore]
 #[test]
 fn test_sqlite_map_to_destruction() {
-    let mut set = SQLiteMap::<String, String>::new().unwrap();
+    let mut map = SQLiteMap::<String, String>::new().unwrap();
     let (channel_tx, channel_rx) = sync_channel::<(String, String)>(1024usize);
 
     let _handle = thread::spawn(move || {
@@ -2941,7 +2998,7 @@ fn test_sqlite_map_to_destruction() {
         }
     });
 
-    let mut tx = set.transaction().unwrap();
+    let mut tx = map.transaction().unwrap();
 
     loop {
         let (key, value) = channel_rx.recv().expect("Out of items!");
@@ -2952,7 +3009,7 @@ fn test_sqlite_map_to_destruction() {
                     sqlite_containers::rusqlite::ErrorCode::DiskFull => break,
                     _ => panic!("Unexpected SQLite failure has been encountered! [{sqlite_error}]"),
                 },
-                _ => panic!("Unexpected SQLiteMap has been encountered!"),
+                _ => panic!("Unexpected SQLiteMap error has been encountered!"),
             },
             Ok(success) => assert!(success),
         }
