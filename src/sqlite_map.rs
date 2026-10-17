@@ -221,7 +221,7 @@ where
             Connection::open_in_memory()?
         })?;
 
-        #[cfg(not(feature = "no_check"))]
+        #[cfg(feature = "checked")]
         if path_option.is_some() {
             crate::common::integrity_check(&connection)?;
         }

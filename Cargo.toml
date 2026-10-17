@@ -10,11 +10,11 @@ repository = "https://github.com/danieltrick/sqlite-containers/"
 readme = "README-package.md"
 
 [features]
-default = ["bundled"]
+default = ["bundled", "checked"]
 bundled = ["rusqlite/bundled"]
+checked = []
 backup = ["rusqlite/backup"]
 hooks = ["with_rowid", "rusqlite/hooks"]
-no_check = []
 with_rowid = []
 
 [dependencies]

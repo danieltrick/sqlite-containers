@@ -4,7 +4,7 @@
 
 use crate::{
     rusqlite::{
-        Connection, Error as RusqliteError, OpenFlags,
+        Error as RusqliteError, OpenFlags,
         ffi::{Error as FfiError, ErrorCode as FfiErrorCode},
         types::{FromSql, ToSql, Type as RusqliteType},
         version_number,
@@ -16,6 +16,9 @@ use std::{
     fmt::{Debug, Display},
     sync::LazyLock,
 };
+
+#[cfg(any(feature = "backup", feature = "checked"))]
+use crate::rusqlite::Connection;
 
 // ---------------------------------------------------------------------------
 // Flags
@@ -214,7 +217,7 @@ impl SizeExt for Size {
 ///
 /// Container operations are generally infallible. However, because our containers are backed by SQLite databases, they may still fail due to an internal SQLite error. Such errors can indicate a bug, but may also occur in out-of-memory situations.
 #[allow(dead_code)]
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Error {
     /// Indicates that the operation failed because of an SQLite error; wraps the underlying [`RusqliteError`](crate::rusqlite::Error).
     SqlError(RusqliteError),
@@ -292,15 +295,22 @@ pub(crate) fn verify_schema(sql_create: &str, sql_schema: &str) -> bool {
     trim_schema_str(sql_create).eq(trim_schema_str(sql_schema))
 }
 
-#[cfg(not(feature = "no_check"))]
-#[inline(always)]
-pub(crate) fn integrity_check(connection: &Connection) -> Result<(), Error> {
-    use rusqlite::OptionalExtension;
+cfg_if! {
+    if #[cfg(feature = "checked")] {
+        #[inline(always)]
+        fn map_check_result(check_result: Option<String>) -> Result<(), Error> {
+            match check_result {
+                Some(value) if value.eq_ignore_ascii_case("ok") => Ok(()),
+                _ => Err(Error::IntegrityCheck),
+            }
+        }
 
-    const SQL_CHECK_DATA: &str = "PRAGMA integrity_check;";
-    match connection.query_row(SQL_CHECK_DATA, [], |row| row.get::<_, String>(0)).optional()? {
-        Some(value) if value.eq_ignore_ascii_case("ok") => Ok(()),
-        _ => Err(Error::IntegrityCheck),
+        #[inline(always)]
+        pub(crate) fn integrity_check(connection: &Connection) -> Result<(), Error> {
+            use crate::rusqlite::OptionalExtension;
+            const SQL_CHECK_DATA: &str = "PRAGMA integrity_check;";
+            map_check_result(connection.query_row(SQL_CHECK_DATA, [], |row| row.get::<_, String>(0)).optional()?)
+        }
     }
 }
 
@@ -406,6 +416,13 @@ mod test {
 
         let error_3 = check_constraint_violation(RusqliteError::SqliteFailure(FfiError::new(SQLITE_NOMEM), None));
         assert!(matches!(error_3, Err(Error::SqlError(..))));
+    }
+
+    #[test]
+    fn test_integrity_check_result() {
+        assert_eq!(map_check_result(None), Err(Error::IntegrityCheck));
+        assert_eq!(map_check_result(Some("xy".into())), Err(Error::IntegrityCheck));
+        assert_eq!(map_check_result(Some("ok".into())), Ok(()));
     }
 
     #[test]

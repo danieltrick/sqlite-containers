@@ -2625,7 +2625,7 @@ fn test_sqlite_map_filebased() {
     assert!(matches!(SQLiteMap::<String, String>::from_file(&file_path_2, false), Err(Error::InvalidSchema)));
 }
 
-#[cfg(not(feature = "no_check"))]
+#[cfg(feature = "checked")]
 #[test]
 fn test_sqlite_set_filebased_integrity() {
     use std::{

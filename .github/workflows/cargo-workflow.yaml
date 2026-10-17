@@ -149,7 +149,7 @@ jobs:
       - name: Upload to Codecov
         uses: codecov/codecov-action@v7
         with:
-          files: target/codecov-output-1.info,target/codecov-output-2.info
+          files: target/codecov-output.info
           verbose: true
           fail_ci_if_error: true
           token: ${{ secrets.CODECOV_TOKEN }}
