@@ -4,7 +4,7 @@
 
 use crate::{
     CharType, Error, Size, SizeExt, TryClone, Type,
-    common::{OPEN_FLAGS, SQL_TYPE_TEXT, SQL_TYPES, SqlType, check_constraint_violation, verify_schema},
+    common::{OPEN_FLAGS, OPEN_FLAGS_NOCREATE, SQL_TYPE_TEXT, SQL_TYPES, SqlType, check_constraint_violation, verify_schema},
     rusqlite::{Connection, OptionalExtension, ToSql, Transaction, params},
 };
 use cfg_if::cfg_if;
@@ -165,7 +165,7 @@ where
     #[allow(clippy::let_unit_value)]
     #[inline]
     pub fn new() -> Result<Self, Error> {
-        Self::from_connection(Self::create_connection::<false, &Path>(None)?)
+        Self::from_connection(Self::create_connection::<false, &Path>(None, false)?)
     }
 
     /// Creates a new, empty hash map with case-insensitive keys, backed by an *in-memory* SQLite database.
@@ -177,46 +177,46 @@ where
     where
         K: CharType,
     {
-        Self::from_connection(Self::create_connection::<true, &Path>(None)?)
+        Self::from_connection(Self::create_connection::<true, &Path>(None, false)?)
     }
 
     /// Creates a new or re-opens an existing hash map with case-sensitive keys, backed by a *file-based* SQLite database.
     ///
-    /// The database file is created, if it does *not* exist yet.
+    /// If `can_create` is `true` and the database file does *not* exist yet, then a new empty one is created.
     ///
     /// Fails with [`Error::InvalidSchema`], if the schema of the existing database file does **not** match the expected schema.
     #[allow(clippy::let_unit_value)]
     #[inline]
-    pub fn with_file<P>(path: P) -> Result<Self, Error>
+    pub fn from_file<P>(path: P, can_create: bool) -> Result<Self, Error>
     where
         P: AsRef<Path>,
     {
-        Self::from_connection(Self::create_connection::<false, _>(Some(path))?)
+        Self::from_connection(Self::create_connection::<false, _>(Some(path), can_create)?)
     }
 
     /// Creates a new or re-opens an existing hash map with case-insensitive keys, backed by a *file-based* SQLite database.
     ///
-    /// The database file is created, if it does *not* exist yet.
+    /// If `can_create` is `true` and the database file does *not* exist yet, then a new empty one is created.
     ///
     /// Fails with [`Error::InvalidSchema`], if the schema of the existing database file does **not** match the expected schema.
     ///
     /// Only ASCII characters are case folded. SQLite does **not** attempt to do full UTF case folding!
     #[inline]
-    pub fn with_file_nocase<P>(path: P) -> Result<Self, Error>
+    pub fn from_file_nocase<P>(path: P, can_create: bool) -> Result<Self, Error>
     where
         K: CharType,
         P: AsRef<Path>,
     {
-        Self::from_connection(Self::create_connection::<true, _>(Some(path))?)
+        Self::from_connection(Self::create_connection::<true, _>(Some(path), can_create)?)
     }
 
     #[inline]
-    fn create_connection<const NO_CASE: bool, P>(path_option: Option<P>) -> Result<Connection, Error>
+    fn create_connection<const NO_CASE: bool, P>(path_option: Option<P>, can_create: bool) -> Result<Connection, Error>
     where
         P: AsRef<Path>,
     {
         let connection = Self::initialize_connection(if let Some(path) = path_option.as_ref() {
-            Connection::open_with_flags(path, *OPEN_FLAGS)?
+            Connection::open_with_flags(path, if can_create { *OPEN_FLAGS } else { *OPEN_FLAGS_NOCREATE })?
         } else {
             Connection::open_in_memory()?
         })?;

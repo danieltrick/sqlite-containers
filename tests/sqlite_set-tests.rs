@@ -16,7 +16,13 @@ use rand_xoshiro::{
     Xoshiro256PlusPlus,
     rand_core::{Rng, SeedableRng},
 };
-use sqlite_containers::{Blob, Error, SQLiteSet, SizeExt, TryClone};
+use sqlite_containers::{
+    Blob, Error, SQLiteSet, SizeExt, TryClone,
+    rusqlite::{
+        Error as RusqliteError,
+        ffi::{Error as FfiError, ErrorCode as FfiErrorCode},
+    },
+};
 use std::{
     array,
     collections::HashSet,
@@ -838,8 +844,17 @@ fn test_sqlite_set_filebased() {
     assert!(!fs::exists(&file_path_1).unwrap());
     assert!(!fs::exists(&file_path_2).unwrap());
 
+    assert!(matches!(
+        SQLiteSet::<String>::from_file(&file_path_1, false),
+        Err(Error::SqlError(RusqliteError::SqliteFailure(FfiError { code: FfiErrorCode::CannotOpen, .. }, _)))
+    ));
+    assert!(matches!(
+        SQLiteSet::<String>::from_file(&file_path_2, false),
+        Err(Error::SqlError(RusqliteError::SqliteFailure(FfiError { code: FfiErrorCode::CannotOpen, .. }, _)))
+    ));
+
     {
-        let mut set = SQLiteSet::<String>::with_file(&file_path_1).unwrap();
+        let mut set = SQLiteSet::<String>::from_file(&file_path_1, true).unwrap();
         {
             let mut tx = set.transaction().unwrap();
             assert!(tx.insert("foo").unwrap());
@@ -849,7 +864,7 @@ fn test_sqlite_set_filebased() {
     }
 
     {
-        let mut set = SQLiteSet::<String>::with_file_nocase(&file_path_2).unwrap();
+        let mut set = SQLiteSet::<String>::from_file_nocase(&file_path_2, true).unwrap();
         {
             let mut tx = set.transaction().unwrap();
             assert!(tx.insert("bar").unwrap());
@@ -862,7 +877,7 @@ fn test_sqlite_set_filebased() {
     assert!(fs::exists(&file_path_2).unwrap());
 
     {
-        let set = SQLiteSet::<String>::with_file(&file_path_1).unwrap();
+        let set = SQLiteSet::<String>::from_file(&file_path_1, false).unwrap();
         assert!(set.contains("foo").unwrap());
         assert!(!set.contains("FOO").unwrap());
         assert!(!set.contains("bar").unwrap());
@@ -872,7 +887,7 @@ fn test_sqlite_set_filebased() {
     }
 
     {
-        let set = SQLiteSet::<String>::with_file_nocase(&file_path_2).unwrap();
+        let set = SQLiteSet::<String>::from_file_nocase(&file_path_2, false).unwrap();
         assert!(!set.contains("foo").unwrap());
         assert!(set.contains("bar").unwrap());
         assert!(set.contains("BAR").unwrap());
@@ -881,8 +896,8 @@ fn test_sqlite_set_filebased() {
         assert!(set.contains("QUX").unwrap());
     }
 
-    assert!(matches!(SQLiteSet::<String>::with_file_nocase(&file_path_1), Err(Error::InvalidSchema)));
-    assert!(matches!(SQLiteSet::<String>::with_file(&file_path_2), Err(Error::InvalidSchema)));
+    assert!(matches!(SQLiteSet::<String>::from_file_nocase(&file_path_1, false), Err(Error::InvalidSchema)));
+    assert!(matches!(SQLiteSet::<String>::from_file(&file_path_2, false), Err(Error::InvalidSchema)));
 }
 
 #[cfg(not(feature = "no_check"))]
@@ -899,7 +914,7 @@ fn test_sqlite_set_filebased_integrity() {
     assert!(!fs::exists(&file_path).unwrap());
 
     {
-        let mut set = SQLiteSet::<String>::with_file(&file_path).unwrap();
+        let mut set = SQLiteSet::<String>::from_file(&file_path, true).unwrap();
         {
             let mut tx = set.transaction().unwrap();
             assert!(tx.insert("foo").unwrap());
@@ -923,7 +938,7 @@ fn test_sqlite_set_filebased_integrity() {
         file.sync_all().unwrap();
     }
 
-    assert!(matches!(SQLiteSet::<String>::with_file(&file_path), Err(Error::IntegrityCheck)));
+    assert!(matches!(SQLiteSet::<String>::from_file(&file_path, false), Err(Error::IntegrityCheck)));
 }
 
 // ---------------------------------------------------------------------------

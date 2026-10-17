@@ -16,7 +16,13 @@ use rand_xoshiro::{
     Xoshiro256PlusPlus,
     rand_core::{Rng, SeedableRng},
 };
-use sqlite_containers::{Action, Blob, Error, SQLiteMap, SizeExt, TryClone};
+use sqlite_containers::{
+    Action, Blob, Error, SQLiteMap, SizeExt, TryClone,
+    rusqlite::{
+        Error as RusqliteError,
+        ffi::{Error as FfiError, ErrorCode as FfiErrorCode},
+    },
+};
 use std::{
     array,
     collections::{HashMap, HashSet},
@@ -2563,8 +2569,17 @@ fn test_sqlite_map_filebased() {
     assert!(!fs::exists(&file_path_1).unwrap());
     assert!(!fs::exists(&file_path_2).unwrap());
 
+    assert!(matches!(
+        SQLiteMap::<String, String>::from_file(&file_path_1, false),
+        Err(Error::SqlError(RusqliteError::SqliteFailure(FfiError { code: FfiErrorCode::CannotOpen, .. }, _)))
+    ));
+    assert!(matches!(
+        SQLiteMap::<String, String>::from_file(&file_path_2, false),
+        Err(Error::SqlError(RusqliteError::SqliteFailure(FfiError { code: FfiErrorCode::CannotOpen, .. }, _)))
+    ));
+
     {
-        let mut set = SQLiteMap::<String, String>::with_file(&file_path_1).unwrap();
+        let mut set = SQLiteMap::<String, String>::from_file(&file_path_1, true).unwrap();
         {
             let mut tx = set.transaction().unwrap();
             assert!(tx.insert("foo", "12345678").unwrap());
@@ -2574,7 +2589,7 @@ fn test_sqlite_map_filebased() {
     }
 
     {
-        let mut set = SQLiteMap::<String, String>::with_file_nocase(&file_path_2).unwrap();
+        let mut set = SQLiteMap::<String, String>::from_file_nocase(&file_path_2, true).unwrap();
         {
             let mut tx = set.transaction().unwrap();
             assert!(tx.insert("bar", "hgfedcba").unwrap());
@@ -2587,7 +2602,7 @@ fn test_sqlite_map_filebased() {
     assert!(fs::exists(&file_path_2).unwrap());
 
     {
-        let set = SQLiteMap::<String, String>::with_file(&file_path_1).unwrap();
+        let set = SQLiteMap::<String, String>::from_file(&file_path_1, false).unwrap();
         assert!(set.get("foo").unwrap().is_some_and(|value| value.eq("12345678")));
         assert!(set.get("FOO").unwrap().is_none());
         assert!(set.get("bar").unwrap().is_none());
@@ -2597,7 +2612,7 @@ fn test_sqlite_map_filebased() {
     }
 
     {
-        let set = SQLiteMap::<String, String>::with_file_nocase(&file_path_2).unwrap();
+        let set = SQLiteMap::<String, String>::from_file_nocase(&file_path_2, false).unwrap();
         assert!(set.get("foo").unwrap().is_none());
         assert!(set.get("bar").unwrap().is_some_and(|value| value.eq("hgfedcba")));
         assert!(set.get("BAR").unwrap().is_some_and(|value| value.eq("hgfedcba")));
@@ -2606,8 +2621,8 @@ fn test_sqlite_map_filebased() {
         assert!(set.get("QUX").unwrap().is_some_and(|value| value.eq("stuvwxyz")));
     }
 
-    assert!(matches!(SQLiteMap::<String, String>::with_file_nocase(&file_path_1), Err(Error::InvalidSchema)));
-    assert!(matches!(SQLiteMap::<String, String>::with_file(&file_path_2), Err(Error::InvalidSchema)));
+    assert!(matches!(SQLiteMap::<String, String>::from_file_nocase(&file_path_1, false), Err(Error::InvalidSchema)));
+    assert!(matches!(SQLiteMap::<String, String>::from_file(&file_path_2, false), Err(Error::InvalidSchema)));
 }
 
 #[cfg(not(feature = "no_check"))]
@@ -2624,7 +2639,7 @@ fn test_sqlite_set_filebased_integrity() {
     assert!(!fs::exists(&file_path).unwrap());
 
     {
-        let mut set = SQLiteMap::<String, String>::with_file(&file_path).unwrap();
+        let mut set = SQLiteMap::<String, String>::from_file(&file_path, true).unwrap();
         {
             let mut tx = set.transaction().unwrap();
             assert!(tx.insert("foo", "12345678").unwrap());
@@ -2648,7 +2663,7 @@ fn test_sqlite_set_filebased_integrity() {
         file.sync_all().unwrap();
     }
 
-    assert!(matches!(SQLiteMap::<String, String>::with_file(&file_path), Err(Error::IntegrityCheck)));
+    assert!(matches!(SQLiteMap::<String, String>::from_file(&file_path, false), Err(Error::IntegrityCheck)));
 }
 
 // ---------------------------------------------------------------------------

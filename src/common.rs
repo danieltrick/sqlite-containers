@@ -16,6 +16,10 @@ use std::{
     sync::LazyLock,
 };
 
+// ---------------------------------------------------------------------------
+// Flags
+// ---------------------------------------------------------------------------
+
 /// Binary Large Object (BLOB), represented as a [`Vec<u8>`](std::vec::Vec).
 pub type Blob = Vec<u8>;
 
@@ -23,6 +27,14 @@ pub type Blob = Vec<u8>;
 pub static OPEN_FLAGS: LazyLock<OpenFlags> = LazyLock::new(|| {
     let mut flags = OpenFlags::default();
     flags.remove(OpenFlags::SQLITE_OPEN_URI);
+    flags
+});
+
+/// Flags to be used for [`Connection::open_with_flags()`](rusqlite::Connection::open_with_flags) *without* `SQLITE_OPEN_CREATE`.
+pub static OPEN_FLAGS_NOCREATE: LazyLock<OpenFlags> = LazyLock::new(|| {
+    let mut flags = OpenFlags::default();
+    flags.remove(OpenFlags::SQLITE_OPEN_URI);
+    flags.remove(OpenFlags::SQLITE_OPEN_CREATE);
     flags
 });
 
