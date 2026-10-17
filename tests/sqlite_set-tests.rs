@@ -245,6 +245,45 @@ fn test_sqlite_set_i64_randomized() {
     }
 }
 
+#[test]
+fn test_sqlite_set_i64_union() {
+    let mut set_1 = SQLiteSet::<i64>::new().unwrap();
+    let mut set_2 = SQLiteSet::<i64>::new().unwrap();
+
+    {
+        let mut tx = set_1.transaction().unwrap();
+        assert!(tx.insert(&0i64).unwrap());
+        assert!(tx.insert(&42i64).unwrap());
+        assert!(tx.insert(&2147483647i64).unwrap());
+    }
+
+    {
+        let mut tx = set_2.transaction().unwrap();
+        assert!(tx.insert(&0i64).unwrap());
+        assert!(tx.insert(&i64::MIN).unwrap());
+        assert!(tx.insert(&i64::MAX).unwrap());
+        assert!(tx.insert(&2305843009213693951i64).unwrap());
+    }
+
+    assert!(set_1.contains(&0i64).unwrap());
+    assert!(set_1.contains(&42i64).unwrap());
+    assert!(!set_1.contains(&524287).unwrap());
+    assert!(set_1.contains(&2147483647i64).unwrap());
+    assert!(!set_1.contains(&2305843009213693951i64).unwrap());
+    assert!(!set_1.contains(&i64::MIN).unwrap());
+    assert!(!set_1.contains(&i64::MAX).unwrap());
+
+    assert_eq!(set_1.union(&set_2).unwrap(), 3);
+
+    assert!(set_1.contains(&0i64).unwrap());
+    assert!(set_1.contains(&42i64).unwrap());
+    assert!(!set_1.contains(&524287).unwrap());
+    assert!(set_1.contains(&2147483647i64).unwrap());
+    assert!(set_1.contains(&2305843009213693951i64).unwrap());
+    assert!(set_1.contains(&i64::MIN).unwrap());
+    assert!(set_1.contains(&i64::MAX).unwrap());
+}
+
 #[cfg(not(debug_assertions))]
 #[test]
 fn test_sqlite_set_i64_string_words() {
@@ -601,6 +640,45 @@ fn test_sqlite_set_string_randomized() {
     }
 }
 
+#[test]
+fn test_sqlite_set_string_union() {
+    let mut set_1 = SQLiteSet::<String>::new().unwrap();
+    let mut set_2 = SQLiteSet::<String>::new().unwrap();
+
+    {
+        let mut tx = set_1.transaction().unwrap();
+        assert!(tx.insert("foo").unwrap());
+        assert!(tx.insert("bar").unwrap());
+        assert!(tx.insert("baz").unwrap());
+    }
+
+    {
+        let mut tx = set_2.transaction().unwrap();
+        assert!(tx.insert("foo").unwrap());
+        assert!(tx.insert("qux").unwrap());
+        assert!(tx.insert("xyz").unwrap());
+        assert!(tx.insert("cor").unwrap());
+    }
+
+    assert!(set_1.contains("foo").unwrap());
+    assert!(set_1.contains("bar").unwrap());
+    assert!(set_1.contains("baz").unwrap());
+    assert!(!set_1.contains("qux").unwrap());
+    assert!(!set_1.contains("xyz").unwrap());
+    assert!(!set_1.contains("$?!").unwrap());
+    assert!(!set_1.contains("cor").unwrap());
+
+    assert_eq!(set_1.union(&set_2).unwrap(), 3);
+
+    assert!(set_1.contains("foo").unwrap());
+    assert!(set_1.contains("bar").unwrap());
+    assert!(set_1.contains("baz").unwrap());
+    assert!(set_1.contains("qux").unwrap());
+    assert!(set_1.contains("xyz").unwrap());
+    assert!(!set_1.contains("$?!").unwrap());
+    assert!(set_1.contains("cor").unwrap());
+}
+
 // ---------------------------------------------------------------------------
 // SQLiteSet<Blob> Tests
 // ---------------------------------------------------------------------------
@@ -829,6 +907,45 @@ fn test_sqlite_set_blob_randomized() {
             assert_eq!(tx.contains(temp.as_slice()).unwrap(), b);
         }
     }
+}
+
+#[test]
+fn test_sqlite_set_blob_union() {
+    let mut set_1 = SQLiteSet::<Blob>::new().unwrap();
+    let mut set_2 = SQLiteSet::<Blob>::new().unwrap();
+
+    {
+        let mut tx = set_1.transaction().unwrap();
+        assert!(tx.insert(&b"foo"[..]).unwrap());
+        assert!(tx.insert(&b"bar"[..]).unwrap());
+        assert!(tx.insert(&b"baz"[..]).unwrap());
+    }
+
+    {
+        let mut tx = set_2.transaction().unwrap();
+        assert!(tx.insert(&b"foo"[..]).unwrap());
+        assert!(tx.insert(&b"qux"[..]).unwrap());
+        assert!(tx.insert(&b"xyz"[..]).unwrap());
+        assert!(tx.insert(&b"cor"[..]).unwrap());
+    }
+
+    assert!(set_1.contains(&b"foo"[..]).unwrap());
+    assert!(set_1.contains(&b"bar"[..]).unwrap());
+    assert!(set_1.contains(&b"baz"[..]).unwrap());
+    assert!(!set_1.contains(&b"qux"[..]).unwrap());
+    assert!(!set_1.contains(&b"xyz"[..]).unwrap());
+    assert!(!set_1.contains(&b"$?!"[..]).unwrap());
+    assert!(!set_1.contains(&b"cor"[..]).unwrap());
+
+    assert_eq!(set_1.union(&set_2).unwrap(), 3);
+
+    assert!(set_1.contains(&b"foo"[..]).unwrap());
+    assert!(set_1.contains(&b"bar"[..]).unwrap());
+    assert!(set_1.contains(&b"baz"[..]).unwrap());
+    assert!(set_1.contains(&b"qux"[..]).unwrap());
+    assert!(set_1.contains(&b"xyz"[..]).unwrap());
+    assert!(!set_1.contains(&b"$?!"[..]).unwrap());
+    assert!(set_1.contains(&b"cor"[..]).unwrap());
 }
 
 // ---------------------------------------------------------------------------

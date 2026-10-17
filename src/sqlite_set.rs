@@ -204,6 +204,26 @@ where
         }
     }
 
+    /// Inserts all keys from another set into this set, ignoring existing keys.
+    ///
+    /// Returns the number of new keys that have been inserted.
+    #[inline]
+    pub fn union(&mut self, other: &Self) -> Result<Size, Error> {
+        let trx = self.transaction()?;
+        let mut statement_insert = trx.transaction.prepare_cached(SQL_INSERT_KEY)?;
+        let mut statement_query = other.connection.prepare_cached(SQL_QUERY_KEYS)?;
+        let mut counter = Size::default();
+        for key in statement_query.query_map([], |row| row.get::<_, T>(0))? {
+            if match statement_insert.execute([key?]) {
+                Ok(_) => true,
+                Err(error) => check_constraint_violation(error)?,
+            } {
+                counter += 1;
+            }
+        }
+        Ok(counter)
+    }
+
     /// Checks whether the set contains the specified key.
     ///
     /// For case-sensitive sets, the check is case-sensitive; for case-insensitive sets, the check is case-insensitive.
@@ -352,6 +372,8 @@ where
     #[cfg_attr(docsrs, doc(cfg(feature = "backup")))]
     #[inline]
     /// Stores all contents of this set in the specified database file.
+    ///
+    /// The file will be replaced, if it already exists!
     pub fn to_file<P>(&self, path: P) -> Result<(), Error>
     where
         P: AsRef<Path>,

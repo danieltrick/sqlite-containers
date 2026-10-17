@@ -331,6 +331,30 @@ where
         Ok(Action::from(&self.last_action))
     }
 
+    /// Inserts all key-value pairs from another map into this map.
+    ///
+    /// This function does **not** update the associated value of keys that already exist in this map.
+    ///
+    /// Returns the number of new keys that have been inserted.
+    #[inline]
+    pub fn union(&mut self, other: &Self) -> Result<Size, Error> {
+        let trx = self.transaction()?;
+        let mut statement_insert = trx.transaction.prepare_cached(SQL_INSERT_KEY)?;
+        let mut statement_query = other.connection.prepare_cached(SQL_QUERY_PAIR)?;
+        let mut result = statement_query.query([])?;
+        let mut counter = Size::default();
+        while let Some(key_value) = result.next()? {
+            let (key, value): (K, V) = (key_value.get(0)?, key_value.get(1)?);
+            if match statement_insert.execute(params![key, value]) {
+                Ok(_) => true,
+                Err(error) => check_constraint_violation(error)?,
+            } {
+                counter += 1;
+            }
+        }
+        Ok(counter)
+    }
+
     /// Checks whether the map contains the specified key.
     ///
     /// For case-sensitive maps, the check is case-sensitive; for case-insensitive maps, the check is case-insensitive.
@@ -570,6 +594,8 @@ where
     #[cfg_attr(docsrs, doc(cfg(feature = "backup")))]
     #[inline]
     /// Stores all contents of this map in the specified database file.
+    ///
+    /// The file will be replaced, if it already exists!
     pub fn to_file<P>(&self, path: P) -> Result<(), Error>
     where
         P: AsRef<Path>,
