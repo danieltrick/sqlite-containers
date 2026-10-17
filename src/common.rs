@@ -4,7 +4,8 @@
 
 use crate::{
     rusqlite::{
-        Connection, Error as RusqliteError, ErrorCode, OpenFlags,
+        Connection, Error as RusqliteError, OpenFlags,
+        ffi::{Error as FfiError, ErrorCode as FfiErrorCode},
         types::{FromSql, ToSql, Type as RusqliteType},
         version_number,
     },
@@ -272,10 +273,7 @@ cfg_if! {
 #[inline(always)]
 pub(crate) fn check_constraint_violation(error: RusqliteError) -> Result<bool, Error> {
     match error {
-        RusqliteError::SqliteFailure(sql_error, _) => match sql_error.code {
-            ErrorCode::ConstraintViolation => Ok(false),
-            _ => Err(error.into()),
-        },
+        RusqliteError::SqliteFailure(FfiError { code: FfiErrorCode::ConstraintViolation, .. }, _) => Ok(false),
         _ => Err(error.into()),
     }
 }
