@@ -3099,6 +3099,42 @@ fn test_sqlite_map_updatehook_transacted() {
 }
 
 // ---------------------------------------------------------------------------
+// SQLiteMap ToSet Test
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_sqlite_map_to_set() {
+    let mut map = SQLiteMap::<String, String>::new().unwrap();
+
+    {
+        let mut tx = map.transaction().unwrap();
+        assert!(tx.insert("foo", "12345678").unwrap());
+        assert!(tx.insert("FOO", "87654321").unwrap());
+        assert!(tx.insert("bar", "abcdefgh").unwrap());
+        assert!(tx.insert("BAR", "hgfedcba").unwrap());
+        assert!(tx.insert("baz", "stuvwxyz").unwrap());
+        assert!(tx.insert("BAZ", "zyxwvuts").unwrap());
+    }
+
+    let set_1 = map.to_set().unwrap();
+    let set_2 = map.to_set_nocase().unwrap();
+
+    assert_eq!(set_1.len().unwrap(), 6);
+    assert_eq!(set_2.len().unwrap(), 3);
+
+    assert!(set_1.contains("foo").unwrap());
+    assert!(set_1.contains("FOO").unwrap());
+    assert!(set_1.contains("bar").unwrap());
+    assert!(set_1.contains("BAR").unwrap());
+    assert!(set_1.contains("baz").unwrap());
+    assert!(set_1.contains("BAZ").unwrap());
+
+    assert!(set_2.contains("foo").unwrap());
+    assert!(set_2.contains("bar").unwrap());
+    assert!(set_2.contains("baz").unwrap());
+}
+
+// ---------------------------------------------------------------------------
 // SQLiteMap Clone Test
 // ---------------------------------------------------------------------------
 

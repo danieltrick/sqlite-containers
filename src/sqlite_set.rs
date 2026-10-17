@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Unlicense
 
 use crate::{
-    CharType, Error, Size, SizeExt, TryClone, Type,
+    CharType, Error, SQLiteMap, Size, SizeExt, TryClone, Type,
     common::{OPEN_FLAGS, OPEN_FLAGS_NOCREATE, OPEN_FLAGS_RDONLY, SQL_TYPE_TEXT, SQL_TYPES, SqlType, check_constraint_violation, verify_schema},
     rusqlite::{Connection, ToSql, Transaction},
 };
@@ -465,6 +465,20 @@ where
             Ok(_) => Ok(true),
             Err(error) => check_constraint_violation(error),
         }
+    }
+
+    /// Insert all keys from the given [`SQLiteMap`] into this set.
+    #[inline]
+    pub(crate) fn insert_mapped_keys<Q>(&mut self, map: &mut SQLiteMap<T, Q>) -> Result<(), Error>
+    where
+        Q: Type,
+    {
+        let mut statement = self.transaction.prepare_cached(SQL_INSERT_KEY)?;
+        let trx = map.transaction()?;
+        trx.try_for_each_key(|key| match statement.execute([key]) {
+            Ok(_) => Ok(()),
+            Err(error) => check_constraint_violation(error).map(|_| ()),
+        })
     }
 
     /// This function is equivalent to [`SQLiteSet::contains()`].

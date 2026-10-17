@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Unlicense
 
 use crate::{
-    CharType, Error, Size, SizeExt, TryClone, Type,
+    CharType, Error, SQLiteSet, Size, SizeExt, TryClone, Type,
     common::{OPEN_FLAGS, OPEN_FLAGS_NOCREATE, OPEN_FLAGS_RDONLY, SQL_TYPE_TEXT, SQL_TYPES, SqlType, check_constraint_violation, verify_schema},
     rusqlite::{Connection, OptionalExtension, ToSql, Transaction, params},
 };
@@ -590,6 +590,31 @@ where
         Ok(())
     }
 
+    /// Creates a new [`SQLiteSet`] that contains *all* keys contained in this map.
+    ///
+    /// The created set is case-sensitive.
+    #[inline]
+    pub fn to_set(&mut self) -> Result<SQLiteSet<K>, Error> {
+        let mut key_set = SQLiteSet::<K>::new()?;
+        key_set.transaction()?.insert_mapped_keys(self)?;
+        Ok(key_set)
+    }
+
+    /// Creates a new [`SQLiteSet`] that contains *all* keys contained in this map.
+    ///
+    /// The created set is case-insensitive.
+    ///
+    /// Only ASCII characters are case folded. SQLite does **not** attempt to do full UTF case folding!
+    #[inline]
+    pub fn to_set_nocase(&mut self) -> Result<SQLiteSet<K>, Error>
+    where
+        K: CharType,
+    {
+        let mut key_set = SQLiteSet::<K>::with_nocase()?;
+        key_set.transaction()?.insert_mapped_keys(self)?;
+        Ok(key_set)
+    }
+
     #[cfg(feature = "backup")]
     #[cfg_attr(docsrs, doc(cfg(feature = "backup")))]
     #[inline]
@@ -800,6 +825,19 @@ where
         while let Some(key_value) = result.next()? {
             let (key, value): (K, V) = (key_value.get(0)?, key_value.get(1)?);
             callback(key, value);
+        }
+        Ok(())
+    }
+
+    /// This is the *failable* version of the [`for_each_key()`](Self::for_each_key) function.
+    #[inline]
+    pub(crate) fn try_for_each_key<F>(&self, mut callback: F) -> Result<(), Error>
+    where
+        F: FnMut(K) -> Result<(), Error>,
+    {
+        let mut statement = self.transaction.prepare_cached(SQL_QUERY_KEYS)?;
+        for key in statement.query_map([], |row| row.get(0))? {
+            callback(key?)?
         }
         Ok(())
     }
