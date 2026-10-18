@@ -333,26 +333,44 @@ where
 
     /// Inserts all key-value pairs from another map into this map.
     ///
-    /// This function does **not** update the associated value of keys that already exist in this map.
+    /// If `update` is `true`, this function updates the values associated with existing keys in this map using the corresponding values from the other map. Otherwise, the values associated with existing keys are **not** changed.
     ///
-    /// Returns the number of new keys that have been inserted.
+    /// Returns `Some((inserted, updated))`, i.e., the number of new keys inserted and existing keys updated, respectively.
+    ///
+    /// If [`hooks`](crate#optional-features) is **not** enabled and if `update` is `true`, the function *always* returns `None`, though &#128517;
     #[inline]
-    pub fn union(&mut self, other: &Self) -> Result<Size, Error> {
+    pub fn union(&mut self, other: &Self, update: bool) -> Result<Option<(Size, Size)>, Error> {
         let trx = self.transaction()?;
-        let mut statement_insert = trx.transaction.prepare_cached(SQL_INSERT_KEY)?;
+        let mut statement_insert = trx.transaction.prepare_cached(if update { SQL_UPSERT_KEY } else { SQL_INSERT_KEY })?;
         let mut statement_query = other.connection.prepare_cached(SQL_QUERY_PAIR)?;
         let mut result = statement_query.query([])?;
-        let mut counter = Size::default();
+        let mut counter = (Size::default(), Size::default());
         while let Some(key_value) = result.next()? {
             let (key, value): (K, V) = (key_value.get(0)?, key_value.get(1)?);
-            if match statement_insert.execute(params![key, value]) {
-                Ok(_) => true,
-                Err(error) => check_constraint_violation(error)?,
-            } {
-                counter += 1;
+            if !update {
+                if match statement_insert.execute(params![key, value]) {
+                    Ok(_) => true,
+                    Err(error) => check_constraint_violation(error)?,
+                } {
+                    counter.0 = counter.0.saturating_add(1);
+                }
+            } else {
+                statement_insert.execute(params![key, value])?;
+                #[cfg(feature = "hooks")]
+                match Action::from(trx.last_action) {
+                    Action::Insert => counter.0 = counter.0.saturating_add(1),
+                    Action::Update => counter.1 = counter.1.saturating_add(1),
+                    Action::Unknown => (),
+                }
             }
         }
-        Ok(counter)
+        cfg_if! {
+            if #[cfg(feature = "hooks")] {
+                Ok(Some(counter))
+            } else {
+                Ok(if !update { Some(counter) } else { None })
+            }
+        }
     }
 
     /// Checks whether the map contains the specified key.

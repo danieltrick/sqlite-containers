@@ -34,6 +34,8 @@
 //! println!("{} element(s) successfully inserted.", sqlite_set.len().unwrap());
 //! ```
 //!
+//! &#128073; Please refer to the [`examples`](https://github.com/danieltrick/sqlite-containers/tree/main/examples) directory for details!
+//!
 //! Usage instructions
 //! ------------------
 //!

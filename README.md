@@ -40,6 +40,9 @@ tx.commit();
 println!("{} element(s) successfully inserted.", sqlite_set.len().unwrap());
 ```
 
+&#128073; Please refer to the [`examples`](examples/) directory for details!
+
+
 Documentation
 -------------
 

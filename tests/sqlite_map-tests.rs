@@ -408,6 +408,7 @@ fn test_sqlite_map_i64_string_randomized() {
 fn test_sqlite_map_i64_string_union() {
     let mut map_1 = SQLiteMap::<i64, String>::new().unwrap();
     let mut map_2 = SQLiteMap::<i64, String>::new().unwrap();
+    let mut map_3 = SQLiteMap::<i64, String>::new().unwrap();
 
     {
         let mut tx = map_1.transaction().unwrap();
@@ -418,6 +419,13 @@ fn test_sqlite_map_i64_string_union() {
 
     {
         let mut tx = map_2.transaction().unwrap();
+        assert!(tx.insert(&0i64, "12345678").unwrap());
+        assert!(tx.insert(&42i64, "87654321").unwrap());
+        assert!(tx.insert(&2147483647i64, "abcdefgh").unwrap());
+    }
+
+    {
+        let mut tx = map_3.transaction().unwrap();
         assert!(tx.insert(&0i64, "hgfedcba").unwrap());
         assert!(tx.insert(&i64::MIN, "stuvwxyz").unwrap());
         assert!(tx.insert(&i64::MAX, "zyxwvuts").unwrap());
@@ -432,7 +440,7 @@ fn test_sqlite_map_i64_string_union() {
     assert!(map_1.get(&i64::MIN).unwrap().is_none());
     assert!(map_1.get(&i64::MAX).unwrap().is_none());
 
-    assert_eq!(map_1.union(&map_2).unwrap(), 3);
+    assert_eq!(map_1.union(&map_3, false).unwrap(), Some((3, 0)));
 
     assert!(map_1.get(&0i64).unwrap().is_some_and(|value| value.eq("12345678")));
     assert!(map_1.get(&42i64).unwrap().is_some_and(|value| value.eq("87654321")));
@@ -441,6 +449,30 @@ fn test_sqlite_map_i64_string_union() {
     assert!(map_1.get(&2305843009213693951i64).unwrap().is_some_and(|value| value.eq("deadbeef")));
     assert!(map_1.get(&i64::MIN).unwrap().is_some_and(|value| value.eq("stuvwxyz")));
     assert!(map_1.get(&i64::MAX).unwrap().is_some_and(|value| value.eq("zyxwvuts")));
+
+    assert!(map_2.get(&0i64).unwrap().is_some_and(|value| value.eq("12345678")));
+    assert!(map_2.get(&42i64).unwrap().is_some_and(|value| value.eq("87654321")));
+    assert!(map_2.get(&524287).unwrap().is_none());
+    assert!(map_2.get(&2147483647i64).unwrap().is_some_and(|value| value.eq("abcdefgh")));
+    assert!(map_2.get(&2305843009213693951i64).unwrap().is_none());
+    assert!(map_2.get(&i64::MIN).unwrap().is_none());
+    assert!(map_2.get(&i64::MAX).unwrap().is_none());
+
+    cfg_if! {
+        if #[cfg(feature = "hooks")] {
+            assert_eq!(map_2.union(&map_3, true).unwrap(), Some((3, 1)));
+        } else {
+            assert_eq!(map_2.union(&map_3, true).unwrap(), None);
+        }
+    }
+
+    assert!(map_2.get(&0i64).unwrap().is_some_and(|value| value.eq("hgfedcba")));
+    assert!(map_2.get(&42i64).unwrap().is_some_and(|value| value.eq("87654321")));
+    assert!(map_2.get(&524287).unwrap().is_none());
+    assert!(map_2.get(&2147483647i64).unwrap().is_some_and(|value| value.eq("abcdefgh")));
+    assert!(map_2.get(&2305843009213693951i64).unwrap().is_some_and(|value| value.eq("deadbeef")));
+    assert!(map_2.get(&i64::MIN).unwrap().is_some_and(|value| value.eq("stuvwxyz")));
+    assert!(map_2.get(&i64::MAX).unwrap().is_some_and(|value| value.eq("zyxwvuts")));
 }
 
 #[cfg(not(debug_assertions))]
@@ -886,6 +918,7 @@ fn test_sqlite_map_blob_string_randomized() {
 fn test_sqlite_map_blob_string_union() {
     let mut map_1 = SQLiteMap::<Blob, String>::new().unwrap();
     let mut map_2 = SQLiteMap::<Blob, String>::new().unwrap();
+    let mut map_3 = SQLiteMap::<Blob, String>::new().unwrap();
 
     {
         let mut tx = map_1.transaction().unwrap();
@@ -896,6 +929,13 @@ fn test_sqlite_map_blob_string_union() {
 
     {
         let mut tx = map_2.transaction().unwrap();
+        assert!(tx.insert(&b"foo"[..], "12345678").unwrap());
+        assert!(tx.insert(&b"bar"[..], "87654321").unwrap());
+        assert!(tx.insert(&b"baz"[..], "abcdefgh").unwrap());
+    }
+
+    {
+        let mut tx = map_3.transaction().unwrap();
         assert!(tx.insert(&b"foo"[..], "hgfedcba").unwrap());
         assert!(tx.insert(&b"qux"[..], "stuvwxyz").unwrap());
         assert!(tx.insert(&b"xyz"[..], "zyxwvuts").unwrap());
@@ -910,7 +950,7 @@ fn test_sqlite_map_blob_string_union() {
     assert!(map_1.get(&b"xyz"[..]).unwrap().is_none());
     assert!(map_1.get(&b"cor"[..]).unwrap().is_none());
 
-    assert_eq!(map_1.union(&map_2).unwrap(), 3);
+    assert_eq!(map_1.union(&map_3, false).unwrap(), Some((3, 0)));
 
     assert!(map_1.get(&b"foo"[..]).unwrap().is_some_and(|value| value.eq("12345678")));
     assert!(map_1.get(&b"bar"[..]).unwrap().is_some_and(|value| value.eq("87654321")));
@@ -919,6 +959,30 @@ fn test_sqlite_map_blob_string_union() {
     assert!(map_1.get(&b"qux"[..]).unwrap().is_some_and(|value| value.eq("stuvwxyz")));
     assert!(map_1.get(&b"xyz"[..]).unwrap().is_some_and(|value| value.eq("zyxwvuts")));
     assert!(map_1.get(&b"cor"[..]).unwrap().is_some_and(|value| value.eq("deadbeef")));
+
+    assert!(map_2.get(&b"foo"[..]).unwrap().is_some_and(|value| value.eq("12345678")));
+    assert!(map_2.get(&b"bar"[..]).unwrap().is_some_and(|value| value.eq("87654321")));
+    assert!(map_2.get(&b"$?!"[..]).unwrap().is_none());
+    assert!(map_2.get(&b"baz"[..]).unwrap().is_some_and(|value| value.eq("abcdefgh")));
+    assert!(map_2.get(&b"qux"[..]).unwrap().is_none());
+    assert!(map_2.get(&b"xyz"[..]).unwrap().is_none());
+    assert!(map_2.get(&b"cor"[..]).unwrap().is_none());
+
+    cfg_if! {
+        if #[cfg(feature = "hooks")] {
+            assert_eq!(map_2.union(&map_3, true).unwrap(), Some((3, 1)));
+        } else {
+            assert_eq!(map_2.union(&map_3, true).unwrap(), None);
+        }
+    }
+
+    assert!(map_2.get(&b"foo"[..]).unwrap().is_some_and(|value| value.eq("hgfedcba")));
+    assert!(map_2.get(&b"bar"[..]).unwrap().is_some_and(|value| value.eq("87654321")));
+    assert!(map_2.get(&b"$?!"[..]).unwrap().is_none());
+    assert!(map_2.get(&b"baz"[..]).unwrap().is_some_and(|value| value.eq("abcdefgh")));
+    assert!(map_2.get(&b"qux"[..]).unwrap().is_some_and(|value| value.eq("stuvwxyz")));
+    assert!(map_2.get(&b"xyz"[..]).unwrap().is_some_and(|value| value.eq("zyxwvuts")));
+    assert!(map_2.get(&b"cor"[..]).unwrap().is_some_and(|value| value.eq("deadbeef")));
 }
 
 // ---------------------------------------------------------------------------
@@ -1496,6 +1560,7 @@ fn test_sqlite_map_string_string_randomized() {
 fn test_sqlite_map_string_string_union() {
     let mut map_1 = SQLiteMap::<String, String>::new().unwrap();
     let mut map_2 = SQLiteMap::<String, String>::new().unwrap();
+    let mut map_3 = SQLiteMap::<String, String>::new().unwrap();
 
     {
         let mut tx = map_1.transaction().unwrap();
@@ -1506,6 +1571,13 @@ fn test_sqlite_map_string_string_union() {
 
     {
         let mut tx = map_2.transaction().unwrap();
+        assert!(tx.insert("foo", "12345678").unwrap());
+        assert!(tx.insert("bar", "87654321").unwrap());
+        assert!(tx.insert("baz", "abcdefgh").unwrap());
+    }
+
+    {
+        let mut tx = map_3.transaction().unwrap();
         assert!(tx.insert("foo", "hgfedcba").unwrap());
         assert!(tx.insert("qux", "stuvwxyz").unwrap());
         assert!(tx.insert("xyz", "zyxwvuts").unwrap());
@@ -1520,7 +1592,7 @@ fn test_sqlite_map_string_string_union() {
     assert!(map_1.get("xyz").unwrap().is_none());
     assert!(map_1.get("cor").unwrap().is_none());
 
-    assert_eq!(map_1.union(&map_2).unwrap(), 3);
+    assert_eq!(map_1.union(&map_3, false).unwrap(), Some((3, 0)));
 
     assert!(map_1.get("foo").unwrap().is_some_and(|value| value.eq("12345678")));
     assert!(map_1.get("bar").unwrap().is_some_and(|value| value.eq("87654321")));
@@ -1529,6 +1601,30 @@ fn test_sqlite_map_string_string_union() {
     assert!(map_1.get("qux").unwrap().is_some_and(|value| value.eq("stuvwxyz")));
     assert!(map_1.get("xyz").unwrap().is_some_and(|value| value.eq("zyxwvuts")));
     assert!(map_1.get("cor").unwrap().is_some_and(|value| value.eq("deadbeef")));
+
+    assert!(map_2.get("foo").unwrap().is_some_and(|value| value.eq("12345678")));
+    assert!(map_2.get("bar").unwrap().is_some_and(|value| value.eq("87654321")));
+    assert!(map_2.get("$?!").unwrap().is_none());
+    assert!(map_2.get("baz").unwrap().is_some_and(|value| value.eq("abcdefgh")));
+    assert!(map_2.get("qux").unwrap().is_none());
+    assert!(map_2.get("xyz").unwrap().is_none());
+    assert!(map_2.get("cor").unwrap().is_none());
+
+    cfg_if! {
+        if #[cfg(feature = "hooks")] {
+            assert_eq!(map_2.union(&map_3, true).unwrap(), Some((3, 1)));
+        } else {
+            assert_eq!(map_2.union(&map_3, true).unwrap(), None);
+        }
+    }
+
+    assert!(map_2.get("foo").unwrap().is_some_and(|value| value.eq("hgfedcba")));
+    assert!(map_2.get("bar").unwrap().is_some_and(|value| value.eq("87654321")));
+    assert!(map_2.get("$?!").unwrap().is_none());
+    assert!(map_2.get("baz").unwrap().is_some_and(|value| value.eq("abcdefgh")));
+    assert!(map_2.get("qux").unwrap().is_some_and(|value| value.eq("stuvwxyz")));
+    assert!(map_2.get("xyz").unwrap().is_some_and(|value| value.eq("zyxwvuts")));
+    assert!(map_2.get("cor").unwrap().is_some_and(|value| value.eq("deadbeef")));
 }
 
 // ---------------------------------------------------------------------------
@@ -2107,6 +2203,7 @@ fn test_sqlite_map_string_blob_randomized() {
 fn test_sqlite_map_string_blob_union() {
     let mut map_1 = SQLiteMap::<String, Blob>::new().unwrap();
     let mut map_2 = SQLiteMap::<String, Blob>::new().unwrap();
+    let mut map_3 = SQLiteMap::<String, Blob>::new().unwrap();
 
     {
         let mut tx = map_1.transaction().unwrap();
@@ -2117,6 +2214,13 @@ fn test_sqlite_map_string_blob_union() {
 
     {
         let mut tx = map_2.transaction().unwrap();
+        assert!(tx.insert("foo", &b"12345678"[..]).unwrap());
+        assert!(tx.insert("bar", &b"87654321"[..]).unwrap());
+        assert!(tx.insert("baz", &b"abcdefgh"[..]).unwrap());
+    }
+
+    {
+        let mut tx = map_3.transaction().unwrap();
         assert!(tx.insert("foo", &b"hgfedcba"[..]).unwrap());
         assert!(tx.insert("qux", &b"stuvwxyz"[..]).unwrap());
         assert!(tx.insert("xyz", &b"zyxwvuts"[..]).unwrap());
@@ -2131,7 +2235,7 @@ fn test_sqlite_map_string_blob_union() {
     assert!(map_1.get("xyz").unwrap().is_none());
     assert!(map_1.get("cor").unwrap().is_none());
 
-    assert_eq!(map_1.union(&map_2).unwrap(), 3);
+    assert_eq!(map_1.union(&map_3, false).unwrap(), Some((3, 0)));
 
     assert!(map_1.get("foo").unwrap().is_some_and(|value| value.eq(b"12345678")));
     assert!(map_1.get("bar").unwrap().is_some_and(|value| value.eq(b"87654321")));
@@ -2140,6 +2244,30 @@ fn test_sqlite_map_string_blob_union() {
     assert!(map_1.get("qux").unwrap().is_some_and(|value| value.eq(b"stuvwxyz")));
     assert!(map_1.get("xyz").unwrap().is_some_and(|value| value.eq(b"zyxwvuts")));
     assert!(map_1.get("cor").unwrap().is_some_and(|value| value.eq(b"deadbeef")));
+
+    assert!(map_2.get("foo").unwrap().is_some_and(|value| value.eq(b"12345678")));
+    assert!(map_2.get("bar").unwrap().is_some_and(|value| value.eq(b"87654321")));
+    assert!(map_2.get("$?!").unwrap().is_none());
+    assert!(map_2.get("baz").unwrap().is_some_and(|value| value.eq(b"abcdefgh")));
+    assert!(map_2.get("qux").unwrap().is_none());
+    assert!(map_2.get("xyz").unwrap().is_none());
+    assert!(map_2.get("cor").unwrap().is_none());
+
+    cfg_if! {
+        if #[cfg(feature = "hooks")] {
+            assert_eq!(map_2.union(&map_3, true).unwrap(), Some((3, 1)));
+        } else {
+            assert_eq!(map_2.union(&map_3, true).unwrap(), None);
+        }
+    }
+
+    assert!(map_2.get("foo").unwrap().is_some_and(|value| value.eq(b"hgfedcba")));
+    assert!(map_2.get("bar").unwrap().is_some_and(|value| value.eq(b"87654321")));
+    assert!(map_2.get("$?!").unwrap().is_none());
+    assert!(map_2.get("baz").unwrap().is_some_and(|value| value.eq(b"abcdefgh")));
+    assert!(map_2.get("qux").unwrap().is_some_and(|value| value.eq(b"stuvwxyz")));
+    assert!(map_2.get("xyz").unwrap().is_some_and(|value| value.eq(b"zyxwvuts")));
+    assert!(map_2.get("cor").unwrap().is_some_and(|value| value.eq(b"deadbeef")));
 }
 
 // ---------------------------------------------------------------------------
@@ -2716,6 +2844,7 @@ fn test_sqlite_map_string_i64_randomized() {
 fn test_sqlite_map_string_i64_union() {
     let mut map_1 = SQLiteMap::<String, i64>::new().unwrap();
     let mut map_2 = SQLiteMap::<String, i64>::new().unwrap();
+    let mut map_3 = SQLiteMap::<String, i64>::new().unwrap();
 
     {
         let mut tx = map_1.transaction().unwrap();
@@ -2726,6 +2855,13 @@ fn test_sqlite_map_string_i64_union() {
 
     {
         let mut tx = map_2.transaction().unwrap();
+        assert!(tx.insert("foo", &0x12345678).unwrap());
+        assert!(tx.insert("bar", &0x87654321).unwrap());
+        assert!(tx.insert("baz", &0x9ABCDEF0).unwrap());
+    }
+
+    {
+        let mut tx = map_3.transaction().unwrap();
         assert!(tx.insert("foo", &0x0FEDCBA9).unwrap());
         assert!(tx.insert("qux", &0xDEADBEEF).unwrap());
         assert!(tx.insert("xyz", &0xCAFEBABE).unwrap());
@@ -2740,7 +2876,7 @@ fn test_sqlite_map_string_i64_union() {
     assert!(map_1.get("xyz").unwrap().is_none());
     assert!(map_1.get("cor").unwrap().is_none());
 
-    assert_eq!(map_1.union(&map_2).unwrap(), 3);
+    assert_eq!(map_1.union(&map_3, false).unwrap(), Some((3, 0)));
 
     assert!(map_1.get("foo").unwrap().is_some_and(|value| value.eq(&0x12345678)));
     assert!(map_1.get("bar").unwrap().is_some_and(|value| value.eq(&0x87654321)));
@@ -2749,6 +2885,30 @@ fn test_sqlite_map_string_i64_union() {
     assert!(map_1.get("qux").unwrap().is_some_and(|value| value.eq(&0xDEADBEEF)));
     assert!(map_1.get("xyz").unwrap().is_some_and(|value| value.eq(&0xCAFEBABE)));
     assert!(map_1.get("cor").unwrap().is_some_and(|value| value.eq(&0xFEEDFACE)));
+
+    assert!(map_2.get("foo").unwrap().is_some_and(|value| value.eq(&0x12345678)));
+    assert!(map_2.get("bar").unwrap().is_some_and(|value| value.eq(&0x87654321)));
+    assert!(map_2.get("$?!").unwrap().is_none());
+    assert!(map_2.get("baz").unwrap().is_some_and(|value| value.eq(&0x9ABCDEF0)));
+    assert!(map_2.get("qux").unwrap().is_none());
+    assert!(map_2.get("xyz").unwrap().is_none());
+    assert!(map_2.get("cor").unwrap().is_none());
+
+    cfg_if! {
+        if #[cfg(feature = "hooks")] {
+            assert_eq!(map_2.union(&map_3, true).unwrap(), Some((3, 1)));
+        } else {
+            assert_eq!(map_2.union(&map_3, true).unwrap(), None);
+        }
+    }
+
+    assert!(map_2.get("foo").unwrap().is_some_and(|value| value.eq(&0x0FEDCBA9)));
+    assert!(map_2.get("bar").unwrap().is_some_and(|value| value.eq(&0x87654321)));
+    assert!(map_2.get("$?!").unwrap().is_none());
+    assert!(map_2.get("baz").unwrap().is_some_and(|value| value.eq(&0x9ABCDEF0)));
+    assert!(map_2.get("qux").unwrap().is_some_and(|value| value.eq(&0xDEADBEEF)));
+    assert!(map_2.get("xyz").unwrap().is_some_and(|value| value.eq(&0xCAFEBABE)));
+    assert!(map_2.get("cor").unwrap().is_some_and(|value| value.eq(&0xFEEDFACE)));
 }
 
 // ---------------------------------------------------------------------------
