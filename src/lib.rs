@@ -2,6 +2,9 @@
 // This file is part of the 'SQLite-based containers for Rust' project (sqlite-containers)
 // SPDX-License-Identifier: Unlicense
 
+#![warn(missing_docs)]
+#![cfg_attr(docsrs, feature(doc_cfg))]
+
 //! SQLite-based containers for Rust
 //! ================================
 //!
@@ -43,7 +46,7 @@
 //!
 //! ```toml
 //! [dependencies]
-//! sqlite-containers = "2.2.0"
+//! sqlite-containers = "2.2.1"
 //! ```
 //!
 //! ### Optional Features
