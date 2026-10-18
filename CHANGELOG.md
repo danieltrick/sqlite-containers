@@ -4,6 +4,29 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/).
 
+## [2.2.0] - 2026-10-18
+
+### Added
+
+- Added new optional features `backup`, `checked` and `hooks`.
+- Added new trait `TryClone`, which is currently implemented by the `SQLiteMap` and `SQLiteMap` structs.
+- Added new functions `SQLiteMap::to_file()` and `SQLiteSet::to_file()`.
+- Added new functions `SQLiteMap::union()` and `SQLiteSet::union()`.
+- Added new functions `SQLiteMap::to_set()` and `SQLiteMap::to_set_nocase()`.
+- Added new parameter `can_create` to `SQLiteMap::from_file()` and `SQLiteMap::from_file_nocase()`.
+- Added new parameter `can_create` to `SQLiteSet::from_file()` and `SQLiteSet::from_file_nocase()`.
+- Added new parameter `readonly` to `SQLiteMap::from_file()` and `SQLiteMap::from_file_nocase()`.
+- Added new parameter `readonly` to `SQLiteSet::from_file()` and `SQLiteSet::from_file_nocase()`.
+- Perform an integrity check when opening a file-based database, enabled by default (can be disabled).
+
+### Changed
+
+- Function `SQLiteMap::update()` now returns a value indicating whether an `INSERT` or `UPDATE` was performed.
+- Functions `SQLiteMap::with_file()` was renamed to `SQLiteMap::from_file()`.
+- Functions `SQLiteMap::with_file_nocase()` was renamed to `SQLiteMap::from_file_nocase()`.
+- Functions `SQLiteSet::with_file()` was renamed to `SQLiteSet::from_file()`.
+- Functions `SQLiteSet::with_file_nocase()` was renamed to `SQLiteSet::from_file_nocase()`.
+
 ## [2.1.0] - 2026-10-15
 
 ### Added
