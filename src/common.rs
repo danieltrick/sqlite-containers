@@ -184,9 +184,13 @@ cfg_if! {
 
 /// Provides useful helper functions for the [`Size`](crate::Size) type.
 pub trait SizeExt {
+    /// Create a new [`Size`] instance from an `i64` value.
     fn from_i64(value: i64) -> Self;
+    /// Create a new [`Size`] instance from an `u64` value.
     fn from_u64(value: u64) -> Self;
+    /// Convert this [`Size`] instance to an `u64` value.
     fn to_u64(self) -> u64;
+    /// Convert this [`Size`] instance to an `usize` value, if possible.
     fn to_usize(self) -> Option<usize>;
 }
 
@@ -262,6 +266,7 @@ impl From<RusqliteError> for Error {
 
 /// This is the *failable* version of the standard [`Clone`](std::clone::Clone) trait.
 pub trait TryClone: Sized {
+    /// The error type to be returned by [`try_clone()`](Self::try_clone).
     type Error: Debug;
     /// This is the *failable* version of the standard [`clone()`](std::clone::Clone::clone) function.
     fn try_clone(&self) -> Result<Self, Self::Error>;

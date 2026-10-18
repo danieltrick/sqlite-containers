@@ -371,7 +371,6 @@ where
     }
 
     #[cfg(feature = "backup")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "backup")))]
     #[inline]
     /// Stores all contents of this set in the specified database file.
     ///
@@ -397,7 +396,6 @@ cfg_if! {
             /// Creates an exact, independent *copy* of the given set instance.
             ///
             /// This function fails with [`Error::Unsupported`](crate::Error::Unsupported), if the optional [`backup`](crate#optional-features) feature is **not** enabled &#128549;
-            #[cfg_attr(docsrs, doc(cfg(feature = "backup")))]
             #[inline]
             fn try_clone(&self) -> Result<Self, Self::Error> {
                 let mut connection_cloned = Self::initialize_connection(Connection::open_in_memory()?)?;
