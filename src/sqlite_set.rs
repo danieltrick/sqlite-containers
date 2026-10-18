@@ -136,11 +136,13 @@ where
     where
         P: AsRef<Path>,
     {
-        let connection = Self::initialize_connection(if let Some(path) = path_option.as_ref() {
+        let connection = if let Some(path) = path_option.as_ref() {
             Connection::open_with_flags(path, if !readonly { if can_create { *OPEN_FLAGS } else { *OPEN_FLAGS_NOCREATE } } else { *OPEN_FLAGS_RDONLY })?
         } else {
             Connection::open_in_memory()?
-        })?;
+        };
+
+        let connection = Self::initialize_connection(connection)?;
 
         #[cfg(feature = "checked")]
         if path_option.is_some() {

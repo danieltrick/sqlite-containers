@@ -218,11 +218,13 @@ where
     where
         P: AsRef<Path>,
     {
-        let connection = Self::initialize_connection(if let Some(path) = path_option.as_ref() {
+        let connection = if let Some(path) = path_option.as_ref() {
             Connection::open_with_flags(path, if !readonly { if can_create { *OPEN_FLAGS } else { *OPEN_FLAGS_NOCREATE } } else { *OPEN_FLAGS_RDONLY })?
         } else {
             Connection::open_in_memory()?
-        })?;
+        };
+
+        let connection = Self::initialize_connection(connection)?;
 
         #[cfg(feature = "checked")]
         if path_option.is_some() {
@@ -348,20 +350,16 @@ where
         while let Some(key_value) = result.next()? {
             let (key, value): (K, V) = (key_value.get(0)?, key_value.get(1)?);
             if !update {
-                if match statement_insert.execute(params![key, value]) {
-                    Ok(_) => true,
-                    Err(error) => check_constraint_violation(error)?,
-                } {
-                    counter.0 = counter.0.saturating_add(1);
+                match statement_insert.execute(params![key, value]) {
+                    Ok(_) => counter.0 = counter.0.saturating_add(1),
+                    Err(error) => {
+                        check_constraint_violation(error)?;
+                    }
                 }
             } else {
                 statement_insert.execute(params![key, value])?;
                 #[cfg(feature = "hooks")]
-                match Action::from(trx.last_action) {
-                    Action::Insert => counter.0 = counter.0.saturating_add(1),
-                    Action::Update => counter.1 = counter.1.saturating_add(1),
-                    Action::Unknown => (),
-                }
+                update_counter(&mut counter, Action::from(trx.last_action));
             }
         }
         cfg_if! {
@@ -951,6 +949,20 @@ where
 }
 
 // ---------------------------------------------------------------------------
+// Auxilary Functions
+// ---------------------------------------------------------------------------
+
+#[cfg(feature = "hooks")]
+#[inline(always)]
+fn update_counter(counter: &mut (Size, Size), action: Action) {
+    match action {
+        Action::Insert => counter.0 = counter.0.saturating_add(1),
+        Action::Update => counter.1 = counter.1.saturating_add(1),
+        Action::Unknown => (), /*hint::cold_path()*/
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
@@ -980,5 +992,19 @@ mod test {
     fn test_actions() {
         let action_holder = LastActionHolder::default();
         assert!(matches!(Action::from(&action_holder), Action::Unknown));
+    }
+
+    #[cfg(feature = "hooks")]
+    #[test]
+    fn test_counter() {
+        let mut counter = Default::default();
+        for i in 0..8 {
+            update_counter(&mut counter, Action::Unknown);
+            assert_eq!(counter, (i, i));
+            update_counter(&mut counter, Action::Insert);
+            assert_eq!(counter, (i + 1, i));
+            update_counter(&mut counter, Action::Update);
+            assert_eq!(counter, (i + 1, i + 1));
+        }
     }
 }
