@@ -1245,6 +1245,72 @@ fn test_sqlite_set_multithreading() {
 }
 
 // ---------------------------------------------------------------------------
+// SQLiteMap ToSet Test
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_sqlite_set_to_map_i64() {
+    let mut set = SQLiteSet::<i64>::new().unwrap();
+
+    {
+        let mut tx = set.transaction().unwrap();
+        assert!(tx.insert(&0i64).unwrap());
+        assert!(tx.insert(&42i64).unwrap());
+        assert!(tx.insert(&2147483647i64).unwrap());
+        assert!(tx.insert(&i64::MIN).unwrap());
+        assert!(tx.insert(&i64::MAX).unwrap());
+    }
+
+    let map = set.to_map(|key| if *key != 2147483647i64 { Some(mix64(*key as u64).to_string()) } else { None }).unwrap();
+
+    assert_eq!(map.len().unwrap(), 4);
+    assert!(map.get(&0i64).unwrap().is_some_and(|value| value.eq("0")));
+    assert!(map.get(&42i64).unwrap().is_some_and(|value| value.eq("12058926934050108962")));
+    assert!(map.get(&2147483647i64).unwrap().is_none());
+    assert!(map.get(&i64::MIN).unwrap().is_some_and(|value| value.eq("2720858781877447050")));
+    assert!(map.get(&i64::MAX).unwrap().is_some_and(|value| value.eq("6514504133438201533")));
+}
+
+#[test]
+fn test_sqlite_set_to_map_string() {
+    #[inline]
+    fn reverse_str(str: &str) -> String {
+        str.chars().rev().collect()
+    }
+
+    let mut set = SQLiteSet::<String>::new().unwrap();
+
+    {
+        let mut tx = set.transaction().unwrap();
+        assert!(tx.insert("foo").unwrap());
+        assert!(tx.insert("bar").unwrap());
+        assert!(tx.insert("qux").unwrap());
+        assert!(tx.insert("FOO").unwrap());
+        assert!(tx.insert("BAR").unwrap());
+        assert!(tx.insert("QUX").unwrap());
+    }
+
+    let map_1 = set.to_map(|key| if !key.eq_ignore_ascii_case("qux") { Some(format!("~{}~", reverse_str(key))) } else { None }).unwrap();
+    let map_2 = set.to_map_nocase(|key| if !key.eq_ignore_ascii_case("qux") { Some(format!("~{}~", reverse_str(key))) } else { None }).unwrap();
+
+    assert_eq!(map_1.len().unwrap(), 4);
+    assert!(map_1.get("foo").unwrap().is_some_and(|value| value.eq("~oof~")));
+    assert!(map_1.get("FOO").unwrap().is_some_and(|value| value.eq("~OOF~")));
+    assert!(map_1.get("bar").unwrap().is_some_and(|value| value.eq("~rab~")));
+    assert!(map_1.get("BAR").unwrap().is_some_and(|value| value.eq("~RAB~")));
+    assert!(map_1.get("qux").unwrap().is_none());
+    assert!(map_1.get("QUX").unwrap().is_none());
+
+    assert_eq!(map_2.len().unwrap(), 2);
+    assert!(map_2.get("foo").unwrap().is_some_and(|value| value.eq("~oof~") || value.eq("~OOF~")));
+    assert!(map_2.get("FOO").unwrap().is_some_and(|value| value.eq("~oof~") || value.eq("~OOF~")));
+    assert!(map_2.get("bar").unwrap().is_some_and(|value| value.eq("~rab~") || value.eq("~RAB~")));
+    assert!(map_2.get("BAR").unwrap().is_some_and(|value| value.eq("~rab~") || value.eq("~RAB~")));
+    assert!(map_2.get("qux").unwrap().is_none());
+    assert!(map_2.get("QUX").unwrap().is_none());
+}
+
+// ---------------------------------------------------------------------------
 // SQLiteSet Clone Test
 // ---------------------------------------------------------------------------
 

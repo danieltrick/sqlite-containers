@@ -781,6 +781,24 @@ where
         Ok(Action::from(self.last_action))
     }
 
+    /// Insert all keys from the given [`SQLiteSet`] into this set.
+    #[inline]
+    pub(crate) fn insert_mapped_keys<F>(&mut self, set: &mut SQLiteSet<K>, mapping: F) -> Result<(), Error>
+    where
+        F: Fn(&K) -> Option<V>,
+    {
+        let mut statement = self.transaction.prepare_cached(SQL_INSERT_KEY)?;
+        let trx = set.transaction()?;
+        trx.try_for_each(|key| match mapping(&key) {
+            Some(value) => match statement.execute(params![key, value]) {
+                Ok(_) => Ok(()),
+                Err(error) => check_constraint_violation(error).map(|_| ()),
+            },
+            None => Ok(()),
+        })
+        .map_err(|error| error.into())
+    }
+
     /// This function is equivalent to [`SQLiteMap::contains_key()`].
     #[inline]
     pub fn contains_key<Q>(&self, key: &Q) -> Result<bool, Error>

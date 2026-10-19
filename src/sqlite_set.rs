@@ -385,6 +385,41 @@ where
         Ok(())
     }
 
+    /// Creates a new [`SQLiteMap`] that contains *all* keys contained in this set.
+    ///
+    /// The given `mapping` function is used to generate the map’s values. If it returns `Some(value)` for a key, that key is inserted into the map with the returned `value` as its associated value. If it returns `None`, the key is **not** inserted into the map.
+    ///
+    /// The created map is case-sensitive.
+    #[inline]
+    pub fn to_map<F, V>(&mut self, mapping: F) -> Result<SQLiteMap<T, V>, Error>
+    where
+        F: Fn(&T) -> Option<V>,
+        V: Type,
+    {
+        let mut map = SQLiteMap::<T, V>::new()?;
+        map.transaction()?.insert_mapped_keys(self, mapping)?;
+        Ok(map)
+    }
+
+    /// Creates a new [`SQLiteMap`] that contains *all* keys contained in this set.
+    ///
+    /// The given `mapping` function is used to generate the map’s values. If it returns `Some(value)` for a key, that key is inserted into the map with the returned `value` as its associated value. If it returns `None`, the key is **not** inserted into the map.
+    ///
+    /// The created map is case-insensitive.
+    ///
+    /// Only ASCII characters are case folded. SQLite does **not** attempt to do full UTF case folding!
+    #[inline]
+    pub fn to_map_nocase<F, V>(&mut self, mapping: F) -> Result<SQLiteMap<T, V>, Error>
+    where
+        F: Fn(&T) -> Option<V>,
+        V: Type,
+        T: CharType,
+    {
+        let mut map = SQLiteMap::<T, V>::with_nocase()?;
+        map.transaction()?.insert_mapped_keys(self, mapping)?;
+        Ok(map)
+    }
+
     #[cfg(feature = "backup")]
     #[inline]
     /// Stores all contents of this set in the specified database file.
