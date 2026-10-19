@@ -17,7 +17,7 @@ use rand_xoshiro::{
     rand_core::{Rng, SeedableRng},
 };
 use sqlite_containers::{
-    Blob, Error, SQLiteSet, SizeExt, TryClone,
+    Blob, Error, IterationError, SQLiteSet, SizeExt, TryClone,
     rusqlite::{
         Error as RusqliteError,
         ffi::{Error as FfiError, ErrorCode as FfiErrorCode},
@@ -95,6 +95,21 @@ fn test_sqlite_set_i64() {
         assert!(hash.contains(&i64::MIN));
     }
 
+    {
+        let mut hash = HashSet::new();
+        set.try_for_each(|key| {
+            assert!(hash.insert(key.to_owned()));
+            Ok::<_, ()>(())
+        })
+        .unwrap();
+        assert_eq!(hash.len(), 3);
+        assert!(hash.contains(&0i64));
+        assert!(hash.contains(&i64::MAX));
+        assert!(hash.contains(&i64::MIN));
+    }
+
+    assert!(matches!(set.try_for_each(|_key| Err("Failed!")), Err(IterationError::CallbackError(_))));
+
     assert!(set.find(|item| item.eq(&0i64)).unwrap().is_some_and(|item| item == 0i64));
     assert!(set.find(|item| item.eq(&42i64)).unwrap().is_none());
     assert!(set.find(|item| item.eq(&i64::MAX)).unwrap().is_some_and(|item| item == i64::MAX));
@@ -168,6 +183,21 @@ fn test_sqlite_set_i64_transacted() {
         assert!(hash.contains(&i64::MAX));
         assert!(hash.contains(&i64::MIN));
     }
+
+    {
+        let mut hash = HashSet::new();
+        tx.try_for_each(|key| {
+            assert!(hash.insert(key.to_owned()));
+            Ok::<_, ()>(())
+        })
+        .unwrap();
+        assert_eq!(hash.len(), 3);
+        assert!(hash.contains(&0i64));
+        assert!(hash.contains(&i64::MAX));
+        assert!(hash.contains(&i64::MIN));
+    }
+
+    assert!(matches!(tx.try_for_each(|_key| Err("Failed!")), Err(IterationError::CallbackError(_))));
 
     assert!(tx.find(|item| item.eq(&0i64)).unwrap().is_some_and(|item| item == 0i64));
     assert!(tx.find(|item| item.eq(&42i64)).unwrap().is_none());
@@ -395,6 +425,21 @@ fn test_sqlite_set_string() {
         assert!(hash.contains("qux"));
     }
 
+    {
+        let mut hash = HashSet::new();
+        set.try_for_each(|key| {
+            assert!(hash.insert(key.to_owned()));
+            Ok::<_, ()>(())
+        })
+        .unwrap();
+        assert_eq!(hash.len(), 3);
+        assert!(hash.contains("foo"));
+        assert!(hash.contains("baz"));
+        assert!(hash.contains("qux"));
+    }
+
+    assert!(matches!(set.try_for_each(|_key| Err("Failed!")), Err(IterationError::CallbackError(_))));
+
     assert!(set.find(|item: &str| item.eq("foo")).unwrap().is_some_and(|item| item.eq("foo")));
     assert!(set.find(|item: &str| item.eq_ignore_ascii_case("FOO")).unwrap().is_some_and(|item| item.eq("foo")));
     assert!(set.find(|item: &str| item.eq("bar")).unwrap().is_none());
@@ -505,6 +550,21 @@ fn test_sqlite_set_string_transacted() {
         assert!(hash.contains("baz"));
         assert!(hash.contains("qux"));
     }
+
+    {
+        let mut hash = HashSet::new();
+        tx.try_for_each(|key| {
+            assert!(hash.insert(key.to_owned()));
+            Ok::<_, ()>(())
+        })
+        .unwrap();
+        assert_eq!(hash.len(), 3);
+        assert!(hash.contains("foo"));
+        assert!(hash.contains("baz"));
+        assert!(hash.contains("qux"));
+    }
+
+    assert!(matches!(tx.try_for_each(|_key| Err("Failed!")), Err(IterationError::CallbackError(_))));
 
     assert!(tx.find(|item: &str| item.eq("foo")).unwrap().is_some_and(|key| key.eq("foo")));
     assert!(tx.find(|item: &str| item.eq_ignore_ascii_case("FOO")).unwrap().is_some_and(|key| key.eq("foo")));
@@ -749,6 +809,21 @@ fn test_sqlite_set_blob() {
         assert!(hash.contains::<[u8]>(b"qux"));
     }
 
+    {
+        let mut hash = HashSet::new();
+        set.try_for_each(|key| {
+            assert!(hash.insert(key.to_owned()));
+            Ok::<_, ()>(())
+        })
+        .unwrap();
+        assert_eq!(hash.len(), 3);
+        assert!(hash.contains::<[u8]>(b"foo"));
+        assert!(hash.contains::<[u8]>(b"baz"));
+        assert!(hash.contains::<[u8]>(b"qux"));
+    }
+
+    assert!(matches!(set.try_for_each(|_key| Err("Failed!")), Err(IterationError::CallbackError(_))));
+
     assert!(set.find(|item: &[u8]| item.eq(b"foo")).unwrap().is_some_and(|key| key.eq(b"foo")));
     assert!(set.find(|item: &[u8]| item.eq_ignore_ascii_case(b"FOO")).unwrap().is_some_and(|key| key.eq(b"foo")));
     assert!(set.find(|item: &[u8]| item.eq(b"bar")).unwrap().is_none());
@@ -829,6 +904,21 @@ fn test_sqlite_set_blob_transacted() {
         assert!(hash.contains::<[u8]>(b"baz"));
         assert!(hash.contains::<[u8]>(b"qux"));
     }
+
+    {
+        let mut hash = HashSet::new();
+        tx.try_for_each(|key| {
+            assert!(hash.insert(key.to_owned()));
+            Ok::<_, ()>(())
+        })
+        .unwrap();
+        assert_eq!(hash.len(), 3);
+        assert!(hash.contains::<[u8]>(b"foo"));
+        assert!(hash.contains::<[u8]>(b"baz"));
+        assert!(hash.contains::<[u8]>(b"qux"));
+    }
+
+    assert!(matches!(tx.try_for_each(|_key| Err("Failed!")), Err(IterationError::CallbackError(_))));
 
     assert!(tx.find(|item: &[u8]| item.eq(b"foo")).unwrap().is_some_and(|item| item.eq(b"foo")));
     assert!(tx.find(|item: &[u8]| item.eq_ignore_ascii_case(b"FOO")).unwrap().is_some_and(|item| item.eq(b"foo")));

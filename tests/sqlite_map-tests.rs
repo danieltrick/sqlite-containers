@@ -17,7 +17,7 @@ use rand_xoshiro::{
     rand_core::{Rng, SeedableRng},
 };
 use sqlite_containers::{
-    Action, Blob, Error, SQLiteMap, SizeExt, TryClone,
+    Action, Blob, Error, IterationError, SQLiteMap, SizeExt, TryClone,
     rusqlite::{
         Error as RusqliteError,
         ffi::{Error as FfiError, ErrorCode as FfiErrorCode},
@@ -112,6 +112,21 @@ fn test_sqlite_map_i64_string() {
     }
 
     {
+        let mut hash = HashSet::new();
+        map.try_for_each_key(|key| {
+            assert!(hash.insert(key.to_owned()));
+            Ok::<_, ()>(())
+        })
+        .unwrap();
+        assert_eq!(hash.len(), 3);
+        assert!(hash.contains(&0i64));
+        assert!(hash.contains(&i64::MAX));
+        assert!(hash.contains(&i64::MIN));
+    }
+
+    assert!(matches!(map.try_for_each_key(|_key| Err("Failed!")), Err(IterationError::CallbackError(_))));
+
+    {
         let mut hash = HashMap::new();
         map.for_each_entry(|key, value| assert!(hash.insert(key.to_owned(), value.to_owned()).is_none())).unwrap();
         assert_eq!(hash.len(), 3);
@@ -119,6 +134,21 @@ fn test_sqlite_map_i64_string() {
         assert_eq!(hash.get(&i64::MAX).unwrap(), "deadbeef");
         assert_eq!(hash.get(&i64::MIN).unwrap(), "cafebabe");
     }
+
+    {
+        let mut hash = HashMap::new();
+        map.try_for_each_entry(|key, value| {
+            assert!(hash.insert(key.to_owned(), value.to_owned()).is_none());
+            Ok::<_, ()>(())
+        })
+        .unwrap();
+        assert_eq!(hash.len(), 3);
+        assert_eq!(hash.get(&0i64).unwrap(), "12345678");
+        assert_eq!(hash.get(&i64::MAX).unwrap(), "deadbeef");
+        assert_eq!(hash.get(&i64::MIN).unwrap(), "cafebabe");
+    }
+
+    assert!(matches!(map.try_for_each_entry(|_key, _value| Err("Failed!")), Err(IterationError::CallbackError(_))));
 
     assert!(map.find_key(|key| key.eq(&0i64)).unwrap().is_some_and(|key| key == 0i64));
     assert!(map.find_key(|key| key.eq(&42i64)).unwrap().is_none());
@@ -256,6 +286,21 @@ fn test_sqlite_map_i64_string_transacted() {
     }
 
     {
+        let mut hash = HashSet::new();
+        tx.try_for_each_key(|key| {
+            assert!(hash.insert(key.to_owned()));
+            Ok::<_, ()>(())
+        })
+        .unwrap();
+        assert_eq!(hash.len(), 3);
+        assert!(hash.contains(&0i64));
+        assert!(hash.contains(&i64::MAX));
+        assert!(hash.contains(&i64::MIN));
+    }
+
+    assert!(matches!(tx.try_for_each_key(|_key| Err("Failed!")), Err(IterationError::CallbackError(_))));
+
+    {
         let mut hash = HashMap::new();
         tx.for_each_entry(|key, value| assert!(hash.insert(key.to_owned(), value.to_owned()).is_none())).unwrap();
         assert_eq!(hash.len(), 3);
@@ -263,6 +308,21 @@ fn test_sqlite_map_i64_string_transacted() {
         assert_eq!(hash.get(&i64::MAX).unwrap(), "deadbeef");
         assert_eq!(hash.get(&i64::MIN).unwrap(), "cafebabe");
     }
+
+    {
+        let mut hash = HashMap::new();
+        tx.try_for_each_entry(|key, value| {
+            assert!(hash.insert(key.to_owned(), value.to_owned()).is_none());
+            Ok::<_, ()>(())
+        })
+        .unwrap();
+        assert_eq!(hash.len(), 3);
+        assert_eq!(hash.get(&0i64).unwrap(), "12345678");
+        assert_eq!(hash.get(&i64::MAX).unwrap(), "deadbeef");
+        assert_eq!(hash.get(&i64::MIN).unwrap(), "cafebabe");
+    }
+
+    assert!(matches!(tx.try_for_each_entry(|_key, _value| Err("Failed!")), Err(IterationError::CallbackError(_))));
 
     assert!(tx.find_key(|key| key.eq(&0i64)).unwrap().is_some_and(|key| key == 0i64));
     assert!(tx.find_key(|key| key.eq(&42i64)).unwrap().is_none());
@@ -605,6 +665,21 @@ fn test_sqlite_map_blob_string() {
     }
 
     {
+        let mut hash = HashSet::new();
+        map.try_for_each_key(|key| {
+            assert!(hash.insert(key.to_owned()));
+            Ok::<_, ()>(())
+        })
+        .unwrap();
+        assert_eq!(hash.len(), 3);
+        assert!(hash.contains(&b"foo"[..]));
+        assert!(hash.contains(&b"baz"[..]));
+        assert!(hash.contains(&b"qux"[..]));
+    }
+
+    assert!(matches!(map.try_for_each_key(|_key| Err("Failed!")), Err(IterationError::CallbackError(_))));
+
+    {
         let mut hash = HashMap::new();
         map.for_each_entry(|key, value| assert!(hash.insert(key.to_owned(), value.to_owned()).is_none())).unwrap();
         assert_eq!(hash.len(), 3);
@@ -612,6 +687,21 @@ fn test_sqlite_map_blob_string() {
         assert_eq!(hash.get(&b"baz"[..]).unwrap(), "deadbeef");
         assert_eq!(hash.get(&b"qux"[..]).unwrap(), "cafebabe");
     }
+
+    {
+        let mut hash = HashMap::new();
+        map.try_for_each_entry(|key, value| {
+            assert!(hash.insert(key.to_owned(), value.to_owned()).is_none());
+            Ok::<_, ()>(())
+        })
+        .unwrap();
+        assert_eq!(hash.len(), 3);
+        assert_eq!(hash.get(&b"foo"[..]).unwrap(), "12345678");
+        assert_eq!(hash.get(&b"baz"[..]).unwrap(), "deadbeef");
+        assert_eq!(hash.get(&b"qux"[..]).unwrap(), "cafebabe");
+    }
+
+    assert!(matches!(map.try_for_each_entry(|_key, _value| Err("Failed!")), Err(IterationError::CallbackError(_))));
 
     assert!(map.find_key(|key| key.eq(b"foo")).unwrap().is_some_and(|key| key.eq(b"foo")));
     assert!(map.find_key(|key| key.eq(b"bar")).unwrap().is_none());
@@ -764,6 +854,21 @@ fn test_sqlite_map_blob_string_transacted() {
     }
 
     {
+        let mut hash = HashSet::new();
+        tx.try_for_each_key(|key| {
+            assert!(hash.insert(key.to_owned()));
+            Ok::<_, ()>(())
+        })
+        .unwrap();
+        assert_eq!(hash.len(), 3);
+        assert!(hash.contains(&b"foo"[..]));
+        assert!(hash.contains(&b"baz"[..]));
+        assert!(hash.contains(&b"qux"[..]));
+    }
+
+    assert!(matches!(tx.try_for_each_key(|_key| Err("Failed!")), Err(IterationError::CallbackError(_))));
+
+    {
         let mut hash = HashMap::new();
         tx.for_each_entry(|key, value| assert!(hash.insert(key.to_owned(), value.to_owned()).is_none())).unwrap();
         assert_eq!(hash.len(), 3);
@@ -771,6 +876,21 @@ fn test_sqlite_map_blob_string_transacted() {
         assert_eq!(hash.get(&b"baz"[..]).unwrap(), "deadbeef");
         assert_eq!(hash.get(&b"qux"[..]).unwrap(), "cafebabe");
     }
+
+    {
+        let mut hash = HashMap::new();
+        tx.try_for_each_entry(|key, value| {
+            assert!(hash.insert(key.to_owned(), value.to_owned()).is_none());
+            Ok::<_, ()>(())
+        })
+        .unwrap();
+        assert_eq!(hash.len(), 3);
+        assert_eq!(hash.get(&b"foo"[..]).unwrap(), "12345678");
+        assert_eq!(hash.get(&b"baz"[..]).unwrap(), "deadbeef");
+        assert_eq!(hash.get(&b"qux"[..]).unwrap(), "cafebabe");
+    }
+
+    assert!(matches!(tx.try_for_each_entry(|_key, _value| Err("Failed!")), Err(IterationError::CallbackError(_))));
 
     assert!(tx.find_key(|key| key.eq(b"foo")).unwrap().is_some_and(|key| key.eq(b"foo")));
     assert!(tx.find_key(|key| key.eq(b"bar")).unwrap().is_none());
@@ -1094,6 +1214,21 @@ fn test_sqlite_map_string_string() {
     }
 
     {
+        let mut hash = HashSet::new();
+        map.try_for_each_key(|key| {
+            assert!(hash.insert(key.to_owned()));
+            Ok::<_, ()>(())
+        })
+        .unwrap();
+        assert_eq!(hash.len(), 3);
+        assert!(hash.contains("foo"));
+        assert!(hash.contains("baz"));
+        assert!(hash.contains("qux"));
+    }
+
+    assert!(matches!(map.try_for_each_key(|_key| Err("Failed!")), Err(IterationError::CallbackError(_))));
+
+    {
         let mut hash = HashMap::new();
         map.for_each_entry(|key, value| assert!(hash.insert(key.to_owned(), value.to_owned()).is_none())).unwrap();
         assert_eq!(hash.len(), 3);
@@ -1101,6 +1236,21 @@ fn test_sqlite_map_string_string() {
         assert_eq!(hash.get("baz").unwrap(), "deadbeef");
         assert_eq!(hash.get("qux").unwrap(), "cafebabe");
     }
+
+    {
+        let mut hash = HashMap::new();
+        map.try_for_each_entry(|key, value| {
+            assert!(hash.insert(key.to_owned(), value.to_owned()).is_none());
+            Ok::<_, ()>(())
+        })
+        .unwrap();
+        assert_eq!(hash.len(), 3);
+        assert_eq!(hash.get("foo").unwrap(), "12345678");
+        assert_eq!(hash.get("baz").unwrap(), "deadbeef");
+        assert_eq!(hash.get("qux").unwrap(), "cafebabe");
+    }
+
+    assert!(matches!(map.try_for_each_entry(|_key, _value| Err("Failed!")), Err(IterationError::CallbackError(_))));
 
     assert!(map.find_key(|key| key.eq("foo")).unwrap().is_some_and(|key| key.eq("foo")));
     assert!(map.find_key(|key| key.eq("bar")).unwrap().is_none());
@@ -1313,6 +1463,21 @@ fn test_sqlite_map_string_string_transacted() {
     }
 
     {
+        let mut hash = HashSet::new();
+        tx.try_for_each_key(|key| {
+            assert!(hash.insert(key.to_owned()));
+            Ok::<_, ()>(())
+        })
+        .unwrap();
+        assert_eq!(hash.len(), 3);
+        assert!(hash.contains("foo"));
+        assert!(hash.contains("baz"));
+        assert!(hash.contains("qux"));
+    }
+
+    assert!(matches!(tx.try_for_each_key(|_key| Err("Failed!")), Err(IterationError::CallbackError(_))));
+
+    {
         let mut hash = HashMap::new();
         tx.for_each_entry(|key, value| assert!(hash.insert(key.to_owned(), value.to_owned()).is_none())).unwrap();
         assert_eq!(hash.len(), 3);
@@ -1320,6 +1485,21 @@ fn test_sqlite_map_string_string_transacted() {
         assert_eq!(hash.get("baz").unwrap(), "deadbeef");
         assert_eq!(hash.get("qux").unwrap(), "cafebabe");
     }
+
+    {
+        let mut hash = HashMap::new();
+        tx.try_for_each_entry(|key, value| {
+            assert!(hash.insert(key.to_owned(), value.to_owned()).is_none());
+            Ok::<_, ()>(())
+        })
+        .unwrap();
+        assert_eq!(hash.len(), 3);
+        assert_eq!(hash.get("foo").unwrap(), "12345678");
+        assert_eq!(hash.get("baz").unwrap(), "deadbeef");
+        assert_eq!(hash.get("qux").unwrap(), "cafebabe");
+    }
+
+    assert!(matches!(tx.try_for_each_entry(|_key, _value| Err("Failed!")), Err(IterationError::CallbackError(_))));
 
     assert!(tx.find_key(|key| key.eq("foo")).unwrap().is_some_and(|key| key.eq("foo")));
     assert!(tx.find_key(|key| key.eq("bar")).unwrap().is_none());
@@ -1736,6 +1916,21 @@ fn test_sqlite_map_string_blob() {
     }
 
     {
+        let mut hash = HashSet::new();
+        map.try_for_each_key(|key| {
+            assert!(hash.insert(key.to_owned()));
+            Ok::<_, ()>(())
+        })
+        .unwrap();
+        assert_eq!(hash.len(), 3);
+        assert!(hash.contains("foo"));
+        assert!(hash.contains("baz"));
+        assert!(hash.contains("qux"));
+    }
+
+    assert!(matches!(map.try_for_each_key(|_key| Err("Failed!")), Err(IterationError::CallbackError(_))));
+
+    {
         let mut hash = HashMap::new();
         map.for_each_entry(|key, value| assert!(hash.insert(key.to_owned(), value.to_owned()).is_none())).unwrap();
         assert_eq!(hash.len(), 3);
@@ -1743,6 +1938,21 @@ fn test_sqlite_map_string_blob() {
         assert_eq!(hash.get("baz").unwrap(), &b"deadbeef"[..]);
         assert_eq!(hash.get("qux").unwrap(), &b"cafebabe"[..]);
     }
+
+    {
+        let mut hash = HashMap::new();
+        map.try_for_each_entry(|key, value| {
+            assert!(hash.insert(key.to_owned(), value.to_owned()).is_none());
+            Ok::<_, ()>(())
+        })
+        .unwrap();
+        assert_eq!(hash.len(), 3);
+        assert_eq!(hash.get("foo").unwrap(), &b"12345678"[..]);
+        assert_eq!(hash.get("baz").unwrap(), &b"deadbeef"[..]);
+        assert_eq!(hash.get("qux").unwrap(), &b"cafebabe"[..]);
+    }
+
+    assert!(matches!(map.try_for_each_entry(|_key, _value| Err("Failed!")), Err(IterationError::CallbackError(_))));
 
     assert!(map.find_key(|key| key.eq("foo")).unwrap().is_some_and(|key| key.eq("foo")));
     assert!(map.find_key(|key| key.eq("bar")).unwrap().is_none());
@@ -1955,6 +2165,21 @@ fn test_sqlite_map_string_blob_transacted() {
     }
 
     {
+        let mut hash = HashSet::new();
+        tx.try_for_each_key(|key| {
+            assert!(hash.insert(key.to_owned()));
+            Ok::<_, ()>(())
+        })
+        .unwrap();
+        assert_eq!(hash.len(), 3);
+        assert!(hash.contains("foo"));
+        assert!(hash.contains("baz"));
+        assert!(hash.contains("qux"));
+    }
+
+    assert!(matches!(tx.try_for_each_key(|_key| Err("Failed!")), Err(IterationError::CallbackError(_))));
+
+    {
         let mut hash = HashMap::new();
         tx.for_each_entry(|key, value| assert!(hash.insert(key.to_owned(), value.to_owned()).is_none())).unwrap();
         assert_eq!(hash.len(), 3);
@@ -1962,6 +2187,21 @@ fn test_sqlite_map_string_blob_transacted() {
         assert_eq!(hash.get("baz").unwrap(), &b"deadbeef"[..]);
         assert_eq!(hash.get("qux").unwrap(), &b"cafebabe"[..]);
     }
+
+    {
+        let mut hash = HashMap::new();
+        tx.try_for_each_entry(|key, value| {
+            assert!(hash.insert(key.to_owned(), value.to_owned()).is_none());
+            Ok::<_, ()>(())
+        })
+        .unwrap();
+        assert_eq!(hash.len(), 3);
+        assert_eq!(hash.get("foo").unwrap(), &b"12345678"[..]);
+        assert_eq!(hash.get("baz").unwrap(), &b"deadbeef"[..]);
+        assert_eq!(hash.get("qux").unwrap(), &b"cafebabe"[..]);
+    }
+
+    assert!(matches!(tx.try_for_each_entry(|_key, _value| Err("Failed!")), Err(IterationError::CallbackError(_))));
 
     assert!(tx.find_key(|key| key.eq("foo")).unwrap().is_some_and(|key| key.eq("foo")));
     assert!(tx.find_key(|key| key.eq("bar")).unwrap().is_none());
@@ -2379,6 +2619,21 @@ fn test_sqlite_map_string_i64() {
     }
 
     {
+        let mut hash = HashSet::new();
+        map.try_for_each_key(|key| {
+            assert!(hash.insert(key.to_owned()));
+            Ok::<_, ()>(())
+        })
+        .unwrap();
+        assert_eq!(hash.len(), 3);
+        assert!(hash.contains("foo"));
+        assert!(hash.contains("baz"));
+        assert!(hash.contains("qux"));
+    }
+
+    assert!(matches!(map.try_for_each_key(|_key| Err("Failed!")), Err(IterationError::CallbackError(_))));
+
+    {
         let mut hash = HashMap::new();
         map.for_each_entry(|key, value| assert!(hash.insert(key.to_owned(), value.to_owned()).is_none())).unwrap();
         assert_eq!(hash.len(), 3);
@@ -2386,6 +2641,21 @@ fn test_sqlite_map_string_i64() {
         assert_eq!(hash.get("baz").unwrap(), &0xDEADBEEF);
         assert_eq!(hash.get("qux").unwrap(), &0xCAFEBABE);
     }
+
+    {
+        let mut hash = HashMap::new();
+        map.try_for_each_entry(|key, value| {
+            assert!(hash.insert(key.to_owned(), value.to_owned()).is_none());
+            Ok::<_, ()>(())
+        })
+        .unwrap();
+        assert_eq!(hash.len(), 3);
+        assert_eq!(hash.get("foo").unwrap(), &0x12345678);
+        assert_eq!(hash.get("baz").unwrap(), &0xDEADBEEF);
+        assert_eq!(hash.get("qux").unwrap(), &0xCAFEBABE);
+    }
+
+    assert!(matches!(map.try_for_each_entry(|_key, _value| Err("Failed!")), Err(IterationError::CallbackError(_))));
 
     assert!(map.find_key(|key| key.eq("foo")).unwrap().is_some_and(|key| key.eq("foo")));
     assert!(map.find_key(|key| key.eq("bar")).unwrap().is_none());
@@ -2598,6 +2868,21 @@ fn test_sqlite_map_string_i64_transacted() {
     }
 
     {
+        let mut hash = HashSet::new();
+        tx.try_for_each_key(|key| {
+            assert!(hash.insert(key.to_owned()));
+            Ok::<_, ()>(())
+        })
+        .unwrap();
+        assert_eq!(hash.len(), 3);
+        assert!(hash.contains("foo"));
+        assert!(hash.contains("baz"));
+        assert!(hash.contains("qux"));
+    }
+
+    assert!(matches!(tx.try_for_each_key(|_key| Err("Failed!")), Err(IterationError::CallbackError(_))));
+
+    {
         let mut hash = HashMap::new();
         tx.for_each_entry(|key, value| assert!(hash.insert(key.to_owned(), value.to_owned()).is_none())).unwrap();
         assert_eq!(hash.len(), 3);
@@ -2605,6 +2890,21 @@ fn test_sqlite_map_string_i64_transacted() {
         assert_eq!(hash.get("baz").unwrap(), &0xDEADBEEF);
         assert_eq!(hash.get("qux").unwrap(), &0xCAFEBABE);
     }
+
+    {
+        let mut hash = HashMap::new();
+        tx.try_for_each_entry(|key, value| {
+            assert!(hash.insert(key.to_owned(), value.to_owned()).is_none());
+            Ok::<_, ()>(())
+        })
+        .unwrap();
+        assert_eq!(hash.len(), 3);
+        assert_eq!(hash.get("foo").unwrap(), &0x12345678);
+        assert_eq!(hash.get("baz").unwrap(), &0xDEADBEEF);
+        assert_eq!(hash.get("qux").unwrap(), &0xCAFEBABE);
+    }
+
+    assert!(matches!(tx.try_for_each_entry(|_key, _value| Err("Failed!")), Err(IterationError::CallbackError(_))));
 
     assert!(tx.find_key(|key| key.eq("foo")).unwrap().is_some_and(|key| key.eq("foo")));
     assert!(tx.find_key(|key| key.eq("bar")).unwrap().is_none());

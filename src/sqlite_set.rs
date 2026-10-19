@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Unlicense
 
 use crate::{
-    CharType, Error, SQLiteMap, Size, SizeExt, TryClone, Type,
+    CharType, Error, IterationError, SQLiteMap, Size, SizeExt, TryClone, Type,
     common::{OPEN_FLAGS, OPEN_FLAGS_NOCREATE, OPEN_FLAGS_RDONLY, SQL_TYPE_TEXT, SQL_TYPES, SqlType, check_constraint_violation, verify_schema},
     rusqlite::{Connection, ToSql, Transaction},
 };
@@ -301,6 +301,21 @@ where
         Ok(())
     }
 
+    /// This is the *failable* version of the [`for_each()`](Self::for_each) function.
+    #[inline]
+    pub fn try_for_each<F, E>(&self, mut callback: F) -> Result<(), IterationError<E>>
+    where
+        F: FnMut(T) -> Result<(), E>,
+    {
+        let mut statement = self.connection.prepare_cached(SQL_QUERY_KEYS)?;
+        for key in statement.query_map([], |row| row.get(0))? {
+            if let Err(error) = callback(key?) {
+                return Err(IterationError::CallbackError(error));
+            }
+        }
+        Ok(())
+    }
+
     /// Searches the set for the first key that satisfies the given `predicate`.
     ///
     /// Returns the first key that satisfies the given predicate, or `None` if **no** key satisfies the predicate or the set is empty.
@@ -479,6 +494,7 @@ where
             Ok(_) => Ok(()),
             Err(error) => check_constraint_violation(error).map(|_| ()),
         })
+        .map_err(|error| error.into())
     }
 
     /// This function is equivalent to [`SQLiteSet::contains()`].
@@ -534,6 +550,21 @@ where
         let mut statement = self.transaction.prepare_cached(SQL_QUERY_KEYS)?;
         for key in statement.query_map([], |row| row.get(0))? {
             callback(key?);
+        }
+        Ok(())
+    }
+
+    /// This is the *failable* version of the [`for_each()`](Self::for_each) function.
+    #[inline]
+    pub fn try_for_each<F, E>(&self, mut callback: F) -> Result<(), IterationError<E>>
+    where
+        F: FnMut(T) -> Result<(), E>,
+    {
+        let mut statement = self.transaction.prepare_cached(SQL_QUERY_KEYS)?;
+        for key in statement.query_map([], |row| row.get(0))? {
+            if let Err(error) = callback(key?) {
+                return Err(IterationError::CallbackError(error));
+            }
         }
         Ok(())
     }

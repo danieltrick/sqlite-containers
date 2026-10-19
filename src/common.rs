@@ -261,6 +261,36 @@ impl From<RusqliteError> for Error {
 }
 
 // ---------------------------------------------------------------------------
+// IterationError
+// ---------------------------------------------------------------------------
+
+/// The error type used by the [`try_for_each`](crate::SQLiteSet::try_for_each) function.
+#[derive(Debug)]
+pub enum IterationError<C> {
+    /// Indicates that the iteration was aborted because the callback function returned an error.
+    CallbackError(C),
+    /// Indicates that a container operation has failed.
+    Other(Error),
+}
+
+impl<E> From<RusqliteError> for IterationError<E> {
+    #[inline]
+    fn from(error: RusqliteError) -> Self {
+        Self::Other(error.into())
+    }
+}
+
+impl From<IterationError<Error>> for Error {
+    #[inline]
+    fn from(value: IterationError<Error>) -> Self {
+        match value {
+            IterationError::CallbackError(error) => error,
+            IterationError::Other(error) => error,
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // TryClone Trait
 // ---------------------------------------------------------------------------
 
@@ -419,6 +449,20 @@ mod test {
 
         let error_4 = Error::InvalidSchema;
         assert!(error_4.into_inner().is_none());
+    }
+
+    #[test]
+    fn test_iteration_error() {
+        let error_1 = IterationError::<&str>::from(RusqliteError::InvalidQuery);
+        assert!(matches!(error_1, IterationError::Other(Error::SqlError(RusqliteError::InvalidQuery))));
+
+        let error_2 = IterationError::Other(Error::IntegrityCheck);
+        let check_a: Error = error_2.into();
+        assert!(matches!(check_a, Error::IntegrityCheck));
+
+        let error_3 = IterationError::CallbackError(Error::IntegrityCheck);
+        let check_b: Error = error_3.into();
+        assert!(matches!(check_b, Error::IntegrityCheck));
     }
 
     #[test]

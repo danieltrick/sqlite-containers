@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Unlicense
 
 use crate::{
-    CharType, Error, SQLiteSet, Size, SizeExt, TryClone, Type,
+    CharType, Error, IterationError, SQLiteSet, Size, SizeExt, TryClone, Type,
     common::{OPEN_FLAGS, OPEN_FLAGS_NOCREATE, OPEN_FLAGS_RDONLY, SQL_TYPE_TEXT, SQL_TYPES, SqlType, check_constraint_violation, verify_schema},
     rusqlite::{Connection, OptionalExtension, ToSql, Transaction, params},
 };
@@ -476,6 +476,21 @@ where
         Ok(())
     }
 
+    /// This is the *failable* version of the [`for_each_key()`](Self::for_each_key) function.
+    #[inline]
+    pub fn try_for_each_key<F, E>(&self, mut callback: F) -> Result<(), IterationError<E>>
+    where
+        F: FnMut(K) -> Result<(), E>,
+    {
+        let mut statement = self.connection.prepare_cached(SQL_QUERY_KEYS)?;
+        for key in statement.query_map([], |row| row.get(0))? {
+            if let Err(error) = callback(key?) {
+                return Err(IterationError::CallbackError(error));
+            }
+        }
+        Ok(())
+    }
+
     /// Invokes the given `callback` function for each key-value pair that is currently contained in the map.
     ///
     /// This function does **not** guarantee a specific iteration order.
@@ -489,6 +504,23 @@ where
         while let Some(key_value) = result.next()? {
             let (key, value): (K, V) = (key_value.get(0)?, key_value.get(1)?);
             callback(key, value);
+        }
+        Ok(())
+    }
+
+    /// This is the *failable* version of the [`for_each_entry()`](Self::for_each_entry) function.
+    #[inline]
+    pub fn try_for_each_entry<F, E>(&self, mut callback: F) -> Result<(), IterationError<E>>
+    where
+        F: FnMut(K, V) -> Result<(), E>,
+    {
+        let mut statement = self.connection.prepare_cached(SQL_QUERY_PAIR)?;
+        let mut result = statement.query([])?;
+        while let Some(key_value) = result.next()? {
+            let (key, value): (K, V) = (key_value.get(0)?, key_value.get(1)?);
+            if let Err(error) = callback(key, value) {
+                return Err(IterationError::CallbackError(error));
+            }
         }
         Ok(())
     }
@@ -828,6 +860,21 @@ where
         Ok(())
     }
 
+    /// This is the *failable* version of the [`for_each_key()`](Self::for_each_key) function.
+    #[inline]
+    pub fn try_for_each_key<F, E>(&self, mut callback: F) -> Result<(), IterationError<E>>
+    where
+        F: FnMut(K) -> Result<(), E>,
+    {
+        let mut statement = self.transaction.prepare_cached(SQL_QUERY_KEYS)?;
+        for key in statement.query_map([], |row| row.get(0))? {
+            if let Err(error) = callback(key?) {
+                return Err(IterationError::CallbackError(error));
+            }
+        }
+        Ok(())
+    }
+
     /// This function is equivalent to [`SQLiteMap::for_each_entry()`].
     #[inline]
     pub fn for_each_entry<F>(&self, mut callback: F) -> Result<(), Error>
@@ -843,15 +890,19 @@ where
         Ok(())
     }
 
-    /// This is the *failable* version of the [`for_each_key()`](Self::for_each_key) function.
+    /// This is the *failable* version of the [`for_each_entry()`](Self::for_each_entry) function.
     #[inline]
-    pub(crate) fn try_for_each_key<F>(&self, mut callback: F) -> Result<(), Error>
+    pub fn try_for_each_entry<F, E>(&self, mut callback: F) -> Result<(), IterationError<E>>
     where
-        F: FnMut(K) -> Result<(), Error>,
+        F: FnMut(K, V) -> Result<(), E>,
     {
-        let mut statement = self.transaction.prepare_cached(SQL_QUERY_KEYS)?;
-        for key in statement.query_map([], |row| row.get(0))? {
-            callback(key?)?
+        let mut statement = self.transaction.prepare_cached(SQL_QUERY_PAIR)?;
+        let mut result = statement.query([])?;
+        while let Some(key_value) = result.next()? {
+            let (key, value): (K, V) = (key_value.get(0)?, key_value.get(1)?);
+            if let Err(error) = callback(key, value) {
+                return Err(IterationError::CallbackError(error));
+            }
         }
         Ok(())
     }
