@@ -4,8 +4,8 @@
 
 use crate::{
     CharType, Error, IterationError, SQLiteSet, Size, SizeExt, TryClone, Type,
-    common::{OPEN_FLAGS, OPEN_FLAGS_NOCREATE, OPEN_FLAGS_RDONLY, SQL_TYPE_TEXT, SQL_TYPES, SqlType, check_constraint_violation, verify_schema},
-    rusqlite::{Connection, OptionalExtension, ToSql, Transaction, params},
+    common::{OPEN_FLAGS, OPEN_FLAGS_NOCREATE, OPEN_FLAGS_RDONLY, SQL_TYPE_TEXT, SQL_TYPES, SqlType, check_constraint_violation, increment, verify_schema},
+    rusqlite::{Connection, DropBehavior, OptionalExtension, ToSql, Transaction, TransactionBehavior, params},
 };
 use cfg_if::cfg_if;
 use const_format::concatcp;
@@ -251,7 +251,8 @@ where
     }
 
     #[inline(always)]
-    fn initialize_connection(connection: Connection) -> Result<Connection, Error> {
+    fn initialize_connection(mut connection: Connection) -> Result<Connection, Error> {
+        connection.set_transaction_behavior(TransactionBehavior::Exclusive);
         connection.pragma_update(None, "synchronous", "OFF")?;
         connection.pragma_update(None, "journal_mode", "OFF")?;
         Ok(connection)
@@ -351,7 +352,7 @@ where
             let (key, value): (K, V) = (key_value.get(0)?, key_value.get(1)?);
             if !update {
                 match statement_insert.execute(params![key, value]) {
-                    Ok(_) => counter.0 = counter.0.saturating_add(1),
+                    Ok(_) => increment(&mut counter.0),
                     Err(error) => {
                         check_constraint_violation(error)?;
                     }
@@ -743,7 +744,7 @@ where
     #[inline]
     fn from(connection: &'a mut Connection, last_action: &'a LastActionHolder) -> Result<Self, Error> {
         let mut transaction = connection.transaction()?;
-        transaction.set_drop_behavior(rusqlite::DropBehavior::Commit);
+        transaction.set_drop_behavior(DropBehavior::Commit);
         Ok(Self { _types: (PhantomData, PhantomData), transaction, last_action })
     }
 
@@ -1023,8 +1024,8 @@ where
 #[inline(always)]
 fn update_counter(counter: &mut (Size, Size), action: Action) {
     match action {
-        Action::Insert => counter.0 = counter.0.saturating_add(1),
-        Action::Update => counter.1 = counter.1.saturating_add(1),
+        Action::Insert => increment(&mut counter.0),
+        Action::Update => increment(&mut counter.1),
         Action::Unknown => (), /*hint::cold_path()*/
     }
 }

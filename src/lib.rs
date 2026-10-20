@@ -61,6 +61,14 @@
 //! **`hooks`**      | &#x274C; | If this feature is enabled, the [`update()`](SQLiteMap::update) function returns additional information that would otherwise be unavailable. Please note that this feature implies the `with_rowid` feature. Enabling this feature may slightly degrade performance, so it should *only* be used if it is actually needed.
 //! **`backup`**     | &#x274C; | If this feature is enabled, the [`try_clone()`](TryClone::try_clone) function can be used to create a **copy** of an existing container instance, which otherwise fails with [`Error::Unsupported`]. Please note that this feature implies the `rusqlite` feature of the same name; requires SQLite 3.6.11 or newer.
 //!
+//! Sources
+//! -------
+//!
+//! Official Git repository mirrors:
+//! - <https://github.com/danieltrick/sqlite-containers.git>
+//! - <https://codeberg.org/danieltrick/sqlite-containers.git>
+//! - <https://gitlab.com/danieltrick/sqlite-containers.git>
+//!
 //! Acknowledgement
 //! ---------------
 //!

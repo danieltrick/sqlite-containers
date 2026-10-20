@@ -4,8 +4,8 @@
 
 use crate::{
     CharType, Error, IterationError, SQLiteMap, Size, SizeExt, TryClone, Type,
-    common::{OPEN_FLAGS, OPEN_FLAGS_NOCREATE, OPEN_FLAGS_RDONLY, SQL_TYPE_TEXT, SQL_TYPES, SqlType, check_constraint_violation, verify_schema},
-    rusqlite::{Connection, ToSql, Transaction},
+    common::{OPEN_FLAGS, OPEN_FLAGS_NOCREATE, OPEN_FLAGS_RDONLY, SQL_TYPE_TEXT, SQL_TYPES, SqlType, check_constraint_violation, increment, verify_schema},
+    rusqlite::{Connection, DropBehavior, ToSql, Transaction, TransactionBehavior},
 };
 use cfg_if::cfg_if;
 use const_format::concatcp;
@@ -169,7 +169,8 @@ where
     }
 
     #[inline(always)]
-    fn initialize_connection(connection: Connection) -> Result<Connection, Error> {
+    fn initialize_connection(mut connection: Connection) -> Result<Connection, Error> {
+        connection.set_transaction_behavior(TransactionBehavior::Exclusive);
         connection.pragma_update(None, "synchronous", "OFF")?;
         connection.pragma_update(None, "journal_mode", "OFF")?;
         Ok(connection)
@@ -188,6 +189,12 @@ where
     #[inline]
     pub fn transaction(&mut self) -> Result<SQLiteSetTransaction<'_, T>, Error> {
         SQLiteSetTransaction::from(&mut self.connection)
+    }
+
+    /// This is the “read-only” version of the [`transaction()`](Self::transaction) function.
+    #[inline]
+    fn transaction_readonly(&self) -> Result<SQLiteSetTransaction<'_, T>, Error> {
+        SQLiteSetTransaction::from_immutable(&self.connection)
     }
 
     /// Inserts the given key into the set.
@@ -220,10 +227,82 @@ where
                 Ok(_) => true,
                 Err(error) => check_constraint_violation(error)?,
             } {
-                counter += 1;
+                increment(&mut counter);
             }
         }
         Ok(counter)
+    }
+
+    /// Removes all keys that exist in another set from this sets, ignoring non-existing keys.
+    ///
+    /// Returns the number of keys that have been removed.
+    #[inline]
+    pub fn difference(&mut self, other: &Self) -> Result<Size, Error> {
+        let trx = self.transaction()?;
+        let mut statement_delete = trx.transaction.prepare_cached(SQL_DELETE_KEY)?;
+        let mut statement_query = other.connection.prepare_cached(SQL_QUERY_KEYS)?;
+        let mut counter = Size::default();
+        for key in statement_query.query_map([], |row| row.get::<_, T>(0))? {
+            if statement_delete.execute([key?])? != 0 {
+                increment(&mut counter);
+            }
+        }
+        Ok(counter)
+    }
+
+    /// Creates a new set containing all keys that are contained in both, this set *and* the other set.
+    ///
+    /// The created map is case-sensitive.
+    #[inline]
+    pub fn intersection(&mut self, other: &Self) -> Result<SQLiteSet<T>, Error> {
+        let tx_1 = other.transaction_readonly()?;
+        let mut statement_query = self.connection.prepare_cached(SQL_QUERY_KEYS)?;
+        let mut statement_find = tx_1.transaction.prepare_cached(SQL_EXISTS_KEY)?;
+        let mut intersected_map = SQLiteSet::new()?;
+        {
+            let tx_2 = intersected_map.transaction()?;
+            let mut statement_insert = tx_2.transaction.prepare_cached(SQL_INSERT_KEY)?;
+            for key in statement_query.query_map([], |row| row.get::<_, T>(0))? {
+                let key = key?;
+                if statement_find.exists([&key])? {
+                    match statement_insert.execute([key]) {
+                        Ok(_) => true,
+                        Err(error) => check_constraint_violation(error)?,
+                    };
+                }
+            }
+        }
+        Ok(intersected_map)
+    }
+
+    /// Creates a new set containing all keys that are contained in both, this set *and* the other set.
+    ///
+    /// The created map is case-insensitive.
+    ///
+    /// Only ASCII characters are case folded. SQLite does **not** attempt to do full UTF case folding!
+    #[inline]
+    pub fn intersection_nocase(&mut self, other: &Self) -> Result<SQLiteSet<T>, Error>
+    where
+        T: CharType,
+    {
+        let tx_1 = other.transaction_readonly()?;
+        let mut statement_query = self.connection.prepare_cached(SQL_QUERY_KEYS)?;
+        let mut statement_find = tx_1.transaction.prepare_cached(SQL_EXISTS_NOC)?;
+        let mut intersected_map = SQLiteSet::with_nocase()?;
+        {
+            let tx_2 = intersected_map.transaction()?;
+            let mut statement_insert = tx_2.transaction.prepare_cached(SQL_INSERT_KEY)?;
+            for key in statement_query.query_map([], |row| row.get::<_, T>(0))? {
+                let key = key?;
+                if statement_find.exists([&key])? {
+                    match statement_insert.execute([key]) {
+                        Ok(_) => true,
+                        Err(error) => check_constraint_violation(error)?,
+                    };
+                }
+            }
+        }
+        Ok(intersected_map)
     }
 
     /// Checks whether the set contains the specified key.
@@ -495,7 +574,14 @@ where
     #[inline]
     fn from(connection: &'a mut Connection) -> Result<Self, Error> {
         let mut transaction = connection.transaction()?;
-        transaction.set_drop_behavior(rusqlite::DropBehavior::Commit);
+        transaction.set_drop_behavior(DropBehavior::Commit);
+        Ok(Self { _type: PhantomData, transaction })
+    }
+
+    #[inline]
+    fn from_immutable(connection: &'a Connection) -> Result<Self, Error> {
+        let mut transaction = connection.unchecked_transaction()?;
+        transaction.set_drop_behavior(DropBehavior::Commit);
         Ok(Self { _type: PhantomData, transaction })
     }
 
