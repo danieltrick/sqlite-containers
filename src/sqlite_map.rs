@@ -180,6 +180,42 @@ where
         Self::from_connection(Self::create_connection::<true, &Path>(None, false, false)?)
     }
 
+    /// Creates a new map with case-sensitive keys containing all key-value pairs yielded by the given [iterable](std::iter::IntoIterator).
+    ///
+    /// The new hash map is backed by an *in-memory* SQLite database.
+    #[inline]
+    pub fn from_entries<'a, Q, R, I>(entries: I) -> Result<Self, Error>
+    where
+        I: IntoIterator<Item = (&'a Q, &'a R)>,
+        K: Borrow<Q>,
+        Q: ?Sized + ToSql + 'a,
+        V: Borrow<R>,
+        R: ?Sized + ToSql + 'a,
+    {
+        let mut set = Self::new()?;
+        set.insert_all(entries)?;
+        Ok(set)
+    }
+
+    /// Creates a map set with case-insensitive keys containing all key-value pairs yielded by the given [iterable](std::iter::IntoIterator).
+    ///
+    /// The new hash map is backed by an *in-memory* SQLite database.
+    ///
+    /// Only ASCII characters are case folded. SQLite does **not** attempt to do full UTF case folding!
+    #[inline]
+    pub fn from_entries_nocase<'a, Q, R, I>(entries: I) -> Result<Self, Error>
+    where
+        I: IntoIterator<Item = (&'a Q, &'a R)>,
+        K: Borrow<Q> + CharType,
+        Q: ?Sized + ToSql + 'a,
+        V: Borrow<R>,
+        R: ?Sized + ToSql + 'a,
+    {
+        let mut set = Self::with_nocase()?;
+        set.insert_all(entries)?;
+        Ok(set)
+    }
+
     /// Creates a new or re-opens an existing hash map with case-sensitive keys, backed by a *file-based* SQLite database.
     ///
     /// If `readonly` is `true`, the database file is opened in “read-only” mode.
@@ -312,6 +348,32 @@ where
             Ok(_) => Ok(true),
             Err(error) => check_constraint_violation(error),
         }
+    }
+
+    /// Inserts all key-value pairs yielded by the given [iterable](std::iter::IntoIterator) into the map, skipping existing keys.
+    ///
+    /// Returns the number of new key-value pairs that have been inserted.
+    #[inline]
+    pub fn insert_all<'a, Q, R, I>(&mut self, entries: I) -> Result<Size, Error>
+    where
+        I: IntoIterator<Item = (&'a Q, &'a R)>,
+        K: Borrow<Q>,
+        Q: ?Sized + ToSql + 'a,
+        V: Borrow<R>,
+        R: ?Sized + ToSql + 'a,
+    {
+        let trx = self.transaction()?;
+        let mut statement = trx.transaction.prepare_cached(SQL_INSERT_KEY)?;
+        let mut counter = Size::default();
+        for (key, value) in entries {
+            if match statement.execute(params![key, value]) {
+                Ok(_) => true,
+                Err(error) => check_constraint_violation(error)?,
+            } {
+                increment(&mut counter);
+            }
+        }
+        Ok(counter)
     }
 
     /// Associates the specified value with the specified key, regardless of whether the key already exists in the map.
@@ -766,6 +828,29 @@ where
             Ok(_) => Ok(true),
             Err(error) => check_constraint_violation(error),
         }
+    }
+
+    /// This function is equivalent to [`SQLiteMap::insert_all()`].
+    #[inline]
+    pub fn insert_all<'b, Q, R, I>(&mut self, keys: I) -> Result<Size, Error>
+    where
+        I: IntoIterator<Item = (&'b Q, &'b R)>,
+        K: Borrow<Q>,
+        Q: ?Sized + ToSql + 'b,
+        V: Borrow<R>,
+        R: ?Sized + ToSql + 'b,
+    {
+        let mut statement = self.transaction.prepare_cached(SQL_INSERT_KEY)?;
+        let mut counter = Size::default();
+        for (key, value) in keys {
+            if match statement.execute(params![key, value]) {
+                Ok(_) => true,
+                Err(error) => check_constraint_violation(error)?,
+            } {
+                increment(&mut counter);
+            }
+        }
+        Ok(counter)
     }
 
     /// This function is equivalent to [`SQLiteMap::update()`].

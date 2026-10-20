@@ -251,16 +251,16 @@ fn test_sqlite_set_i64_transacted() {
 #[test]
 fn test_sqlite_set_i64_from_keys() {
     const KEYS: [i64; 6] = [0i64, 42i64, 8191i64, 42i64, i64::MIN, i64::MAX];
-    let set_1 = SQLiteSet::<i64>::from_keys(KEYS.as_slice()).unwrap();
+    let set = SQLiteSet::<i64>::from_keys(KEYS.as_slice()).unwrap();
 
-    assert_eq!(set_1.len().unwrap(), 5);
-    assert!(set_1.contains(&0i64).unwrap());
-    assert!(!set_1.contains(&1i64).unwrap());
-    assert!(set_1.contains(&42i64).unwrap());
-    assert!(set_1.contains(&8191i64).unwrap());
-    assert!(!set_1.contains(&131071i64).unwrap());
-    assert!(set_1.contains(&i64::MIN).unwrap());
-    assert!(set_1.contains(&i64::MAX).unwrap());
+    assert_eq!(set.len().unwrap(), 5);
+    assert!(set.contains(&0i64).unwrap());
+    assert!(!set.contains(&1i64).unwrap());
+    assert!(set.contains(&42i64).unwrap());
+    assert!(set.contains(&8191i64).unwrap());
+    assert!(!set.contains(&131071i64).unwrap());
+    assert!(set.contains(&i64::MIN).unwrap());
+    assert!(set.contains(&i64::MAX).unwrap());
 }
 
 #[test]
