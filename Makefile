@@ -29,15 +29,15 @@ test:
 	cargo nextest run --locked --release
 	cargo nextest run --locked --release --all-features
 
+doc:
+	cargo doc --locked --all-features
+
 run: $(EXAMPLES)
 $(EXAMPLES):
 	cargo run --locked --release --example $(patsubst run-%,%,$@)
 
 bench:
 	cargo bench --locked --bench sqlite_containers-bench -- --quick
-
-doc:
-	cargo doc --locked --all-features
 
 upgrade:
 	cargo upgrade -i
@@ -48,6 +48,9 @@ audit:
 
 codecov:
 	cargo llvm-cov --locked --all-features --lcov --output-path target/codecov-output.info
+
+dist:
+	cargo package --locked --all-features
 
 publish:
 	cargo publish --locked

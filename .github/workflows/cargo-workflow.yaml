@@ -155,11 +155,68 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
 
   # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  # Package
+  # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  package:
+    name: Package
+    needs: build
+
+    runs-on: ubuntu-26.04
+    steps:
+      - name: Install Rust Toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v2
+        with:
+          toolchain: 1.99.1
+          cache: false
+
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.release.tag_name && format('refs/tags/{0}', github.event.release.tag_name) || github.sha }}
+          fetch-depth: 0
+
+      - name: Create Package
+        run: make dist
+        env:
+          CARGO_PROFILE_RELEASE_DEBUG: true
+          RUST_BACKTRACE: 1
+
+      - name: Upload package
+        uses: actions/upload-artifact@v7
+        with:
+          name: sqlite_containers-package
+          path: target/package/*.crate
+
+  # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  # GitHub Release
+  # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  release:
+    name: Release
+    needs: [audit, codecov, package]
+    permissions:
+      contents: write
+    if: ${{ github.event_name == 'release' }}
+
+    runs-on: ubuntu-26.04
+    steps:
+      - name: Download
+        uses: actions/download-artifact@v8
+        with:
+          pattern: sqlite_containers-*
+          path: artifacts
+          merge-multiple: true
+      - uses: Roang-zero1/github-upload-release-artifacts-action@v3
+        with:
+          args: artifacts/
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   # Publish to crates.io
   # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   publish:
     name: Publish
-    needs: [audit, codecov]
+    needs: [audit, codecov, package]
     if: ${{ github.event_name == 'release' }}
 
     runs-on: ubuntu-26.04
