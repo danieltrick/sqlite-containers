@@ -893,6 +893,7 @@ fn test_sqlite_set_string_intersection_nocase() {
         assert!(tx.insert("foo").unwrap());
         assert!(tx.insert("BAR").unwrap());
         assert!(tx.insert("qux").unwrap());
+        assert!(tx.insert("xyz").unwrap());
         assert!(tx.insert("XYZ").unwrap());
     }
 

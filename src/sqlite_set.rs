@@ -265,10 +265,7 @@ where
             for key in statement_query.query_map([], |row| row.get::<_, T>(0))? {
                 let key = key?;
                 if statement_find.exists([&key])? {
-                    match statement_insert.execute([key]) {
-                        Ok(_) => true,
-                        Err(error) => check_constraint_violation(error)?,
-                    };
+                    _ = statement_insert.execute([key])?;
                 }
             }
         }
