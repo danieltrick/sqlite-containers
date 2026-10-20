@@ -98,6 +98,38 @@ where
         Self::from_connection(Self::create_connection::<true, &Path>(None, false, false)?)
     }
 
+    /// Creates a new hash set with case-sensitive keys containing all keys yielded by the given [iterable](std::iter::IntoIterator).
+    ///
+    /// The new hash set is backed by an *in-memory* SQLite database.
+    #[inline]
+    pub fn from_keys<'a, Q, I>(keys: I) -> Result<Self, Error>
+    where
+        I: IntoIterator<Item = &'a Q>,
+        T: Borrow<Q>,
+        Q: ?Sized + ToSql + 'a,
+    {
+        let mut set = Self::new()?;
+        set.insert_all(keys)?;
+        Ok(set)
+    }
+
+    /// Creates a new hash set with case-insensitive keys containing all keys yielded by the given [iterable](std::iter::IntoIterator).
+    ///
+    /// The new hash set is backed by an *in-memory* SQLite database.
+    ///
+    /// Only ASCII characters are case folded. SQLite does **not** attempt to do full UTF case folding!
+    #[inline]
+    pub fn from_keys_nocase<'a, Q, I>(keys: I) -> Result<Self, Error>
+    where
+        I: IntoIterator<Item = &'a Q>,
+        T: Borrow<Q> + CharType,
+        Q: ?Sized + ToSql + 'a,
+    {
+        let mut set = Self::with_nocase()?;
+        set.insert_all(keys)?;
+        Ok(set)
+    }
+
     /// Creates a new or re-opens an existing hash set with case-sensitive keys, backed by a *file-based* SQLite database.
     ///
     /// If `readonly` is `true`, the database file is opened in “read-only” mode.
@@ -213,6 +245,30 @@ where
         }
     }
 
+    /// Inserts all keys yielded by the given [iterable](std::iter::IntoIterator) into the set, skipping duplicate keys.
+    ///
+    /// Returns the number of new keys that have been inserted.
+    #[inline]
+    pub fn insert_all<'a, Q, I>(&mut self, keys: I) -> Result<Size, Error>
+    where
+        I: IntoIterator<Item = &'a Q>,
+        T: Borrow<Q>,
+        Q: ?Sized + ToSql + 'a,
+    {
+        let trx = self.transaction()?;
+        let mut statement = trx.transaction.prepare_cached(SQL_INSERT_KEY)?;
+        let mut counter = Size::default();
+        for key in keys {
+            if match statement.execute([key]) {
+                Ok(_) => true,
+                Err(error) => check_constraint_violation(error)?,
+            } {
+                increment(&mut counter);
+            }
+        }
+        Ok(counter)
+    }
+
     /// Inserts all keys from another set into this set, ignoring existing keys.
     ///
     /// Returns the number of new keys that have been inserted.
@@ -265,7 +321,7 @@ where
             for key in statement_query.query_map([], |row| row.get::<_, T>(0))? {
                 let key = key?;
                 if statement_find.exists([&key])? {
-                    _ = statement_insert.execute([key])?;
+                    statement_insert.execute([key])?;
                 }
             }
         }
@@ -598,6 +654,27 @@ where
             Ok(_) => Ok(true),
             Err(error) => check_constraint_violation(error),
         }
+    }
+
+    /// This function is equivalent to [`SQLiteSet::insert_all()`].
+    #[inline]
+    pub fn insert_all<'b, Q, I>(&mut self, keys: I) -> Result<Size, Error>
+    where
+        I: IntoIterator<Item = &'b Q>,
+        T: Borrow<Q>,
+        Q: ?Sized + ToSql + 'b,
+    {
+        let mut statement = self.transaction.prepare_cached(SQL_INSERT_KEY)?;
+        let mut counter = Size::default();
+        for key in keys {
+            if match statement.execute([key]) {
+                Ok(_) => true,
+                Err(error) => check_constraint_violation(error)?,
+            } {
+                increment(&mut counter);
+            }
+        }
+        Ok(counter)
     }
 
     /// Insert all keys from the given [`SQLiteMap`] into this set.

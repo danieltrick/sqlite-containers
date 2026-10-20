@@ -4,6 +4,9 @@
 
 use cfg_if::cfg_if;
 
+// Use “fast” settings for some long-running tests in DEBUG mode, and generally on 16- and 32-bit platforms.
+// Also use slightly faster settings when executing on a GitHub Actions runner.
+// Furthermore, we use even faster settings specifically on GitHub's “macOS” runner to avoid nasty timeouts!
 cfg_if! {
     if #[cfg(any(debug_assertions, target_pointer_width = "16", target_pointer_width = "32"))] {
         pub const MAX_ITEMS: u64 = 125_000u64;
