@@ -1,0 +1,19 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  check:
+    runs-on: codeberg-small
+    container:
+      image: cimg/rust:1.99.1-node
+    steps:
+      - name: Checkout
+        uses: https://data.forgejo.org/actions/checkout@v7
+
+      - name: Perform Code Check
+        run: make check
