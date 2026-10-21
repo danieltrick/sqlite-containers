@@ -276,6 +276,30 @@ where
         Ok(counter)
     }
 
+    /// Inserts all keys yielded by the given [iterable](std::iter::IntoIterator) into the set, skipping duplicate keys.
+    ///
+    /// Returns the number of new keys that have been inserted.
+    #[inline]
+    pub fn extend_ref<'b, I, Q>(&mut self, keys: I) -> Result<Size, Error>
+    where
+        I: IntoIterator<Item = &'b Q>,
+        T: Borrow<Q>,
+        Q: ?Sized + ToSql + 'b,
+    {
+        let trx = self.transaction()?;
+        let mut statement = trx.transaction.prepare_cached(SQL_INSERT_KEY)?;
+        let mut counter = Size::default();
+        for key in keys {
+            if match statement.execute([key]) {
+                Ok(_) => true,
+                Err(error) => check_constraint_violation(error)?,
+            } {
+                increment(&mut counter);
+            }
+        }
+        Ok(counter)
+    }
+
     /// Inserts all keys from another set into this set, ignoring existing keys.
     ///
     /// Returns the number of new keys that have been inserted.
@@ -678,6 +702,27 @@ where
     pub fn extend<I>(&mut self, keys: I) -> Result<Size, Error>
     where
         I: IntoIterator<Item = T>,
+    {
+        let mut statement = self.transaction.prepare_cached(SQL_INSERT_KEY)?;
+        let mut counter = Size::default();
+        for key in keys {
+            if match statement.execute([key]) {
+                Ok(_) => true,
+                Err(error) => check_constraint_violation(error)?,
+            } {
+                increment(&mut counter);
+            }
+        }
+        Ok(counter)
+    }
+
+    /// This function is equivalent to [`SQLiteSet::extend_ref()`].
+    #[inline]
+    pub fn extend_ref<'b, I, Q>(&mut self, keys: I) -> Result<Size, Error>
+    where
+        I: IntoIterator<Item = &'b Q>,
+        T: Borrow<Q>,
+        Q: ?Sized + ToSql + 'b,
     {
         let mut statement = self.transaction.prepare_cached(SQL_INSERT_KEY)?;
         let mut counter = Size::default();

@@ -223,16 +223,37 @@ fn test_sqlite_map_i64_string() {
     assert!(!map.is_empty().unwrap());
     assert!(map.contains_key(&0i64).unwrap());
     assert!(map.contains_key(&42i64).unwrap());
+    assert!(!map.contains_key(&524287).unwrap());
     assert!(map.contains_key(&8191i64).unwrap());
     assert!(map.contains_key(&131071i64).unwrap());
     assert!(map.contains_key(&i64::MAX).unwrap());
     assert!(!map.contains_key(&i64::MIN).unwrap());
     assert!(map.get(&0i64).unwrap().is_some_and(|value| value.eq("ijklmnop")));
     assert!(map.get(&42i64).unwrap().is_some_and(|value| value.eq("ponmlkji")));
+    assert!(map.get(&524287).unwrap().is_none());
     assert!(map.get(&8191i64).unwrap().is_some_and(|value| value.eq("hgfedcba")));
     assert!(map.get(&131071i64).unwrap().is_some_and(|value| value.eq("stuvwxyz")));
     assert!(map.get(&i64::MAX).unwrap().is_some_and(|value| value.eq("zyxwvuts")));
     assert!(map.get(&i64::MIN).unwrap().is_none());
+
+    assert_eq!(map.extend_ref([(&42i64, "deadbeef"), (&i64::MIN, "cafebabe"), (&42i64, "dead10cc")]).unwrap(), 1);
+
+    assert_eq!(map.len().unwrap(), 6);
+    assert!(!map.is_empty().unwrap());
+    assert!(map.contains_key(&0i64).unwrap());
+    assert!(map.contains_key(&42i64).unwrap());
+    assert!(!map.contains_key(&524287).unwrap());
+    assert!(map.contains_key(&8191i64).unwrap());
+    assert!(map.contains_key(&131071i64).unwrap());
+    assert!(map.contains_key(&i64::MAX).unwrap());
+    assert!(map.contains_key(&i64::MIN).unwrap());
+    assert!(map.get(&0i64).unwrap().is_some_and(|value| value.eq("ijklmnop")));
+    assert!(map.get(&42i64).unwrap().is_some_and(|value| value.eq("ponmlkji")));
+    assert!(map.get(&524287).unwrap().is_none());
+    assert!(map.get(&8191i64).unwrap().is_some_and(|value| value.eq("hgfedcba")));
+    assert!(map.get(&131071i64).unwrap().is_some_and(|value| value.eq("stuvwxyz")));
+    assert!(map.get(&i64::MAX).unwrap().is_some_and(|value| value.eq("zyxwvuts")));
+    assert!(map.get(&i64::MIN).unwrap().is_some_and(|value| value.eq("cafebabe")));
 }
 
 #[test]
@@ -419,22 +440,43 @@ fn test_sqlite_map_i64_string_transacted() {
         3
     );
 
+    assert_eq!(tx.len().unwrap(), 5);
+    assert!(!tx.is_empty().unwrap());
+    assert!(tx.contains_key(&0i64).unwrap());
+    assert!(tx.contains_key(&42i64).unwrap());
+    assert!(!tx.contains_key(&524287).unwrap());
+    assert!(tx.contains_key(&8191i64).unwrap());
+    assert!(tx.contains_key(&131071i64).unwrap());
+    assert!(tx.contains_key(&i64::MAX).unwrap());
+    assert!(!tx.contains_key(&i64::MIN).unwrap());
+    assert!(tx.get(&0i64).unwrap().is_some_and(|value| value.eq("ijklmnop")));
+    assert!(tx.get(&42i64).unwrap().is_some_and(|value| value.eq("ponmlkji")));
+    assert!(tx.get(&524287).unwrap().is_none());
+    assert!(tx.get(&8191i64).unwrap().is_some_and(|value| value.eq("hgfedcba")));
+    assert!(tx.get(&131071i64).unwrap().is_some_and(|value| value.eq("stuvwxyz")));
+    assert!(tx.get(&i64::MAX).unwrap().is_some_and(|value| value.eq("zyxwvuts")));
+    assert!(tx.get(&i64::MIN).unwrap().is_none());
+
+    assert_eq!(tx.extend_ref([(&42i64, "deadbeef"), (&i64::MIN, "cafebabe"), (&42i64, "dead10cc")]).unwrap(), 1);
+
     tx.commit();
 
-    assert_eq!(map.len().unwrap(), 5);
+    assert_eq!(map.len().unwrap(), 6);
     assert!(!map.is_empty().unwrap());
     assert!(map.contains_key(&0i64).unwrap());
     assert!(map.contains_key(&42i64).unwrap());
+    assert!(!map.contains_key(&524287).unwrap());
     assert!(map.contains_key(&8191i64).unwrap());
     assert!(map.contains_key(&131071i64).unwrap());
     assert!(map.contains_key(&i64::MAX).unwrap());
-    assert!(!map.contains_key(&i64::MIN).unwrap());
+    assert!(map.contains_key(&i64::MIN).unwrap());
     assert!(map.get(&0i64).unwrap().is_some_and(|value| value.eq("ijklmnop")));
     assert!(map.get(&42i64).unwrap().is_some_and(|value| value.eq("ponmlkji")));
+    assert!(map.get(&524287).unwrap().is_none());
     assert!(map.get(&8191i64).unwrap().is_some_and(|value| value.eq("hgfedcba")));
     assert!(map.get(&131071i64).unwrap().is_some_and(|value| value.eq("stuvwxyz")));
     assert!(map.get(&i64::MAX).unwrap().is_some_and(|value| value.eq("zyxwvuts")));
-    assert!(map.get(&i64::MIN).unwrap().is_none());
+    assert!(map.get(&i64::MIN).unwrap().is_some_and(|value| value.eq("cafebabe")));
 }
 
 #[test]
@@ -849,11 +891,30 @@ fn test_sqlite_map_blob_string() {
     assert!(map.contains_key(&b"baz"[..]).unwrap());
     assert!(map.contains_key(&b"qux"[..]).unwrap());
     assert!(!map.contains_key(&b"xyz"[..]).unwrap());
+    assert!(!map.contains_key(&b"$?!"[..]).unwrap());
     assert!(map.get(&b"foo"[..]).unwrap().is_some_and(|value| value.eq("ijklmnop")));
     assert!(map.get(&b"bar"[..]).unwrap().is_some_and(|value| value.eq("abcdefgh")));
     assert!(map.get(&b"baz"[..]).unwrap().is_some_and(|value| value.eq("ponmlkji")));
     assert!(map.get(&b"qux"[..]).unwrap().is_some_and(|value| value.eq("stuvwxyz")));
     assert!(map.get(&b"xyz"[..]).unwrap().is_none());
+    assert!(map.get(&b"$?!"[..]).unwrap().is_none());
+
+    assert_eq!(map.extend_ref([(&b"foo"[..], "deadbeef"), (&b"xyz"[..], "cafebabe"), (&b"qux"[..], "dead10cc")]).unwrap(), 1);
+
+    assert_eq!(map.len().unwrap(), 5);
+    assert!(!map.is_empty().unwrap());
+    assert!(map.contains_key(&b"foo"[..]).unwrap());
+    assert!(map.contains_key(&b"bar"[..]).unwrap());
+    assert!(map.contains_key(&b"baz"[..]).unwrap());
+    assert!(map.contains_key(&b"qux"[..]).unwrap());
+    assert!(map.contains_key(&b"xyz"[..]).unwrap());
+    assert!(!map.contains_key(&b"$?!"[..]).unwrap());
+    assert!(map.get(&b"foo"[..]).unwrap().is_some_and(|value| value.eq("ijklmnop")));
+    assert!(map.get(&b"bar"[..]).unwrap().is_some_and(|value| value.eq("abcdefgh")));
+    assert!(map.get(&b"baz"[..]).unwrap().is_some_and(|value| value.eq("ponmlkji")));
+    assert!(map.get(&b"qux"[..]).unwrap().is_some_and(|value| value.eq("stuvwxyz")));
+    assert!(map.get(&b"xyz"[..]).unwrap().is_some_and(|value| value.eq("cafebabe")));
+    assert!(map.get(&b"$?!"[..]).unwrap().is_none());
 }
 
 #[test]
@@ -1053,20 +1114,39 @@ fn test_sqlite_map_blob_string_transacted() {
         2
     );
 
+    assert_eq!(tx.len().unwrap(), 4);
+    assert!(!tx.is_empty().unwrap());
+    assert!(tx.contains_key(&b"foo"[..]).unwrap());
+    assert!(tx.contains_key(&b"bar"[..]).unwrap());
+    assert!(tx.contains_key(&b"baz"[..]).unwrap());
+    assert!(tx.contains_key(&b"qux"[..]).unwrap());
+    assert!(!tx.contains_key(&b"xyz"[..]).unwrap());
+    assert!(!tx.contains_key(&b"$?!"[..]).unwrap());
+    assert!(tx.get(&b"foo"[..]).unwrap().is_some_and(|value| value.eq("ijklmnop")));
+    assert!(tx.get(&b"bar"[..]).unwrap().is_some_and(|value| value.eq("abcdefgh")));
+    assert!(tx.get(&b"baz"[..]).unwrap().is_some_and(|value| value.eq("ponmlkji")));
+    assert!(tx.get(&b"qux"[..]).unwrap().is_some_and(|value| value.eq("stuvwxyz")));
+    assert!(tx.get(&b"xyz"[..]).unwrap().is_none());
+    assert!(tx.get(&b"$?!"[..]).unwrap().is_none());
+
+    assert_eq!(tx.extend_ref([(&b"foo"[..], "deadbeef"), (&b"xyz"[..], "cafebabe"), (&b"qux"[..], "dead10cc")]).unwrap(), 1);
+
     tx.commit();
 
-    assert_eq!(map.len().unwrap(), 4);
+    assert_eq!(map.len().unwrap(), 5);
     assert!(!map.is_empty().unwrap());
     assert!(map.contains_key(&b"foo"[..]).unwrap());
     assert!(map.contains_key(&b"bar"[..]).unwrap());
     assert!(map.contains_key(&b"baz"[..]).unwrap());
     assert!(map.contains_key(&b"qux"[..]).unwrap());
-    assert!(!map.contains_key(&b"xyz"[..]).unwrap());
+    assert!(map.contains_key(&b"xyz"[..]).unwrap());
+    assert!(!map.contains_key(&b"$?!"[..]).unwrap());
     assert!(map.get(&b"foo"[..]).unwrap().is_some_and(|value| value.eq("ijklmnop")));
     assert!(map.get(&b"bar"[..]).unwrap().is_some_and(|value| value.eq("abcdefgh")));
     assert!(map.get(&b"baz"[..]).unwrap().is_some_and(|value| value.eq("ponmlkji")));
     assert!(map.get(&b"qux"[..]).unwrap().is_some_and(|value| value.eq("stuvwxyz")));
-    assert!(map.get(&b"xyz"[..]).unwrap().is_none());
+    assert!(map.get(&b"xyz"[..]).unwrap().is_some_and(|value| value.eq("cafebabe")));
+    assert!(map.get(&b"$?!"[..]).unwrap().is_none());
 }
 
 #[test]
@@ -1507,11 +1587,30 @@ fn test_sqlite_map_string_string() {
     assert!(map.contains_key("baz").unwrap());
     assert!(map.contains_key("qux").unwrap());
     assert!(!map.contains_key("xyz").unwrap());
+    assert!(!map.contains_key("$?!").unwrap());
     assert!(map.get("foo").unwrap().is_some_and(|value| value.eq("ijklmnop")));
     assert!(map.get("bar").unwrap().is_some_and(|value| value.eq("abcdefgh")));
     assert!(map.get("baz").unwrap().is_some_and(|value| value.eq("ponmlkji")));
     assert!(map.get("qux").unwrap().is_some_and(|value| value.eq("stuvwxyz")));
     assert!(map.get("xyz").unwrap().is_none());
+    assert!(map.get("$?!").unwrap().is_none());
+
+    assert_eq!(map.extend_ref([("foo", "deadbeef"), ("xyz", "cafebabe"), ("qux", "dead10cc")]).unwrap(), 1);
+
+    assert_eq!(map.len().unwrap(), 5);
+    assert!(!map.is_empty().unwrap());
+    assert!(map.contains_key("foo").unwrap());
+    assert!(map.contains_key("bar").unwrap());
+    assert!(map.contains_key("baz").unwrap());
+    assert!(map.contains_key("qux").unwrap());
+    assert!(map.contains_key("xyz").unwrap());
+    assert!(!map.contains_key("$?!").unwrap());
+    assert!(map.get("foo").unwrap().is_some_and(|value| value.eq("ijklmnop")));
+    assert!(map.get("bar").unwrap().is_some_and(|value| value.eq("abcdefgh")));
+    assert!(map.get("baz").unwrap().is_some_and(|value| value.eq("ponmlkji")));
+    assert!(map.get("qux").unwrap().is_some_and(|value| value.eq("stuvwxyz")));
+    assert!(map.get("xyz").unwrap().is_some_and(|value| value.eq("cafebabe")));
+    assert!(map.get("$?!").unwrap().is_none());
 }
 
 #[test]
@@ -1771,20 +1870,39 @@ fn test_sqlite_map_string_string_transacted() {
         2
     );
 
+    assert_eq!(tx.len().unwrap(), 4);
+    assert!(!tx.is_empty().unwrap());
+    assert!(tx.contains_key("foo").unwrap());
+    assert!(tx.contains_key("bar").unwrap());
+    assert!(tx.contains_key("baz").unwrap());
+    assert!(tx.contains_key("qux").unwrap());
+    assert!(!tx.contains_key("xyz").unwrap());
+    assert!(!tx.contains_key("$?!").unwrap());
+    assert!(tx.get("foo").unwrap().is_some_and(|value| value.eq("ijklmnop")));
+    assert!(tx.get("bar").unwrap().is_some_and(|value| value.eq("abcdefgh")));
+    assert!(tx.get("baz").unwrap().is_some_and(|value| value.eq("ponmlkji")));
+    assert!(tx.get("qux").unwrap().is_some_and(|value| value.eq("stuvwxyz")));
+    assert!(tx.get("xyz").unwrap().is_none());
+    assert!(tx.get("$?!").unwrap().is_none());
+
+    assert_eq!(tx.extend_ref([("foo", "deadbeef"), ("xyz", "cafebabe"), ("qux", "dead10cc")]).unwrap(), 1);
+
     tx.commit();
 
-    assert_eq!(map.len().unwrap(), 4);
+    assert_eq!(map.len().unwrap(), 5);
     assert!(!map.is_empty().unwrap());
     assert!(map.contains_key("foo").unwrap());
     assert!(map.contains_key("bar").unwrap());
     assert!(map.contains_key("baz").unwrap());
     assert!(map.contains_key("qux").unwrap());
-    assert!(!map.contains_key("xyz").unwrap());
+    assert!(map.contains_key("xyz").unwrap());
+    assert!(!map.contains_key("$?!").unwrap());
     assert!(map.get("foo").unwrap().is_some_and(|value| value.eq("ijklmnop")));
     assert!(map.get("bar").unwrap().is_some_and(|value| value.eq("abcdefgh")));
     assert!(map.get("baz").unwrap().is_some_and(|value| value.eq("ponmlkji")));
     assert!(map.get("qux").unwrap().is_some_and(|value| value.eq("stuvwxyz")));
-    assert!(map.get("xyz").unwrap().is_none());
+    assert!(map.get("xyz").unwrap().is_some_and(|value| value.eq("cafebabe")));
+    assert!(map.get("$?!").unwrap().is_none());
 }
 
 #[test]
@@ -2286,11 +2404,30 @@ fn test_sqlite_map_string_blob() {
     assert!(map.contains_key("baz").unwrap());
     assert!(map.contains_key("qux").unwrap());
     assert!(!map.contains_key("xyz").unwrap());
+    assert!(!map.contains_key("$?!").unwrap());
     assert!(map.get("foo").unwrap().is_some_and(|value| value.eq(&b"ijklmnop"[..])));
     assert!(map.get("bar").unwrap().is_some_and(|value| value.eq(&b"abcdefgh"[..])));
     assert!(map.get("baz").unwrap().is_some_and(|value| value.eq(&b"ponmlkji"[..])));
     assert!(map.get("qux").unwrap().is_some_and(|value| value.eq(&b"stuvwxyz"[..])));
     assert!(map.get("xyz").unwrap().is_none());
+    assert!(map.get("$?!").unwrap().is_none());
+
+    assert_eq!(map.extend_ref([("foo", &b"deadbeef"[..]), ("xyz", &b"cafebabe"[..]), ("qux", &b"dead10cc"[..])]).unwrap(), 1);
+
+    assert_eq!(map.len().unwrap(), 5);
+    assert!(!map.is_empty().unwrap());
+    assert!(map.contains_key("foo").unwrap());
+    assert!(map.contains_key("bar").unwrap());
+    assert!(map.contains_key("baz").unwrap());
+    assert!(map.contains_key("qux").unwrap());
+    assert!(map.contains_key("xyz").unwrap());
+    assert!(!map.contains_key("$?!").unwrap());
+    assert!(map.get("foo").unwrap().is_some_and(|value| value.eq(b"ijklmnop")));
+    assert!(map.get("bar").unwrap().is_some_and(|value| value.eq(b"abcdefgh")));
+    assert!(map.get("baz").unwrap().is_some_and(|value| value.eq(b"ponmlkji")));
+    assert!(map.get("qux").unwrap().is_some_and(|value| value.eq(b"stuvwxyz")));
+    assert!(map.get("xyz").unwrap().is_some_and(|value| value.eq(b"cafebabe")));
+    assert!(map.get("$?!").unwrap().is_none());
 }
 
 #[test]
@@ -2550,20 +2687,39 @@ fn test_sqlite_map_string_blob_transacted() {
         2
     );
 
+    assert_eq!(tx.len().unwrap(), 4);
+    assert!(!tx.is_empty().unwrap());
+    assert!(tx.contains_key("foo").unwrap());
+    assert!(tx.contains_key("bar").unwrap());
+    assert!(tx.contains_key("baz").unwrap());
+    assert!(tx.contains_key("qux").unwrap());
+    assert!(!tx.contains_key("xyz").unwrap());
+    assert!(!tx.contains_key("$?!").unwrap());
+    assert!(tx.get("foo").unwrap().is_some_and(|value| value.eq(&b"ijklmnop"[..])));
+    assert!(tx.get("bar").unwrap().is_some_and(|value| value.eq(&b"abcdefgh"[..])));
+    assert!(tx.get("baz").unwrap().is_some_and(|value| value.eq(&b"ponmlkji"[..])));
+    assert!(tx.get("qux").unwrap().is_some_and(|value| value.eq(&b"stuvwxyz"[..])));
+    assert!(tx.get("xyz").unwrap().is_none());
+    assert!(tx.get("$?!").unwrap().is_none());
+
+    assert_eq!(tx.extend_ref([("foo", &b"deadbeef"[..]), ("xyz", &b"cafebabe"[..]), ("qux", &b"dead10cc"[..])]).unwrap(), 1);
+
     tx.commit();
 
-    assert_eq!(map.len().unwrap(), 4);
+    assert_eq!(map.len().unwrap(), 5);
     assert!(!map.is_empty().unwrap());
     assert!(map.contains_key("foo").unwrap());
     assert!(map.contains_key("bar").unwrap());
     assert!(map.contains_key("baz").unwrap());
     assert!(map.contains_key("qux").unwrap());
-    assert!(!map.contains_key("xyz").unwrap());
-    assert!(map.get("foo").unwrap().is_some_and(|value| value.eq(&b"ijklmnop"[..])));
-    assert!(map.get("bar").unwrap().is_some_and(|value| value.eq(&b"abcdefgh"[..])));
-    assert!(map.get("baz").unwrap().is_some_and(|value| value.eq(&b"ponmlkji"[..])));
-    assert!(map.get("qux").unwrap().is_some_and(|value| value.eq(&b"stuvwxyz"[..])));
-    assert!(map.get("xyz").unwrap().is_none());
+    assert!(map.contains_key("xyz").unwrap());
+    assert!(!map.contains_key("$?!").unwrap());
+    assert!(map.get("foo").unwrap().is_some_and(|value| value.eq(b"ijklmnop")));
+    assert!(map.get("bar").unwrap().is_some_and(|value| value.eq(b"abcdefgh")));
+    assert!(map.get("baz").unwrap().is_some_and(|value| value.eq(b"ponmlkji")));
+    assert!(map.get("qux").unwrap().is_some_and(|value| value.eq(b"stuvwxyz")));
+    assert!(map.get("xyz").unwrap().is_some_and(|value| value.eq(b"cafebabe")));
+    assert!(map.get("$?!").unwrap().is_none());
 }
 
 #[test]
@@ -3064,11 +3220,30 @@ fn test_sqlite_map_string_i64() {
     assert!(map.contains_key("baz").unwrap());
     assert!(map.contains_key("qux").unwrap());
     assert!(!map.contains_key("xyz").unwrap());
+    assert!(!map.contains_key("$?!").unwrap());
     assert!(map.get("foo").unwrap().is_some_and(|value| value.eq(&0x12345678i64)));
     assert!(map.get("bar").unwrap().is_some_and(|value| value.eq(&0x9ABCDEF0i64)));
     assert!(map.get("baz").unwrap().is_some_and(|value| value.eq(&0x87654321i64)));
     assert!(map.get("qux").unwrap().is_some_and(|value| value.eq(&0xDEADBEEFi64)));
     assert!(map.get("xyz").unwrap().is_none());
+    assert!(map.get("$?!").unwrap().is_none());
+
+    assert_eq!(map.extend_ref([("foo", &0xEBEBEBEBi64), ("xyz", &0xCAFEBABEi64), ("qux", &0xDEAD10CCi64)]).unwrap(), 1);
+
+    assert_eq!(map.len().unwrap(), 5);
+    assert!(!map.is_empty().unwrap());
+    assert!(map.contains_key("foo").unwrap());
+    assert!(map.contains_key("bar").unwrap());
+    assert!(map.contains_key("baz").unwrap());
+    assert!(map.contains_key("qux").unwrap());
+    assert!(map.contains_key("xyz").unwrap());
+    assert!(!map.contains_key("$?!").unwrap());
+    assert!(map.get("foo").unwrap().is_some_and(|value| value.eq(&0x12345678i64)));
+    assert!(map.get("bar").unwrap().is_some_and(|value| value.eq(&0x9ABCDEF0i64)));
+    assert!(map.get("baz").unwrap().is_some_and(|value| value.eq(&0x87654321i64)));
+    assert!(map.get("qux").unwrap().is_some_and(|value| value.eq(&0xDEADBEEFi64)));
+    assert!(map.get("xyz").unwrap().is_some_and(|value| value.eq(&0xCAFEBABEi64)));
+    assert!(map.get("$?!").unwrap().is_none());
 }
 
 #[test]
@@ -3325,20 +3500,39 @@ fn test_sqlite_map_string_i64_transacted() {
 
     assert_eq!(tx.extend([("bar".to_owned(), 0x9ABCDEF0i64), ("baz".to_owned(), 0xCAFEBABE), ("qux".to_owned(), 0xDEADBEEFi64)]).unwrap(), 2);
 
+    assert_eq!(tx.len().unwrap(), 4);
+    assert!(!tx.is_empty().unwrap());
+    assert!(tx.contains_key("foo").unwrap());
+    assert!(tx.contains_key("bar").unwrap());
+    assert!(tx.contains_key("baz").unwrap());
+    assert!(tx.contains_key("qux").unwrap());
+    assert!(!tx.contains_key("xyz").unwrap());
+    assert!(!tx.contains_key("$?!").unwrap());
+    assert!(tx.get("foo").unwrap().is_some_and(|value| value.eq(&0x12345678i64)));
+    assert!(tx.get("bar").unwrap().is_some_and(|value| value.eq(&0x9ABCDEF0i64)));
+    assert!(tx.get("baz").unwrap().is_some_and(|value| value.eq(&0x87654321i64)));
+    assert!(tx.get("qux").unwrap().is_some_and(|value| value.eq(&0xDEADBEEFi64)));
+    assert!(tx.get("xyz").unwrap().is_none());
+    assert!(tx.get("$?!").unwrap().is_none());
+
+    assert_eq!(tx.extend_ref([("foo", &0xEBEBEBEBi64), ("xyz", &0xCAFEBABEi64), ("qux", &0xDEAD10CCi64)]).unwrap(), 1);
+
     tx.commit();
 
-    assert_eq!(map.len().unwrap(), 4);
+    assert_eq!(map.len().unwrap(), 5);
     assert!(!map.is_empty().unwrap());
     assert!(map.contains_key("foo").unwrap());
     assert!(map.contains_key("bar").unwrap());
     assert!(map.contains_key("baz").unwrap());
     assert!(map.contains_key("qux").unwrap());
-    assert!(!map.contains_key("xyz").unwrap());
+    assert!(map.contains_key("xyz").unwrap());
+    assert!(!map.contains_key("$?!").unwrap());
     assert!(map.get("foo").unwrap().is_some_and(|value| value.eq(&0x12345678i64)));
     assert!(map.get("bar").unwrap().is_some_and(|value| value.eq(&0x9ABCDEF0i64)));
     assert!(map.get("baz").unwrap().is_some_and(|value| value.eq(&0x87654321i64)));
     assert!(map.get("qux").unwrap().is_some_and(|value| value.eq(&0xDEADBEEFi64)));
-    assert!(map.get("xyz").unwrap().is_none());
+    assert!(map.get("xyz").unwrap().is_some_and(|value| value.eq(&0xCAFEBABEi64)));
+    assert!(map.get("$?!").unwrap().is_none());
 }
 
 #[test]

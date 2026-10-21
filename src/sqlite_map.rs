@@ -421,6 +421,32 @@ where
         Ok(counter)
     }
 
+    /// Inserts all key-value pairs yielded by the given [iterable](std::iter::IntoIterator) into the map, skipping existing keys.
+    ///
+    /// Returns the number of new key-value pairs that have been inserted.
+    #[inline]
+    pub fn extend_ref<'a, I, Q, R>(&mut self, entries: I) -> Result<Size, Error>
+    where
+        I: IntoIterator<Item = (&'a Q, &'a R)>,
+        K: Borrow<Q>,
+        Q: ?Sized + ToSql + 'a,
+        V: Borrow<R>,
+        R: ?Sized + ToSql + 'a,
+    {
+        let trx = self.transaction()?;
+        let mut statement = trx.transaction.prepare_cached(SQL_INSERT_KEY)?;
+        let mut counter = Size::default();
+        for (key, value) in entries {
+            if match statement.execute(params![key, value]) {
+                Ok(_) => true,
+                Err(error) => check_constraint_violation(error)?,
+            } {
+                increment(&mut counter);
+            }
+        }
+        Ok(counter)
+    }
+
     /// Inserts all key-value pairs from another map into this map.
     ///
     /// If `update` is `true`, this function updates the values associated with existing keys in this map using the corresponding values from the other map. Otherwise, the values associated with existing keys are **not** changed.
@@ -903,6 +929,29 @@ where
         let mut statement = self.transaction.prepare_cached(SQL_INSERT_KEY)?;
         let mut counter = Size::default();
         for (key, value) in keys {
+            if match statement.execute(params![key, value]) {
+                Ok(_) => true,
+                Err(error) => check_constraint_violation(error)?,
+            } {
+                increment(&mut counter);
+            }
+        }
+        Ok(counter)
+    }
+
+    /// This function is equivalent to [`SQLiteMap::extend_ref()`].
+    #[inline]
+    pub fn extend_ref<'b, I, Q, R>(&mut self, entries: I) -> Result<Size, Error>
+    where
+        I: IntoIterator<Item = (&'a Q, &'a R)>,
+        K: Borrow<Q>,
+        Q: ?Sized + ToSql + 'a,
+        V: Borrow<R>,
+        R: ?Sized + ToSql + 'a,
+    {
+        let mut statement = self.transaction.prepare_cached(SQL_INSERT_KEY)?;
+        let mut counter = Size::default();
+        for (key, value) in entries {
             if match statement.execute(params![key, value]) {
                 Ok(_) => true,
                 Err(error) => check_constraint_violation(error)?,
