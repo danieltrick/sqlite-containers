@@ -217,7 +217,7 @@ where
     ///
     /// Returns [`Error::InvalidSchema`], if the database file already exists but its schema does **not** match the schema expected by this type of map. This means that you **must** re-open a database file with the *same* type of map that was used to create it.
     #[inline]
-    pub fn from_file<P>(path: P, readonly: bool, can_create: bool) -> Result<Self, Error>
+    pub fn try_from_file<P>(path: P, readonly: bool, can_create: bool) -> Result<Self, Error>
     where
         P: AsRef<Path>,
     {
@@ -234,7 +234,7 @@ where
     ///
     /// Only ASCII characters are case folded. SQLite does **not** attempt to do full UTF case folding!
     #[inline]
-    pub fn from_file_nocase<P>(path: P, readonly: bool, can_create: bool) -> Result<Self, Error>
+    pub fn try_from_file_nocase<P>(path: P, readonly: bool, can_create: bool) -> Result<Self, Error>
     where
         K: CharType,
         P: AsRef<Path>,

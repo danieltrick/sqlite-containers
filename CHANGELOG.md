@@ -4,6 +4,37 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/).
 
+## [2.3.0] - 2026-10-22
+
+### Added
+
+- Added new functions `SQLiteMap::try_from()` and `SQLiteMap::try_from_nocase()`.
+- Added new functions `SQLiteSet::try_from()` and `SQLiteSet::try_from_nocase()`.
+- Added new functions `SQLiteMap::insert_ref()` and `SQLiteSet::insert_ref()`.
+- Added new function `SQLiteMap::update_ref()`.
+- Added new functions `SQLiteMap::extend()` and `SQLiteSet::extend()`.
+- Added new functions `SQLiteMap::extend_ref()` and `SQLiteSet::extend_ref()`.
+- Added new functions `SQLiteMap::try_for_each_key()` and `SQLiteMap::try_for_each_entry()`.
+- Added new function `SQLiteSet::try_for_each()`.
+- Added new functions `SQLiteSet::difference()` and `SQLiteSet::intersection()`.
+- Added new CI/CD workflows for GitLab and Forgejo/Codeberg.
+
+### Changed
+
+- Functions `SQLiteMap::insert()` and `SQLiteMap::update()` now take owned keys/values.
+- Function `SQLiteSet::insert()` now takes owned keys.
+- Function `SQLiteMap::from_file()` was renamed to `SQLiteMap::try_from_file()`.
+- Function `SQLiteMap::from_file_nocase()` was renamed to `SQLiteMap::try_from_file_nocase()`.
+- Function `SQLiteSet::from_file()` was renamed to `SQLiteSet::try_from_file()`.
+- Function `SQLiteSet::from_file_nocase()` was renamed to `SQLiteSet::try_from_file_nocase()`.
+- Improved test coverage for map and set operations.
+
+## [2.2.1] - 2026-10-18
+
+### Fixed
+
+- Docs.rs: Fixed generation of the documentation.
+
 ## [2.2.0] - 2026-10-18
 
 ### Added

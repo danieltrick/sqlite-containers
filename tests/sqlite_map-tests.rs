@@ -3782,25 +3782,25 @@ fn test_sqlite_map_filebased() {
     assert!(!fs::exists(&file_path_2).unwrap());
 
     assert!(matches!(
-        SQLiteMap::<String, String>::from_file(&file_path_1, false, false),
+        SQLiteMap::<String, String>::try_from_file(&file_path_1, false, false),
         Err(Error::SqlError(RusqliteError::SqliteFailure(FfiError { code: FfiErrorCode::CannotOpen, .. }, _)))
     ));
     assert!(matches!(
-        SQLiteMap::<String, String>::from_file(&file_path_2, false, false),
+        SQLiteMap::<String, String>::try_from_file(&file_path_2, false, false),
         Err(Error::SqlError(RusqliteError::SqliteFailure(FfiError { code: FfiErrorCode::CannotOpen, .. }, _)))
     ));
 
     assert!(matches!(
-        SQLiteMap::<String, String>::from_file(&file_path_1, true, true),
+        SQLiteMap::<String, String>::try_from_file(&file_path_1, true, true),
         Err(Error::SqlError(RusqliteError::SqliteFailure(FfiError { code: FfiErrorCode::CannotOpen, .. }, _)))
     ));
     assert!(matches!(
-        SQLiteMap::<String, String>::from_file(&file_path_2, true, true),
+        SQLiteMap::<String, String>::try_from_file(&file_path_2, true, true),
         Err(Error::SqlError(RusqliteError::SqliteFailure(FfiError { code: FfiErrorCode::CannotOpen, .. }, _)))
     ));
 
     {
-        let mut map = SQLiteMap::<String, String>::from_file(&file_path_1, false, true).unwrap();
+        let mut map = SQLiteMap::<String, String>::try_from_file(&file_path_1, false, true).unwrap();
         {
             let mut tx = map.transaction().unwrap();
             assert!(tx.insert("foo".to_owned(), "12345678".to_owned()).unwrap());
@@ -3810,7 +3810,7 @@ fn test_sqlite_map_filebased() {
     }
 
     {
-        let mut map = SQLiteMap::<String, String>::from_file_nocase(&file_path_2, false, true).unwrap();
+        let mut map = SQLiteMap::<String, String>::try_from_file_nocase(&file_path_2, false, true).unwrap();
         {
             let mut tx = map.transaction().unwrap();
             assert!(tx.insert("bar".to_owned(), "hgfedcba".to_owned()).unwrap());
@@ -3823,7 +3823,7 @@ fn test_sqlite_map_filebased() {
     assert!(fs::exists(&file_path_2).unwrap());
 
     {
-        let mut map = SQLiteMap::<String, String>::from_file(&file_path_1, true, false).unwrap();
+        let mut map = SQLiteMap::<String, String>::try_from_file(&file_path_1, true, false).unwrap();
         assert!(map.get("foo").unwrap().is_some_and(|value| value.eq("12345678")));
         assert!(matches!(
             map.insert("xyz".to_owned(), "feedface".to_owned()),
@@ -3832,12 +3832,12 @@ fn test_sqlite_map_filebased() {
     }
 
     {
-        let mut map = SQLiteMap::<String, String>::from_file(&file_path_1, false, false).unwrap();
+        let mut map = SQLiteMap::<String, String>::try_from_file(&file_path_1, false, false).unwrap();
         assert!(map.insert("xyz".to_owned(), "feedface".to_owned()).unwrap());
     }
 
     {
-        let map = SQLiteMap::<String, String>::from_file(&file_path_1, false, false).unwrap();
+        let map = SQLiteMap::<String, String>::try_from_file(&file_path_1, false, false).unwrap();
         assert!(map.get("foo").unwrap().is_some_and(|value| value.eq("12345678")));
         assert!(map.get("FOO").unwrap().is_none());
         assert!(map.get("bar").unwrap().is_none());
@@ -3848,7 +3848,7 @@ fn test_sqlite_map_filebased() {
     }
 
     {
-        let map = SQLiteMap::<String, String>::from_file_nocase(&file_path_2, false, false).unwrap();
+        let map = SQLiteMap::<String, String>::try_from_file_nocase(&file_path_2, false, false).unwrap();
         assert!(map.get("foo").unwrap().is_none());
         assert!(map.get("bar").unwrap().is_some_and(|value| value.eq("hgfedcba")));
         assert!(map.get("BAR").unwrap().is_some_and(|value| value.eq("hgfedcba")));
@@ -3858,8 +3858,8 @@ fn test_sqlite_map_filebased() {
         assert!(map.get("xyz").unwrap().is_none());
     }
 
-    assert!(matches!(SQLiteMap::<String, String>::from_file_nocase(&file_path_1, false, false), Err(Error::InvalidSchema)));
-    assert!(matches!(SQLiteMap::<String, String>::from_file(&file_path_2, false, false), Err(Error::InvalidSchema)));
+    assert!(matches!(SQLiteMap::<String, String>::try_from_file_nocase(&file_path_1, false, false), Err(Error::InvalidSchema)));
+    assert!(matches!(SQLiteMap::<String, String>::try_from_file(&file_path_2, false, false), Err(Error::InvalidSchema)));
 }
 
 #[cfg(feature = "checked")]
@@ -3876,7 +3876,7 @@ fn test_sqlite_map_filebased_integrity() {
     assert!(!fs::exists(&file_path).unwrap());
 
     {
-        let mut map = SQLiteMap::<String, String>::from_file(&file_path, false, true).unwrap();
+        let mut map = SQLiteMap::<String, String>::try_from_file(&file_path, false, true).unwrap();
         {
             let mut tx = map.transaction().unwrap();
             assert!(tx.insert("foo".to_owned(), "12345678".to_owned()).unwrap());
@@ -3900,7 +3900,7 @@ fn test_sqlite_map_filebased_integrity() {
         file.sync_all().unwrap();
     }
 
-    assert!(matches!(SQLiteMap::<String, String>::from_file(&file_path, false, false), Err(Error::IntegrityCheck)));
+    assert!(matches!(SQLiteMap::<String, String>::try_from_file(&file_path, false, false), Err(Error::IntegrityCheck)));
 }
 
 #[cfg(feature = "backup")]
@@ -3926,7 +3926,7 @@ fn test_sqlite_map_filebased_tofile() {
     }
 
     {
-        let map = SQLiteMap::<String, String>::from_file(&file_path, false, false).unwrap();
+        let map = SQLiteMap::<String, String>::try_from_file(&file_path, false, false).unwrap();
         assert!(map.get("foo").unwrap().is_some_and(|value| value.eq("12345678")));
         assert!(map.get("FOO").unwrap().is_some_and(|value| value.eq("87654321")));
         assert!(map.get("bar").unwrap().is_some_and(|value| value.eq("abcdefgh")));
