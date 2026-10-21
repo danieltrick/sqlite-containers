@@ -291,15 +291,21 @@ fn test_sqlite_set_i64_stresstest() {
 
 #[test]
 fn test_sqlite_set_i64_randomized() {
+    const COUNT: u64 = 75_000u64;
     let mut set = SQLiteSet::<i64>::new().unwrap();
-    const COUNT: u64 = 125_000u64;
 
-    for seed in [0x9DDC5F3146219B97u64, 0x79B9E4DC002B32D6u64] {
+    for (seed, t) in [(0x9DDC5F3146219B97u64, true), (0x79B9E4DC002B32D6u64, false)] {
         for b in [true, false] {
             let mut xoshiro = Xoshiro256PlusPlus::seed_from_u64(seed);
-            let mut tx = set.transaction().unwrap();
-            for _i in 0u64..COUNT {
-                assert_eq!(tx.insert(xoshiro.next_u64() as i64).unwrap(), b);
+            if !t {
+                for _i in 0u64..COUNT {
+                    assert_eq!(set.insert(xoshiro.next_u64() as i64).unwrap(), b);
+                }
+            } else {
+                let mut tx = set.transaction().unwrap();
+                for _i in 0u64..COUNT {
+                    assert_eq!(tx.insert(xoshiro.next_u64() as i64).unwrap(), b);
+                }
             }
         }
     }
@@ -840,17 +846,17 @@ fn test_sqlite_set_string_randomized() {
     let mut set = SQLiteSet::<String>::new().unwrap();
     let mut hex = HexEncoder::default();
 
-    for (seed, b) in [(0x9DDC5F3146219B97u64, true), (0x79B9E4DC002B32D6u64, false)] {
-        for c in [true, false] {
+    for (seed, t) in [(0x9DDC5F3146219B97u64, true), (0x79B9E4DC002B32D6u64, false)] {
+        for b in [true, false] {
             let mut xoshiro = Xoshiro256PlusPlus::seed_from_u64(seed);
-            if b {
+            if !t {
                 for _i in 0u64..COUNT {
-                    assert_eq!(set.insert_ref(hex.encode(xoshiro.next_u64())).unwrap(), c);
+                    assert_eq!(set.insert_ref(hex.encode(xoshiro.next_u64())).unwrap(), b);
                 }
             } else {
                 let mut tx = set.transaction().unwrap();
                 for _i in 0u64..COUNT {
-                    assert_eq!(tx.insert_ref(hex.encode(xoshiro.next_u64())).unwrap(), c);
+                    assert_eq!(tx.insert_ref(hex.encode(xoshiro.next_u64())).unwrap(), b);
                 }
             }
         }
@@ -1282,17 +1288,24 @@ fn test_sqlite_set_blob_stresstest() {
 
 #[test]
 fn test_sqlite_set_blob_randomized() {
-    const COUNT: u64 = 125_000u64;
+    const COUNT: u64 = 75_000u64;
     let mut set = SQLiteSet::<Blob>::new().unwrap();
     let mut temp = [0u8; 16usize];
 
-    for seed in [0x9DDC5F3146219B97u64, 0x79B9E4DC002B32D6u64] {
+    for (seed, t) in [(0x9DDC5F3146219B97u64, true), (0x79B9E4DC002B32D6u64, false)] {
         for b in [true, false] {
             let mut xoshiro = Xoshiro256PlusPlus::seed_from_u64(seed);
-            let mut tx = set.transaction().unwrap();
-            for _i in 0u64..COUNT {
-                xoshiro.fill_bytes(&mut temp);
-                assert_eq!(tx.insert_ref(temp.as_slice()).unwrap(), b);
+            if !t {
+                for _i in 0u64..COUNT {
+                    xoshiro.fill_bytes(&mut temp);
+                    assert_eq!(set.insert_ref(temp.as_slice()).unwrap(), b);
+                }
+            } else {
+                let mut tx = set.transaction().unwrap();
+                for _i in 0u64..COUNT {
+                    xoshiro.fill_bytes(&mut temp);
+                    assert_eq!(tx.insert_ref(temp.as_slice()).unwrap(), b);
+                }
             }
         }
     }

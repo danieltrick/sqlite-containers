@@ -184,16 +184,12 @@ where
     ///
     /// The new hash map is backed by an *in-memory* SQLite database.
     #[inline]
-    pub fn from_entries<'a, Q, R, I>(entries: I) -> Result<Self, Error>
+    pub fn try_from<I>(entries: I) -> Result<Self, Error>
     where
-        I: IntoIterator<Item = (&'a Q, &'a R)>,
-        K: Borrow<Q>,
-        Q: ?Sized + ToSql + 'a,
-        V: Borrow<R>,
-        R: ?Sized + ToSql + 'a,
+        I: IntoIterator<Item = (K, V)>,
     {
         let mut set = Self::new()?;
-        set.insert_all(entries)?;
+        set.extend(entries)?;
         Ok(set)
     }
 
@@ -203,16 +199,13 @@ where
     ///
     /// Only ASCII characters are case folded. SQLite does **not** attempt to do full UTF case folding!
     #[inline]
-    pub fn from_entries_nocase<'a, Q, R, I>(entries: I) -> Result<Self, Error>
+    pub fn try_from_nocase<I>(entries: I) -> Result<Self, Error>
     where
-        I: IntoIterator<Item = (&'a Q, &'a R)>,
-        K: Borrow<Q> + CharType,
-        Q: ?Sized + ToSql + 'a,
-        V: Borrow<R>,
-        R: ?Sized + ToSql + 'a,
+        I: IntoIterator<Item = (K, V)>,
+        K: CharType,
     {
         let mut set = Self::with_nocase()?;
-        set.insert_all(entries)?;
+        set.extend(entries)?;
         Ok(set)
     }
 
@@ -342,7 +335,23 @@ where
     ///
     /// Please use the [`update()`](Self::update) function to update the value associated with a key that may already exist.
     #[inline]
-    pub fn insert<Q, R>(&mut self, key: &Q, value: &R) -> Result<bool, Error>
+    pub fn insert(&mut self, key: K, value: V) -> Result<bool, Error> {
+        let mut statement = self.connection.prepare_cached(SQL_INSERT_KEY)?;
+        match statement.execute(params![key, value]) {
+            Ok(_) => Ok(true),
+            Err(error) => check_constraint_violation(error),
+        }
+    }
+
+    /// Inserts the given key-value pair into the map, if the specified key does *not* exist yet.
+    ///
+    /// If the map already contains the specified key, then its associated value is **not** changed by this operation!
+    ///
+    /// Returns `true`, if the key-value pair was inserted; otherwise returns `false`.
+    ///
+    /// Please use the [`update()`](Self::update) function to update the value associated with a key that may already exist.
+    #[inline]
+    pub fn insert_ref<Q, R>(&mut self, key: &Q, value: &R) -> Result<bool, Error>
     where
         K: Borrow<Q>,
         Q: ?Sized + ToSql,
@@ -356,17 +365,47 @@ where
         }
     }
 
+    /// Associates the specified value with the specified key, regardless of whether the key already exists in the map.
+    ///
+    /// If the map does *not* already contain the specified key, then the key is inserted automatically.
+    ///
+    /// Provided that the [`hooks`](crate#optional-features) feature is enabled, the function returns either [`Action::Insert`] or [`Action::Update`], depending on whether a new key-value pair was inserted or the associated value of an existing key was updated
+    ///
+    /// If `hooks` is **not** enabled, the function *always* returns [`Action::Unknown`], but, apart from that, it works identically &#128522;
+    #[inline]
+    pub fn update(&mut self, key: K, value: V) -> Result<Action, Error> {
+        let mut statement = self.connection.prepare_cached(SQL_UPSERT_KEY)?;
+        statement.execute(params![key, value])?;
+        Ok(Action::from(&self.last_action))
+    }
+
+    /// Associates the specified value with the specified key, regardless of whether the key already exists in the map.
+    ///
+    /// If the map does *not* already contain the specified key, then the key is inserted automatically.
+    ///
+    /// Provided that the [`hooks`](crate#optional-features) feature is enabled, the function returns either [`Action::Insert`] or [`Action::Update`], depending on whether a new key-value pair was inserted or the associated value of an existing key was updated
+    ///
+    /// If `hooks` is **not** enabled, the function *always* returns [`Action::Unknown`], but, apart from that, it works identically &#128522;
+    #[inline]
+    pub fn update_ref<Q, R>(&mut self, key: &Q, value: &R) -> Result<Action, Error>
+    where
+        K: Borrow<Q>,
+        Q: ?Sized + ToSql,
+        V: Borrow<R>,
+        R: ?Sized + ToSql,
+    {
+        let mut statement = self.connection.prepare_cached(SQL_UPSERT_KEY)?;
+        statement.execute(params![key, value])?;
+        Ok(Action::from(&self.last_action))
+    }
+
     /// Inserts all key-value pairs yielded by the given [iterable](std::iter::IntoIterator) into the map, skipping existing keys.
     ///
     /// Returns the number of new key-value pairs that have been inserted.
     #[inline]
-    pub fn insert_all<'a, Q, R, I>(&mut self, entries: I) -> Result<Size, Error>
+    pub fn extend<I>(&mut self, entries: I) -> Result<Size, Error>
     where
-        I: IntoIterator<Item = (&'a Q, &'a R)>,
-        K: Borrow<Q>,
-        Q: ?Sized + ToSql + 'a,
-        V: Borrow<R>,
-        R: ?Sized + ToSql + 'a,
+        I: IntoIterator<Item = (K, V)>,
     {
         let trx = self.transaction()?;
         let mut statement = trx.transaction.prepare_cached(SQL_INSERT_KEY)?;
@@ -380,26 +419,6 @@ where
             }
         }
         Ok(counter)
-    }
-
-    /// Associates the specified value with the specified key, regardless of whether the key already exists in the map.
-    ///
-    /// If the map does *not* already contain the specified key, then the key is inserted automatically.
-    ///
-    /// Provided that the [`hooks`](crate#optional-features) feature is enabled, the function returns either [`Action::Insert`] or [`Action::Update`], depending on whether a new key-value pair was inserted or the associated value of an existing key was updated
-    ///
-    /// If `hooks` is **not** enabled, the function *always* returns [`Action::Unknown`], but, apart from that, it works identically &#128522;
-    #[inline]
-    pub fn update<Q, R>(&mut self, key: &Q, value: &R) -> Result<Action, Error>
-    where
-        K: Borrow<Q>,
-        Q: ?Sized + ToSql,
-        V: Borrow<R>,
-        R: ?Sized + ToSql,
-    {
-        let mut statement = self.connection.prepare_cached(SQL_UPSERT_KEY)?;
-        statement.execute(params![key, value])?;
-        Ok(Action::from(&self.last_action))
     }
 
     /// Inserts all key-value pairs from another map into this map.
@@ -713,7 +732,7 @@ where
     #[inline]
     pub fn to_set(&self) -> Result<SQLiteSet<K>, Error> {
         let mut key_set = SQLiteSet::<K>::new()?;
-        key_set.transaction()?.insert_mapped_keys(self)?;
+        key_set.transaction()?.extend_from_map(self)?;
         Ok(key_set)
     }
 
@@ -728,7 +747,7 @@ where
         K: CharType,
     {
         let mut key_set = SQLiteSet::<K>::with_nocase()?;
-        key_set.transaction()?.insert_mapped_keys(self)?;
+        key_set.transaction()?.extend_from_map(self)?;
         Ok(key_set)
     }
 
@@ -829,7 +848,17 @@ where
 
     /// This function is equivalent to [`SQLiteMap::insert()`].
     #[inline]
-    pub fn insert<Q, R>(&mut self, key: &Q, value: &R) -> Result<bool, Error>
+    pub fn insert(&mut self, key: K, value: V) -> Result<bool, Error> {
+        let mut statement = self.transaction.prepare_cached(SQL_INSERT_KEY)?;
+        match statement.execute(params![key, value]) {
+            Ok(_) => Ok(true),
+            Err(error) => check_constraint_violation(error),
+        }
+    }
+
+    /// This function is equivalent to [`SQLiteMap::insert_ref()`].
+    #[inline]
+    pub fn insert_ref<Q, R>(&mut self, key: &Q, value: &R) -> Result<bool, Error>
     where
         K: Borrow<Q>,
         Q: ?Sized + ToSql,
@@ -843,15 +872,33 @@ where
         }
     }
 
-    /// This function is equivalent to [`SQLiteMap::insert_all()`].
+    /// This function is equivalent to [`SQLiteMap::update()`].
     #[inline]
-    pub fn insert_all<'b, Q, R, I>(&mut self, keys: I) -> Result<Size, Error>
+    pub fn update(&mut self, key: K, value: V) -> Result<Action, Error> {
+        let mut statement = self.transaction.prepare_cached(SQL_UPSERT_KEY)?;
+        statement.execute(params![key, value])?;
+        Ok(Action::from(self.last_action))
+    }
+
+    /// This function is equivalent to [`SQLiteMap::update_ref()`].
+    #[inline]
+    pub fn update_ref<Q, R>(&mut self, key: &Q, value: &R) -> Result<Action, Error>
     where
-        I: IntoIterator<Item = (&'b Q, &'b R)>,
         K: Borrow<Q>,
-        Q: ?Sized + ToSql + 'b,
+        Q: ?Sized + ToSql,
         V: Borrow<R>,
-        R: ?Sized + ToSql + 'b,
+        R: ?Sized + ToSql,
+    {
+        let mut statement = self.transaction.prepare_cached(SQL_UPSERT_KEY)?;
+        statement.execute(params![key, value])?;
+        Ok(Action::from(self.last_action))
+    }
+
+    /// This function is equivalent to [`SQLiteMap::extend()`].
+    #[inline]
+    pub fn extend<I>(&mut self, keys: I) -> Result<Size, Error>
+    where
+        I: IntoIterator<Item = (K, V)>,
     {
         let mut statement = self.transaction.prepare_cached(SQL_INSERT_KEY)?;
         let mut counter = Size::default();
@@ -866,23 +913,9 @@ where
         Ok(counter)
     }
 
-    /// This function is equivalent to [`SQLiteMap::update()`].
-    #[inline]
-    pub fn update<Q, R>(&mut self, key: &Q, value: &R) -> Result<Action, Error>
-    where
-        K: Borrow<Q>,
-        Q: ?Sized + ToSql,
-        V: Borrow<R>,
-        R: ?Sized + ToSql,
-    {
-        let mut statement = self.transaction.prepare_cached(SQL_UPSERT_KEY)?;
-        statement.execute(params![key, value])?;
-        Ok(Action::from(self.last_action))
-    }
-
     /// Insert all keys from the given [`SQLiteSet`] into this set.
     #[inline]
-    pub(crate) fn insert_mapped_keys<F>(&mut self, set: &mut SQLiteSet<K>, mapping: F) -> Result<(), Error>
+    pub(crate) fn extend_from_set<F>(&mut self, set: &mut SQLiteSet<K>, mapping: F) -> Result<(), Error>
     where
         F: Fn(&K) -> Option<V>,
     {

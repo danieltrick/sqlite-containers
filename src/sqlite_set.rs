@@ -536,7 +536,7 @@ where
         V: Type,
     {
         let mut map = SQLiteMap::<T, V>::new()?;
-        map.transaction()?.insert_mapped_keys(self, mapping)?;
+        map.transaction()?.extend_from_set(self, mapping)?;
         Ok(map)
     }
 
@@ -555,7 +555,7 @@ where
         T: CharType,
     {
         let mut map = SQLiteMap::<T, V>::with_nocase()?;
-        map.transaction()?.insert_mapped_keys(self, mapping)?;
+        map.transaction()?.extend_from_set(self, mapping)?;
         Ok(map)
     }
 
@@ -694,7 +694,7 @@ where
 
     /// Insert all keys from the given [`SQLiteMap`] into this set.
     #[inline]
-    pub(crate) fn insert_mapped_keys<V>(&mut self, map: &SQLiteMap<T, V>) -> Result<(), Error>
+    pub(crate) fn extend_from_map<V>(&mut self, map: &SQLiteMap<T, V>) -> Result<(), Error>
     where
         V: Type,
     {
@@ -702,7 +702,7 @@ where
         let trx = map.transaction_readonly()?;
         trx.try_for_each_key(|key| match statement.execute([key]) {
             Ok(_) => Ok(()),
-            Err(error) => check_constraint_violation(error).map(|_| ()),
+            Err(error) => check_constraint_violation(error).and(Ok(())),
         })
         .map_err(|error| error.into())
     }

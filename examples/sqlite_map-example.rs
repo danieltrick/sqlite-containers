@@ -25,7 +25,7 @@ fn main() {
 
     for n in 0..10_000_000u64 {
         let (key, value) = (hex_1.encode(mix64(n)), hex_2.encode(mix64(u64::MAX - n)));
-        tx.insert(key, value).expect("Insertion failed!");
+        tx.insert_ref(key, value).expect("Insertion failed!");
     }
 
     tx.commit();
