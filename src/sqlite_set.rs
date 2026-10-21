@@ -102,14 +102,12 @@ where
     ///
     /// The new hash set is backed by an *in-memory* SQLite database.
     #[inline]
-    pub fn from_keys<'a, Q, I>(keys: I) -> Result<Self, Error>
+    pub fn try_from<I>(keys: I) -> Result<Self, Error>
     where
-        I: IntoIterator<Item = &'a Q>,
-        T: Borrow<Q>,
-        Q: ?Sized + ToSql + 'a,
+        I: IntoIterator<Item = T>,
     {
         let mut set = Self::new()?;
-        set.insert_all(keys)?;
+        set.extend(keys)?;
         Ok(set)
     }
 
@@ -119,14 +117,13 @@ where
     ///
     /// Only ASCII characters are case folded. SQLite does **not** attempt to do full UTF case folding!
     #[inline]
-    pub fn from_keys_nocase<'a, Q, I>(keys: I) -> Result<Self, Error>
+    pub fn try_from_nocase<I>(keys: I) -> Result<Self, Error>
     where
-        I: IntoIterator<Item = &'a Q>,
-        T: Borrow<Q> + CharType,
-        Q: ?Sized + ToSql + 'a,
+        I: IntoIterator<Item = T>,
+        T: CharType,
     {
         let mut set = Self::with_nocase()?;
-        set.insert_all(keys)?;
+        set.extend(keys)?;
         Ok(set)
     }
 
@@ -138,7 +135,7 @@ where
     ///
     /// Returns [`Error::InvalidSchema`], if the database file already exists but its schema does **not** match the schema expected by this type of set. This means that you **must** re-open a database file with the *same* type of set that was used to create it.
     #[inline]
-    pub fn from_file<P>(path: P, readonly: bool, can_create: bool) -> Result<Self, Error>
+    pub fn try_from_file<P>(path: P, readonly: bool, can_create: bool) -> Result<Self, Error>
     where
         P: AsRef<Path>,
     {
@@ -155,7 +152,7 @@ where
     ///
     /// Only ASCII characters are case folded. SQLite does **not** attempt to do full UTF case folding!
     #[inline]
-    pub fn from_file_nocase<P>(path: P, readonly: bool, can_create: bool) -> Result<Self, Error>
+    pub fn try_from_file_nocase<P>(path: P, readonly: bool, can_create: bool) -> Result<Self, Error>
     where
         T: CharType,
         P: AsRef<Path>,
@@ -225,7 +222,7 @@ where
 
     /// This is the “read-only” version of the [`transaction()`](Self::transaction) function.
     #[inline]
-    fn transaction_readonly(&self) -> Result<SQLiteSetTransaction<'_, T>, Error> {
+    pub(crate) fn transaction_readonly(&self) -> Result<SQLiteSetTransaction<'_, T>, Error> {
         SQLiteSetTransaction::from_immutable(&self.connection)
     }
 
@@ -233,7 +230,19 @@ where
     ///
     /// Returns `true`, if the set did not already contain the key; otherwise returns `false`.
     #[inline]
-    pub fn insert<Q>(&mut self, key: &Q) -> Result<bool, Error>
+    pub fn insert(&mut self, key: T) -> Result<bool, Error> {
+        let mut statement = self.connection.prepare_cached(SQL_INSERT_KEY)?;
+        match statement.execute([key]) {
+            Ok(_) => Ok(true),
+            Err(error) => check_constraint_violation(error),
+        }
+    }
+
+    /// Inserts the given key reference into the set.
+    ///
+    /// Returns `true`, if the set did not already contain the key; otherwise returns `false`.
+    #[inline]
+    pub fn insert_ref<Q>(&mut self, key: &Q) -> Result<bool, Error>
     where
         T: Borrow<Q>,
         Q: ?Sized + ToSql,
@@ -249,11 +258,9 @@ where
     ///
     /// Returns the number of new keys that have been inserted.
     #[inline]
-    pub fn insert_all<'a, Q, I>(&mut self, keys: I) -> Result<Size, Error>
+    pub fn extend<I>(&mut self, keys: I) -> Result<Size, Error>
     where
-        I: IntoIterator<Item = &'a Q>,
-        T: Borrow<Q>,
-        Q: ?Sized + ToSql + 'a,
+        I: IntoIterator<Item = T>,
     {
         let trx = self.transaction()?;
         let mut statement = trx.transaction.prepare_cached(SQL_INSERT_KEY)?;
@@ -644,7 +651,17 @@ where
 
     /// This function is equivalent to [`SQLiteSet::insert()`].
     #[inline]
-    pub fn insert<Q>(&mut self, key: &Q) -> Result<bool, Error>
+    pub fn insert(&mut self, key: T) -> Result<bool, Error> {
+        let mut statement = self.transaction.prepare_cached(SQL_INSERT_KEY)?;
+        match statement.execute([key]) {
+            Ok(_) => Ok(true),
+            Err(error) => check_constraint_violation(error),
+        }
+    }
+
+    /// This function is equivalent to [`SQLiteSet::insert_ref()`].
+    #[inline]
+    pub fn insert_ref<Q>(&mut self, key: &Q) -> Result<bool, Error>
     where
         T: Borrow<Q>,
         Q: ?Sized + ToSql,
@@ -656,13 +673,11 @@ where
         }
     }
 
-    /// This function is equivalent to [`SQLiteSet::insert_all()`].
+    /// This function is equivalent to [`SQLiteSet::extend()`].
     #[inline]
-    pub fn insert_all<'b, Q, I>(&mut self, keys: I) -> Result<Size, Error>
+    pub fn extend<I>(&mut self, keys: I) -> Result<Size, Error>
     where
-        I: IntoIterator<Item = &'b Q>,
-        T: Borrow<Q>,
-        Q: ?Sized + ToSql + 'b,
+        I: IntoIterator<Item = T>,
     {
         let mut statement = self.transaction.prepare_cached(SQL_INSERT_KEY)?;
         let mut counter = Size::default();
@@ -679,12 +694,12 @@ where
 
     /// Insert all keys from the given [`SQLiteMap`] into this set.
     #[inline]
-    pub(crate) fn insert_mapped_keys<Q>(&mut self, map: &mut SQLiteMap<T, Q>) -> Result<(), Error>
+    pub(crate) fn insert_mapped_keys<V>(&mut self, map: &SQLiteMap<T, V>) -> Result<(), Error>
     where
-        Q: Type,
+        V: Type,
     {
         let mut statement = self.transaction.prepare_cached(SQL_INSERT_KEY)?;
-        let trx = map.transaction()?;
+        let trx = map.transaction_readonly()?;
         trx.try_for_each_key(|key| match statement.execute([key]) {
             Ok(_) => Ok(()),
             Err(error) => check_constraint_violation(error).map(|_| ()),

@@ -23,7 +23,7 @@ fn main() {
     println!("Inserting elements, please wait...");
 
     for n in 0..10_000_000u64 {
-        tx.insert(hex.encode(mix64(n))).expect("Insertion failed!");
+        tx.insert_ref(hex.encode(mix64(n))).expect("Insertion failed!");
     }
 
     tx.commit();

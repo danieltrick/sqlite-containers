@@ -47,12 +47,12 @@ fn test_sqlite_set_i64() {
     assert!(!set.contains(&i64::MAX).unwrap());
     assert!(!set.contains(&i64::MIN).unwrap());
 
-    assert!(set.insert(&0i64).unwrap());
-    assert!(set.insert(&42i64).unwrap());
-    assert!(!set.insert(&0i64).unwrap());
-    assert!(!set.insert(&42i64).unwrap());
-    assert!(set.insert(&i64::MAX).unwrap());
-    assert!(!set.insert(&i64::MAX).unwrap());
+    assert!(set.insert(0i64).unwrap());
+    assert!(set.insert(42i64).unwrap());
+    assert!(!set.insert(0i64).unwrap());
+    assert!(!set.insert(42i64).unwrap());
+    assert!(set.insert(i64::MAX).unwrap());
+    assert!(!set.insert(i64::MAX).unwrap());
 
     assert_eq!(set.len().unwrap(), 3);
     assert!(!set.is_empty().unwrap());
@@ -74,10 +74,10 @@ fn test_sqlite_set_i64() {
     assert!(set.contains(&i64::MAX).unwrap());
     assert!(!set.contains(&i64::MIN).unwrap());
 
-    assert!(set.insert(&i64::MIN).unwrap());
-    assert!(!set.insert(&i64::MIN).unwrap());
-    assert!(set.insert(&0i64).unwrap());
-    assert!(!set.insert(&0i64).unwrap());
+    assert!(set.insert(i64::MIN).unwrap());
+    assert!(!set.insert(i64::MIN).unwrap());
+    assert!(set.insert(0i64).unwrap());
+    assert!(!set.insert(0i64).unwrap());
 
     assert_eq!(set.len().unwrap(), 3);
     assert!(!set.is_empty().unwrap());
@@ -126,10 +126,10 @@ fn test_sqlite_set_i64() {
     assert!(!set.contains(&i64::MAX).unwrap());
     assert!(!set.contains(&i64::MIN).unwrap());
 
-    assert!(set.insert(&0i64).unwrap());
-    assert!(set.insert(&42i64).unwrap());
+    assert!(set.insert(0i64).unwrap());
+    assert!(set.insert(42i64).unwrap());
 
-    assert_eq!(set.insert_all(&[42i64, 8191i64, 131071i64]).unwrap(), 2);
+    assert_eq!(set.extend([42i64, 8191i64, 131071i64]).unwrap(), 2);
 
     assert_eq!(set.len().unwrap(), 4);
     assert!(!set.is_empty().unwrap());
@@ -153,12 +153,12 @@ fn test_sqlite_set_i64_transacted() {
     assert!(!tx.contains(&i64::MAX).unwrap());
     assert!(!tx.contains(&i64::MIN).unwrap());
 
-    assert!(tx.insert(&0i64).unwrap());
-    assert!(tx.insert(&42i64).unwrap());
-    assert!(!tx.insert(&0i64).unwrap());
-    assert!(!tx.insert(&42i64).unwrap());
-    assert!(tx.insert(&i64::MAX).unwrap());
-    assert!(!tx.insert(&i64::MAX).unwrap());
+    assert!(tx.insert(0i64).unwrap());
+    assert!(tx.insert(42i64).unwrap());
+    assert!(!tx.insert(0i64).unwrap());
+    assert!(!tx.insert(42i64).unwrap());
+    assert!(tx.insert(i64::MAX).unwrap());
+    assert!(!tx.insert(i64::MAX).unwrap());
 
     assert_eq!(tx.len().unwrap(), 3);
     assert!(!tx.is_empty().unwrap());
@@ -179,10 +179,10 @@ fn test_sqlite_set_i64_transacted() {
     assert!(tx.contains(&i64::MAX).unwrap());
     assert!(!tx.contains(&i64::MIN).unwrap());
 
-    assert!(tx.insert(&i64::MIN).unwrap());
-    assert!(!tx.insert(&i64::MIN).unwrap());
-    assert!(tx.insert(&0i64).unwrap());
-    assert!(!tx.insert(&0i64).unwrap());
+    assert!(tx.insert(i64::MIN).unwrap());
+    assert!(!tx.insert(i64::MIN).unwrap());
+    assert!(tx.insert(0i64).unwrap());
+    assert!(!tx.insert(0i64).unwrap());
 
     assert_eq!(tx.len().unwrap(), 3);
     assert!(!tx.is_empty().unwrap());
@@ -231,10 +231,10 @@ fn test_sqlite_set_i64_transacted() {
     assert!(!tx.contains(&i64::MAX).unwrap());
     assert!(!tx.contains(&i64::MIN).unwrap());
 
-    assert!(tx.insert(&0i64).unwrap());
-    assert!(tx.insert(&42i64).unwrap());
+    assert!(tx.insert(0i64).unwrap());
+    assert!(tx.insert(42i64).unwrap());
 
-    assert_eq!(tx.insert_all(&[42i64, 8191i64, 131071i64]).unwrap(), 2);
+    assert_eq!(tx.extend([42i64, 8191i64, 131071i64]).unwrap(), 2);
 
     tx.commit();
 
@@ -251,7 +251,7 @@ fn test_sqlite_set_i64_transacted() {
 #[test]
 fn test_sqlite_set_i64_from_keys() {
     const KEYS: [i64; 6] = [0i64, 42i64, 8191i64, 42i64, i64::MIN, i64::MAX];
-    let set = SQLiteSet::<i64>::from_keys(KEYS.as_slice()).unwrap();
+    let set = SQLiteSet::<i64>::try_from(KEYS).unwrap();
 
     assert_eq!(set.len().unwrap(), 5);
     assert!(set.contains(&0i64).unwrap());
@@ -270,7 +270,7 @@ fn test_sqlite_set_i64_stresstest() {
     {
         let mut tx = set.transaction().unwrap();
         for i in 0u64..MAX_ITEMS {
-            assert!(tx.insert(&(mix64(i) as i64)).unwrap());
+            assert!(tx.insert(mix64(i) as i64).unwrap());
         }
     }
 
@@ -280,7 +280,8 @@ fn test_sqlite_set_i64_stresstest() {
     {
         let mut tx = set.transaction().unwrap();
         for i in 0u64..MAX_ITEMS {
-            assert!(tx.remove(&(mix64(i) as i64)).unwrap());
+            let expected = mix64(i) as i64;
+            assert!(tx.remove(&expected).unwrap());
         }
     }
 
@@ -298,7 +299,7 @@ fn test_sqlite_set_i64_randomized() {
             let mut xoshiro = Xoshiro256PlusPlus::seed_from_u64(seed);
             let mut tx = set.transaction().unwrap();
             for _i in 0u64..COUNT {
-                assert_eq!(tx.insert(&(xoshiro.next_u64() as i64)).unwrap(), b);
+                assert_eq!(tx.insert(xoshiro.next_u64() as i64).unwrap(), b);
             }
         }
     }
@@ -307,7 +308,8 @@ fn test_sqlite_set_i64_randomized() {
         let mut xoshiro = Xoshiro256PlusPlus::seed_from_u64(seed);
         let tx = set.transaction().unwrap();
         for _i in 0u64..COUNT {
-            assert_eq!(tx.contains(&(xoshiro.next_u64() as i64)).unwrap(), b);
+            let expected = xoshiro.next_u64() as i64;
+            assert_eq!(tx.contains(&expected).unwrap(), b);
         }
     }
 }
@@ -319,17 +321,17 @@ fn test_sqlite_set_i64_union() {
 
     {
         let mut tx = set_1.transaction().unwrap();
-        assert!(tx.insert(&0i64).unwrap());
-        assert!(tx.insert(&42i64).unwrap());
-        assert!(tx.insert(&2147483647i64).unwrap());
+        assert!(tx.insert(0i64).unwrap());
+        assert!(tx.insert(42i64).unwrap());
+        assert!(tx.insert(2147483647i64).unwrap());
     }
 
     {
         let mut tx = set_2.transaction().unwrap();
-        assert!(tx.insert(&0i64).unwrap());
-        assert!(tx.insert(&i64::MIN).unwrap());
-        assert!(tx.insert(&i64::MAX).unwrap());
-        assert!(tx.insert(&2305843009213693951i64).unwrap());
+        assert!(tx.insert(0i64).unwrap());
+        assert!(tx.insert(i64::MIN).unwrap());
+        assert!(tx.insert(i64::MAX).unwrap());
+        assert!(tx.insert(2305843009213693951i64).unwrap());
     }
 
     assert!(set_1.contains(&0i64).unwrap());
@@ -358,18 +360,18 @@ fn test_sqlite_set_i64_difference() {
 
     {
         let mut tx = set_1.transaction().unwrap();
-        assert!(tx.insert(&0i64).unwrap());
-        assert!(tx.insert(&42i64).unwrap());
-        assert!(tx.insert(&2147483647i64).unwrap());
-        assert!(tx.insert(&i64::MIN).unwrap());
-        assert!(tx.insert(&i64::MAX).unwrap());
+        assert!(tx.insert(0i64).unwrap());
+        assert!(tx.insert(42i64).unwrap());
+        assert!(tx.insert(2147483647i64).unwrap());
+        assert!(tx.insert(i64::MIN).unwrap());
+        assert!(tx.insert(i64::MAX).unwrap());
     }
 
     {
         let mut tx = set_2.transaction().unwrap();
-        assert!(tx.insert(&42i64).unwrap());
-        assert!(tx.insert(&2305843009213693951i64).unwrap());
-        assert!(tx.insert(&i64::MIN).unwrap());
+        assert!(tx.insert(42i64).unwrap());
+        assert!(tx.insert(2305843009213693951i64).unwrap());
+        assert!(tx.insert(i64::MIN).unwrap());
     }
 
     assert!(set_1.contains(&0i64).unwrap());
@@ -398,19 +400,19 @@ fn test_sqlite_set_i64_intersection() {
 
     {
         let mut tx = set_1.transaction().unwrap();
-        assert!(tx.insert(&0i64).unwrap());
-        assert!(tx.insert(&42i64).unwrap());
-        assert!(tx.insert(&2147483647i64).unwrap());
-        assert!(tx.insert(&2305843009213693951i64).unwrap());
-        assert!(tx.insert(&i64::MIN).unwrap());
-        assert!(tx.insert(&i64::MAX).unwrap());
+        assert!(tx.insert(0i64).unwrap());
+        assert!(tx.insert(42i64).unwrap());
+        assert!(tx.insert(2147483647i64).unwrap());
+        assert!(tx.insert(2305843009213693951i64).unwrap());
+        assert!(tx.insert(i64::MIN).unwrap());
+        assert!(tx.insert(i64::MAX).unwrap());
     }
 
     {
         let mut tx = set_2.transaction().unwrap();
-        assert!(tx.insert(&42i64).unwrap());
-        assert!(tx.insert(&2305843009213693951i64).unwrap());
-        assert!(tx.insert(&i64::MAX).unwrap());
+        assert!(tx.insert(42i64).unwrap());
+        assert!(tx.insert(2305843009213693951i64).unwrap());
+        assert!(tx.insert(i64::MAX).unwrap());
     }
 
     let set_3 = set_1.intersection(&set_2).unwrap();
@@ -435,21 +437,20 @@ fn test_sqlite_set_i64_string_words() {
             {
                 let mut tx = set.transaction().unwrap();
                 for &word in word_list {
-                    let hash = xxh64(word.as_bytes(), seed_1) as i64;
-                    assert!(tx.insert(&hash).unwrap());
+                    assert!(tx.insert(xxh64(word.as_bytes(), seed_1) as i64).unwrap());
                 }
             }
             for seed_2 in 0u64..5u64 {
                 let tx = set.transaction().unwrap();
                 if seed_1 == seed_2 {
                     for &word in word_list {
-                        let hash = xxh64(word.as_bytes(), seed_2) as i64;
-                        assert!(tx.contains(&hash).unwrap());
+                        let rexpected_hash = xxh64(word.as_bytes(), seed_2) as i64;
+                        assert!(tx.contains(&rexpected_hash).unwrap());
                     }
                 } else {
                     for &word in word_list {
-                        let hash = xxh64(word.as_bytes(), seed_2) as i64;
-                        assert!(!tx.contains(&hash).unwrap());
+                        let rexpected_hash = xxh64(word.as_bytes(), seed_2) as i64;
+                        assert!(!tx.contains(&rexpected_hash).unwrap());
                     }
                 }
             }
@@ -472,12 +473,12 @@ fn test_sqlite_set_string() {
     assert!(!set.contains("baz").unwrap());
     assert!(!set.contains("qux").unwrap());
 
-    assert!(set.insert("foo").unwrap());
-    assert!(set.insert("bar").unwrap());
-    assert!(!set.insert("foo").unwrap());
-    assert!(!set.insert("bar").unwrap());
-    assert!(set.insert("baz").unwrap());
-    assert!(!set.insert("baz").unwrap());
+    assert!(set.insert("foo".to_owned()).unwrap());
+    assert!(set.insert("bar".to_owned()).unwrap());
+    assert!(!set.insert("foo".to_owned()).unwrap());
+    assert!(!set.insert("bar".to_owned()).unwrap());
+    assert!(set.insert("baz".to_owned()).unwrap());
+    assert!(!set.insert("baz".to_owned()).unwrap());
 
     assert_eq!(set.len().unwrap(), 3);
     assert!(!set.is_empty().unwrap());
@@ -508,10 +509,10 @@ fn test_sqlite_set_string() {
     assert!(set.contains_nocase("BAZ").unwrap());
     assert!(!set.contains("qux").unwrap());
 
-    assert!(set.insert("qux").unwrap());
-    assert!(!set.insert("qux").unwrap());
-    assert!(set.insert("foo").unwrap());
-    assert!(!set.insert("foo").unwrap());
+    assert!(set.insert("qux".to_owned()).unwrap());
+    assert!(!set.insert("qux".to_owned()).unwrap());
+    assert!(set.insert("foo".to_owned()).unwrap());
+    assert!(!set.insert("foo".to_owned()).unwrap());
 
     assert_eq!(set.len().unwrap(), 3);
     assert!(!set.is_empty().unwrap());
@@ -586,10 +587,10 @@ fn test_sqlite_set_string() {
     assert!(!set.contains("qux").unwrap());
     assert!(!set.contains("xyz").unwrap());
 
-    assert!(set.insert("foo").unwrap());
-    assert!(set.insert("baz").unwrap());
+    assert!(set.insert("foo".to_owned()).unwrap());
+    assert!(set.insert("baz".to_owned()).unwrap());
 
-    assert_eq!(set.insert_all(["bar", "baz", "qux"].into_iter()).unwrap(), 2);
+    assert_eq!(set.extend(["bar", "baz", "qux"].map(str::to_owned)).unwrap(), 2);
 
     assert_eq!(set.len().unwrap(), 4);
     assert!(!set.is_empty().unwrap());
@@ -612,12 +613,12 @@ fn test_sqlite_set_string_transacted() {
     assert!(!tx.contains("baz").unwrap());
     assert!(!tx.contains("qux").unwrap());
 
-    assert!(tx.insert("foo").unwrap());
-    assert!(tx.insert("bar").unwrap());
-    assert!(!tx.insert("foo").unwrap());
-    assert!(!tx.insert("bar").unwrap());
-    assert!(tx.insert("baz").unwrap());
-    assert!(!tx.insert("baz").unwrap());
+    assert!(tx.insert("foo".to_owned()).unwrap());
+    assert!(tx.insert("bar".to_owned()).unwrap());
+    assert!(!tx.insert("foo".to_owned()).unwrap());
+    assert!(!tx.insert("bar".to_owned()).unwrap());
+    assert!(tx.insert("baz".to_owned()).unwrap());
+    assert!(!tx.insert("baz".to_owned()).unwrap());
 
     assert_eq!(tx.len().unwrap(), 3);
     assert!(!tx.is_empty().unwrap());
@@ -648,10 +649,10 @@ fn test_sqlite_set_string_transacted() {
     assert!(tx.contains_nocase("BAZ").unwrap());
     assert!(!tx.contains("qux").unwrap());
 
-    assert!(tx.insert("qux").unwrap());
-    assert!(!tx.insert("qux").unwrap());
-    assert!(tx.insert("foo").unwrap());
-    assert!(!tx.insert("foo").unwrap());
+    assert!(tx.insert("qux".to_owned()).unwrap());
+    assert!(!tx.insert("qux".to_owned()).unwrap());
+    assert!(tx.insert("foo".to_owned()).unwrap());
+    assert!(!tx.insert("foo".to_owned()).unwrap());
 
     assert_eq!(tx.len().unwrap(), 3);
     assert!(!tx.is_empty().unwrap());
@@ -724,10 +725,10 @@ fn test_sqlite_set_string_transacted() {
     assert!(!tx.contains("qux").unwrap());
     assert!(!tx.contains("xyz").unwrap());
 
-    assert!(tx.insert("foo").unwrap());
-    assert!(tx.insert("baz").unwrap());
+    assert!(tx.insert("foo".to_owned()).unwrap());
+    assert!(tx.insert("baz".to_owned()).unwrap());
 
-    assert_eq!(tx.insert_all(["bar", "baz", "qux"].into_iter()).unwrap(), 2);
+    assert_eq!(tx.extend(["bar", "baz", "qux"].map(str::to_owned)).unwrap(), 2);
 
     tx.commit();
 
@@ -745,15 +746,15 @@ fn test_sqlite_set_string_ignorecase() {
     let mut set_1 = SQLiteSet::<String>::new().unwrap();
     let mut set_2 = SQLiteSet::<String>::with_nocase().unwrap();
 
-    assert!(set_1.insert("foo").unwrap());
-    assert!(set_1.insert("FOO").unwrap());
-    assert!(set_1.insert("BAR").unwrap());
-    assert!(set_1.insert("bar").unwrap());
+    assert!(set_1.insert("foo".to_owned()).unwrap());
+    assert!(set_1.insert("FOO".to_owned()).unwrap());
+    assert!(set_1.insert("BAR".to_owned()).unwrap());
+    assert!(set_1.insert("bar".to_owned()).unwrap());
 
-    assert!(set_2.insert("foo").unwrap());
-    assert!(!set_2.insert("FOO").unwrap());
-    assert!(set_2.insert("BAR").unwrap());
-    assert!(!set_2.insert("bar").unwrap());
+    assert!(set_2.insert("foo".to_owned()).unwrap());
+    assert!(!set_2.insert("FOO".to_owned()).unwrap());
+    assert!(set_2.insert("BAR".to_owned()).unwrap());
+    assert!(!set_2.insert("bar".to_owned()).unwrap());
 
     assert!(set_1.remove("FOO").unwrap());
     assert!(set_1.remove("bar").unwrap());
@@ -779,9 +780,10 @@ fn test_sqlite_set_string_ignorecase() {
 
 #[test]
 fn test_sqlite_set_string_from_keys() {
-    const KEYS: [&str; 6] = ["foo", "foo", "bar", "BAR", "baz", "qux"];
-    let set_1 = SQLiteSet::<String>::from_keys(KEYS).unwrap();
-    let set_2 = SQLiteSet::<String>::from_keys_nocase(KEYS).unwrap();
+    let keys_1: [String; 6] = ["foo", "foo", "bar", "BAR", "baz", "qux"].map(str::to_string);
+    let keys_2 = keys_1.clone();
+    let set_1 = SQLiteSet::<String>::try_from(keys_1).unwrap();
+    let set_2 = SQLiteSet::<String>::try_from_nocase(keys_2).unwrap();
 
     assert_eq!(set_1.len().unwrap(), 5);
     assert!(set_1.contains("foo").unwrap());
@@ -814,7 +816,7 @@ fn test_sqlite_set_string_stresstest() {
     {
         let mut tx = set.transaction().unwrap();
         for i in 0u64..MAX_ITEMS {
-            assert!(tx.insert(hex.encode(mix64(i))).unwrap());
+            assert!(tx.insert_ref(hex.encode(mix64(i))).unwrap());
         }
     }
 
@@ -834,16 +836,22 @@ fn test_sqlite_set_string_stresstest() {
 
 #[test]
 fn test_sqlite_set_string_randomized() {
-    const COUNT: u64 = 125_000u64;
+    const COUNT: u64 = 75_000u64;
     let mut set = SQLiteSet::<String>::new().unwrap();
     let mut hex = HexEncoder::default();
 
-    for seed in [0x9DDC5F3146219B97u64, 0x79B9E4DC002B32D6u64] {
-        for b in [true, false] {
+    for (seed, b) in [(0x9DDC5F3146219B97u64, true), (0x79B9E4DC002B32D6u64, false)] {
+        for c in [true, false] {
             let mut xoshiro = Xoshiro256PlusPlus::seed_from_u64(seed);
-            let mut tx = set.transaction().unwrap();
-            for _i in 0u64..COUNT {
-                assert_eq!(tx.insert(hex.encode(xoshiro.next_u64())).unwrap(), b);
+            if b {
+                for _i in 0u64..COUNT {
+                    assert_eq!(set.insert_ref(hex.encode(xoshiro.next_u64())).unwrap(), c);
+                }
+            } else {
+                let mut tx = set.transaction().unwrap();
+                for _i in 0u64..COUNT {
+                    assert_eq!(tx.insert_ref(hex.encode(xoshiro.next_u64())).unwrap(), c);
+                }
             }
         }
     }
@@ -864,17 +872,17 @@ fn test_sqlite_set_string_union() {
 
     {
         let mut tx = set_1.transaction().unwrap();
-        assert!(tx.insert("foo").unwrap());
-        assert!(tx.insert("bar").unwrap());
-        assert!(tx.insert("baz").unwrap());
+        assert!(tx.insert("foo".to_owned()).unwrap());
+        assert!(tx.insert("bar".to_owned()).unwrap());
+        assert!(tx.insert("baz".to_owned()).unwrap());
     }
 
     {
         let mut tx = set_2.transaction().unwrap();
-        assert!(tx.insert("foo").unwrap());
-        assert!(tx.insert("qux").unwrap());
-        assert!(tx.insert("xyz").unwrap());
-        assert!(tx.insert("cor").unwrap());
+        assert!(tx.insert("foo".to_owned()).unwrap());
+        assert!(tx.insert("qux".to_owned()).unwrap());
+        assert!(tx.insert("xyz".to_owned()).unwrap());
+        assert!(tx.insert("cor".to_owned()).unwrap());
     }
 
     assert!(set_1.contains("foo").unwrap());
@@ -903,18 +911,18 @@ fn test_sqlite_set_string_difference() {
 
     {
         let mut tx = set_1.transaction().unwrap();
-        assert!(tx.insert("foo").unwrap());
-        assert!(tx.insert("bar").unwrap());
-        assert!(tx.insert("baz").unwrap());
-        assert!(tx.insert("qux").unwrap());
-        assert!(tx.insert("xyz").unwrap());
+        assert!(tx.insert("foo".to_owned()).unwrap());
+        assert!(tx.insert("bar".to_owned()).unwrap());
+        assert!(tx.insert("baz".to_owned()).unwrap());
+        assert!(tx.insert("qux".to_owned()).unwrap());
+        assert!(tx.insert("xyz".to_owned()).unwrap());
     }
 
     {
         let mut tx = set_2.transaction().unwrap();
-        assert!(tx.insert("baz").unwrap());
-        assert!(tx.insert("xyz").unwrap());
-        assert!(tx.insert("$?!").unwrap());
+        assert!(tx.insert("baz".to_owned()).unwrap());
+        assert!(tx.insert("xyz".to_owned()).unwrap());
+        assert!(tx.insert("$?!".to_owned()).unwrap());
     }
 
     assert!(set_1.contains("foo").unwrap());
@@ -941,19 +949,19 @@ fn test_sqlite_set_string_intersection() {
 
     {
         let mut tx = set_1.transaction().unwrap();
-        assert!(tx.insert("foo").unwrap());
-        assert!(tx.insert("bar").unwrap());
-        assert!(tx.insert("qux").unwrap());
-        assert!(tx.insert("xyz").unwrap());
+        assert!(tx.insert("foo".to_owned()).unwrap());
+        assert!(tx.insert("bar".to_owned()).unwrap());
+        assert!(tx.insert("qux".to_owned()).unwrap());
+        assert!(tx.insert("xyz".to_owned()).unwrap());
     }
 
     {
         let mut tx = set_2.transaction().unwrap();
-        assert!(tx.insert("bar").unwrap());
-        assert!(tx.insert("baz").unwrap());
-        assert!(tx.insert("qux").unwrap());
-        assert!(tx.insert("xyz").unwrap());
-        assert!(tx.insert("$?!").unwrap());
+        assert!(tx.insert("bar".to_owned()).unwrap());
+        assert!(tx.insert("baz".to_owned()).unwrap());
+        assert!(tx.insert("qux".to_owned()).unwrap());
+        assert!(tx.insert("xyz".to_owned()).unwrap());
+        assert!(tx.insert("$?!".to_owned()).unwrap());
     }
 
     let set_3 = set_1.intersection(&set_2).unwrap();
@@ -974,20 +982,20 @@ fn test_sqlite_set_string_intersection_nocase() {
 
     {
         let mut tx = set_1.transaction().unwrap();
-        assert!(tx.insert("foo").unwrap());
-        assert!(tx.insert("BAR").unwrap());
-        assert!(tx.insert("qux").unwrap());
-        assert!(tx.insert("xyz").unwrap());
-        assert!(tx.insert("XYZ").unwrap());
+        assert!(tx.insert("foo".to_owned()).unwrap());
+        assert!(tx.insert("BAR".to_owned()).unwrap());
+        assert!(tx.insert("qux".to_owned()).unwrap());
+        assert!(tx.insert("xyz".to_owned()).unwrap());
+        assert!(tx.insert("XYZ".to_owned()).unwrap());
     }
 
     {
         let mut tx = set_2.transaction().unwrap();
-        assert!(tx.insert("bar").unwrap());
-        assert!(tx.insert("baz").unwrap());
-        assert!(tx.insert("qux").unwrap());
-        assert!(tx.insert("xyz").unwrap());
-        assert!(tx.insert("$?!").unwrap());
+        assert!(tx.insert("bar".to_owned()).unwrap());
+        assert!(tx.insert("baz".to_owned()).unwrap());
+        assert!(tx.insert("qux".to_owned()).unwrap());
+        assert!(tx.insert("xyz".to_owned()).unwrap());
+        assert!(tx.insert("$?!".to_owned()).unwrap());
     }
 
     let set_3 = set_1.intersection_nocase(&set_2).unwrap();
@@ -1019,12 +1027,12 @@ fn test_sqlite_set_blob() {
     assert!(!set.contains::<[u8]>(b"baz").unwrap());
     assert!(!set.contains::<[u8]>(b"qux").unwrap());
 
-    assert!(set.insert::<[u8]>(b"foo").unwrap());
-    assert!(set.insert::<[u8]>(b"bar").unwrap());
-    assert!(!set.insert::<[u8]>(b"foo").unwrap());
-    assert!(!set.insert::<[u8]>(b"bar").unwrap());
-    assert!(set.insert::<[u8]>(b"baz").unwrap());
-    assert!(!set.insert::<[u8]>(b"baz").unwrap());
+    assert!(set.insert(b"foo".to_vec()).unwrap());
+    assert!(set.insert(b"bar".to_vec()).unwrap());
+    assert!(!set.insert(b"foo".to_vec()).unwrap());
+    assert!(!set.insert(b"bar".to_vec()).unwrap());
+    assert!(set.insert(b"baz".to_vec()).unwrap());
+    assert!(!set.insert(b"baz".to_vec()).unwrap());
 
     assert_eq!(set.len().unwrap(), 3);
     assert!(!set.is_empty().unwrap());
@@ -1050,10 +1058,10 @@ fn test_sqlite_set_blob() {
     assert!(!set.contains::<[u8]>(b"BAZ").unwrap());
     assert!(!set.contains::<[u8]>(b"qux").unwrap());
 
-    assert!(set.insert::<[u8]>(b"qux").unwrap());
-    assert!(!set.insert::<[u8]>(b"qux").unwrap());
-    assert!(set.insert::<[u8]>(b"foo").unwrap());
-    assert!(!set.insert::<[u8]>(b"foo").unwrap());
+    assert!(set.insert(b"qux".to_vec()).unwrap());
+    assert!(!set.insert(b"qux".to_vec()).unwrap());
+    assert!(set.insert(b"foo".to_vec()).unwrap());
+    assert!(!set.insert(b"foo".to_vec()).unwrap());
 
     assert_eq!(set.len().unwrap(), 3);
     assert!(!set.is_empty().unwrap());
@@ -1103,10 +1111,10 @@ fn test_sqlite_set_blob() {
     assert!(!set.contains::<[u8]>(b"qux").unwrap());
     assert!(!set.contains::<[u8]>(b"xyz").unwrap());
 
-    assert!(set.insert::<[u8]>(b"foo").unwrap());
-    assert!(set.insert::<[u8]>(b"baz").unwrap());
+    assert!(set.insert(b"foo".to_vec()).unwrap());
+    assert!(set.insert(b"baz".to_vec()).unwrap());
 
-    assert_eq!(set.insert_all([&b"bar"[..], &b"baz"[..], &b"qux"[..]].into_iter()).unwrap(), 2);
+    assert_eq!(set.extend([b"bar", b"baz", b"qux"].map(Blob::from)).unwrap(), 2);
 
     assert_eq!(set.len().unwrap(), 4);
     assert!(!set.is_empty().unwrap());
@@ -1129,12 +1137,12 @@ fn test_sqlite_set_blob_transacted() {
     assert!(!tx.contains::<[u8]>(b"baz").unwrap());
     assert!(!tx.contains::<[u8]>(b"qux").unwrap());
 
-    assert!(tx.insert::<[u8]>(b"foo").unwrap());
-    assert!(tx.insert::<[u8]>(b"bar").unwrap());
-    assert!(!tx.insert::<[u8]>(b"foo").unwrap());
-    assert!(!tx.insert::<[u8]>(b"bar").unwrap());
-    assert!(tx.insert::<[u8]>(b"baz").unwrap());
-    assert!(!tx.insert::<[u8]>(b"baz").unwrap());
+    assert!(tx.insert(b"foo".to_vec()).unwrap());
+    assert!(tx.insert(b"bar".to_vec()).unwrap());
+    assert!(!tx.insert(b"foo".to_vec()).unwrap());
+    assert!(!tx.insert(b"bar".to_vec()).unwrap());
+    assert!(tx.insert(b"baz".to_vec()).unwrap());
+    assert!(!tx.insert(b"baz".to_vec()).unwrap());
 
     assert_eq!(tx.len().unwrap(), 3);
     assert!(!tx.is_empty().unwrap());
@@ -1160,10 +1168,10 @@ fn test_sqlite_set_blob_transacted() {
     assert!(!tx.contains::<[u8]>(b"BAZ").unwrap());
     assert!(!tx.contains::<[u8]>(b"qux").unwrap());
 
-    assert!(tx.insert::<[u8]>(b"qux").unwrap());
-    assert!(!tx.insert::<[u8]>(b"qux").unwrap());
-    assert!(tx.insert::<[u8]>(b"foo").unwrap());
-    assert!(!tx.insert::<[u8]>(b"foo").unwrap());
+    assert!(tx.insert(b"qux".to_vec()).unwrap());
+    assert!(!tx.insert(b"qux".to_vec()).unwrap());
+    assert!(tx.insert(b"foo".to_vec()).unwrap());
+    assert!(!tx.insert(b"foo".to_vec()).unwrap());
 
     assert_eq!(tx.len().unwrap(), 3);
     assert!(!tx.is_empty().unwrap());
@@ -1213,10 +1221,10 @@ fn test_sqlite_set_blob_transacted() {
     assert!(!tx.contains::<[u8]>(b"qux").unwrap());
     assert!(!tx.contains::<[u8]>(b"xyz").unwrap());
 
-    assert!(tx.insert::<[u8]>(b"foo").unwrap());
-    assert!(tx.insert::<[u8]>(b"baz").unwrap());
+    assert!(tx.insert(b"foo".to_vec()).unwrap());
+    assert!(tx.insert(b"baz".to_vec()).unwrap());
 
-    assert_eq!(tx.insert_all([&b"bar"[..], &b"baz"[..], &b"qux"[..]].into_iter()).unwrap(), 2);
+    assert_eq!(tx.extend([b"bar", b"baz", b"qux"].map(Blob::from)).unwrap(), 2);
 
     tx.commit();
 
@@ -1231,8 +1239,8 @@ fn test_sqlite_set_blob_transacted() {
 
 #[test]
 fn test_sqlite_set_blob_from_keys() {
-    const KEYS: [&[u8]; 6] = [b"foo", b"foo", b"bar", b"BAR", b"baz", b"qux"];
-    let set = SQLiteSet::<Blob>::from_keys(KEYS).unwrap();
+    let keys: [Blob; 6] = [b"foo", b"foo", b"bar", b"BAR", b"baz", b"qux"].map(Blob::from);
+    let set = SQLiteSet::<Blob>::try_from(keys).unwrap();
 
     assert_eq!(set.len().unwrap(), 5);
     assert!(set.contains(&b"foo"[..]).unwrap());
@@ -1254,7 +1262,7 @@ fn test_sqlite_set_blob_stresstest() {
     {
         let mut tx = set.transaction().unwrap();
         for i in 0u64..MAX_ITEMS {
-            assert!(tx.insert(hex.encode_raw(mix64(i))).unwrap());
+            assert!(tx.insert_ref(hex.encode_raw(mix64(i))).unwrap());
         }
     }
 
@@ -1284,7 +1292,7 @@ fn test_sqlite_set_blob_randomized() {
             let mut tx = set.transaction().unwrap();
             for _i in 0u64..COUNT {
                 xoshiro.fill_bytes(&mut temp);
-                assert_eq!(tx.insert(temp.as_slice()).unwrap(), b);
+                assert_eq!(tx.insert_ref(temp.as_slice()).unwrap(), b);
             }
         }
     }
@@ -1306,17 +1314,17 @@ fn test_sqlite_set_blob_union() {
 
     {
         let mut tx = set_1.transaction().unwrap();
-        assert!(tx.insert(&b"foo"[..]).unwrap());
-        assert!(tx.insert(&b"bar"[..]).unwrap());
-        assert!(tx.insert(&b"baz"[..]).unwrap());
+        assert!(tx.insert(b"foo".to_vec()).unwrap());
+        assert!(tx.insert(b"bar".to_vec()).unwrap());
+        assert!(tx.insert(b"baz".to_vec()).unwrap());
     }
 
     {
         let mut tx = set_2.transaction().unwrap();
-        assert!(tx.insert(&b"foo"[..]).unwrap());
-        assert!(tx.insert(&b"qux"[..]).unwrap());
-        assert!(tx.insert(&b"xyz"[..]).unwrap());
-        assert!(tx.insert(&b"cor"[..]).unwrap());
+        assert!(tx.insert(b"foo".to_vec()).unwrap());
+        assert!(tx.insert(b"qux".to_vec()).unwrap());
+        assert!(tx.insert(b"xyz".to_vec()).unwrap());
+        assert!(tx.insert(b"cor".to_vec()).unwrap());
     }
 
     assert!(set_1.contains(&b"foo"[..]).unwrap());
@@ -1345,18 +1353,18 @@ fn test_sqlite_set_blob_difference() {
 
     {
         let mut tx = set_1.transaction().unwrap();
-        assert!(tx.insert(&b"foo"[..]).unwrap());
-        assert!(tx.insert(&b"bar"[..]).unwrap());
-        assert!(tx.insert(&b"baz"[..]).unwrap());
-        assert!(tx.insert(&b"qux"[..]).unwrap());
-        assert!(tx.insert(&b"xyz"[..]).unwrap());
+        assert!(tx.insert(b"foo".to_vec()).unwrap());
+        assert!(tx.insert(b"bar".to_vec()).unwrap());
+        assert!(tx.insert(b"baz".to_vec()).unwrap());
+        assert!(tx.insert(b"qux".to_vec()).unwrap());
+        assert!(tx.insert(b"xyz".to_vec()).unwrap());
     }
 
     {
         let mut tx = set_2.transaction().unwrap();
-        assert!(tx.insert(&b"baz"[..]).unwrap());
-        assert!(tx.insert(&b"xyz"[..]).unwrap());
-        assert!(tx.insert(&b"$?!"[..]).unwrap());
+        assert!(tx.insert(b"baz".to_vec()).unwrap());
+        assert!(tx.insert(b"xyz".to_vec()).unwrap());
+        assert!(tx.insert(b"$?!".to_vec()).unwrap());
     }
 
     assert!(set_1.contains(&b"foo"[..]).unwrap());
@@ -1383,19 +1391,19 @@ fn test_sqlite_set_blob_intersection() {
 
     {
         let mut tx = set_1.transaction().unwrap();
-        assert!(tx.insert(&b"foo"[..]).unwrap());
-        assert!(tx.insert(&b"bar"[..]).unwrap());
-        assert!(tx.insert(&b"qux"[..]).unwrap());
-        assert!(tx.insert(&b"xyz"[..]).unwrap());
+        assert!(tx.insert(b"foo".to_vec()).unwrap());
+        assert!(tx.insert(b"bar".to_vec()).unwrap());
+        assert!(tx.insert(b"qux".to_vec()).unwrap());
+        assert!(tx.insert(b"xyz".to_vec()).unwrap());
     }
 
     {
         let mut tx = set_2.transaction().unwrap();
-        assert!(tx.insert(&b"bar"[..]).unwrap());
-        assert!(tx.insert(&b"baz"[..]).unwrap());
-        assert!(tx.insert(&b"qux"[..]).unwrap());
-        assert!(tx.insert(&b"xyz"[..]).unwrap());
-        assert!(tx.insert(&b"$?!"[..]).unwrap());
+        assert!(tx.insert(b"bar".to_vec()).unwrap());
+        assert!(tx.insert(b"baz".to_vec()).unwrap());
+        assert!(tx.insert(b"qux".to_vec()).unwrap());
+        assert!(tx.insert(b"xyz".to_vec()).unwrap());
+        assert!(tx.insert(b"$?!".to_vec()).unwrap());
     }
 
     let set_3 = set_1.intersection(&set_2).unwrap();
@@ -1423,40 +1431,40 @@ fn test_sqlite_set_filebased() {
     assert!(!fs::exists(&file_path_2).unwrap());
 
     assert!(matches!(
-        SQLiteSet::<String>::from_file(&file_path_1, false, false),
+        SQLiteSet::<String>::try_from_file(&file_path_1, false, false),
         Err(Error::SqlError(RusqliteError::SqliteFailure(FfiError { code: FfiErrorCode::CannotOpen, .. }, _)))
     ));
     assert!(matches!(
-        SQLiteSet::<String>::from_file(&file_path_2, false, false),
+        SQLiteSet::<String>::try_from_file(&file_path_2, false, false),
         Err(Error::SqlError(RusqliteError::SqliteFailure(FfiError { code: FfiErrorCode::CannotOpen, .. }, _)))
     ));
 
     assert!(matches!(
-        SQLiteSet::<String>::from_file(&file_path_1, true, true),
+        SQLiteSet::<String>::try_from_file(&file_path_1, true, true),
         Err(Error::SqlError(RusqliteError::SqliteFailure(FfiError { code: FfiErrorCode::CannotOpen, .. }, _)))
     ));
     assert!(matches!(
-        SQLiteSet::<String>::from_file(&file_path_2, true, true),
+        SQLiteSet::<String>::try_from_file(&file_path_2, true, true),
         Err(Error::SqlError(RusqliteError::SqliteFailure(FfiError { code: FfiErrorCode::CannotOpen, .. }, _)))
     ));
 
     {
-        let mut set = SQLiteSet::<String>::from_file(&file_path_1, false, true).unwrap();
+        let mut set = SQLiteSet::<String>::try_from_file(&file_path_1, false, true).unwrap();
         {
             let mut tx = set.transaction().unwrap();
-            assert!(tx.insert("foo").unwrap());
-            assert!(tx.insert("baz").unwrap());
-            assert!(tx.insert("BAZ").unwrap());
+            assert!(tx.insert("foo".to_owned()).unwrap());
+            assert!(tx.insert("baz".to_owned()).unwrap());
+            assert!(tx.insert("BAZ".to_owned()).unwrap());
         }
     }
 
     {
-        let mut set = SQLiteSet::<String>::from_file_nocase(&file_path_2, false, true).unwrap();
+        let mut set = SQLiteSet::<String>::try_from_file_nocase(&file_path_2, false, true).unwrap();
         {
             let mut tx = set.transaction().unwrap();
-            assert!(tx.insert("bar").unwrap());
-            assert!(tx.insert("qux").unwrap());
-            assert!(!tx.insert("QUX").unwrap());
+            assert!(tx.insert("bar".to_owned()).unwrap());
+            assert!(tx.insert("qux".to_owned()).unwrap());
+            assert!(!tx.insert("QUX".to_owned()).unwrap());
         }
     }
 
@@ -1464,18 +1472,18 @@ fn test_sqlite_set_filebased() {
     assert!(fs::exists(&file_path_2).unwrap());
 
     {
-        let mut set = SQLiteSet::<String>::from_file(&file_path_1, true, false).unwrap();
+        let mut set = SQLiteSet::<String>::try_from_file(&file_path_1, true, false).unwrap();
         assert!(set.contains("foo").unwrap());
-        assert!(matches!(set.insert("xyz"), Err(Error::SqlError(RusqliteError::SqliteFailure(FfiError { code: FfiErrorCode::ReadOnly, .. }, _)))));
+        assert!(matches!(set.insert("xyz".to_owned()), Err(Error::SqlError(RusqliteError::SqliteFailure(FfiError { code: FfiErrorCode::ReadOnly, .. }, _)))));
     }
 
     {
-        let mut set = SQLiteSet::<String>::from_file(&file_path_1, false, false).unwrap();
-        assert!(set.insert("xyz").unwrap());
+        let mut set = SQLiteSet::<String>::try_from_file(&file_path_1, false, false).unwrap();
+        assert!(set.insert("xyz".to_owned()).unwrap());
     }
 
     {
-        let set = SQLiteSet::<String>::from_file(&file_path_1, false, false).unwrap();
+        let set = SQLiteSet::<String>::try_from_file(&file_path_1, false, false).unwrap();
         assert!(set.contains("foo").unwrap());
         assert!(!set.contains("FOO").unwrap());
         assert!(!set.contains("bar").unwrap());
@@ -1486,7 +1494,7 @@ fn test_sqlite_set_filebased() {
     }
 
     {
-        let set = SQLiteSet::<String>::from_file_nocase(&file_path_2, false, false).unwrap();
+        let set = SQLiteSet::<String>::try_from_file_nocase(&file_path_2, false, false).unwrap();
         assert!(!set.contains("foo").unwrap());
         assert!(set.contains("bar").unwrap());
         assert!(set.contains("BAR").unwrap());
@@ -1496,8 +1504,8 @@ fn test_sqlite_set_filebased() {
         assert!(!set.contains("xyz").unwrap());
     }
 
-    assert!(matches!(SQLiteSet::<String>::from_file_nocase(&file_path_1, false, false), Err(Error::InvalidSchema)));
-    assert!(matches!(SQLiteSet::<String>::from_file(&file_path_2, false, false), Err(Error::InvalidSchema)));
+    assert!(matches!(SQLiteSet::<String>::try_from_file_nocase(&file_path_1, false, false), Err(Error::InvalidSchema)));
+    assert!(matches!(SQLiteSet::<String>::try_from_file(&file_path_2, false, false), Err(Error::InvalidSchema)));
 }
 
 #[cfg(feature = "checked")]
@@ -1514,15 +1522,15 @@ fn test_sqlite_set_filebased_integrity() {
     assert!(!fs::exists(&file_path).unwrap());
 
     {
-        let mut set = SQLiteSet::<String>::from_file(&file_path, false, true).unwrap();
+        let mut set = SQLiteSet::<String>::try_from_file(&file_path, false, true).unwrap();
         {
             let mut tx = set.transaction().unwrap();
-            assert!(tx.insert("foo").unwrap());
-            assert!(tx.insert("Foo").unwrap());
-            assert!(tx.insert("bar").unwrap());
-            assert!(tx.insert("BAR").unwrap());
-            assert!(tx.insert("baz").unwrap());
-            assert!(tx.insert("BAZ").unwrap());
+            assert!(tx.insert("foo".to_owned()).unwrap());
+            assert!(tx.insert("Foo".to_owned()).unwrap());
+            assert!(tx.insert("bar".to_owned()).unwrap());
+            assert!(tx.insert("BAR".to_owned()).unwrap());
+            assert!(tx.insert("baz".to_owned()).unwrap());
+            assert!(tx.insert("BAZ".to_owned()).unwrap());
         }
     }
 
@@ -1538,7 +1546,7 @@ fn test_sqlite_set_filebased_integrity() {
         file.sync_all().unwrap();
     }
 
-    assert!(matches!(SQLiteSet::<String>::from_file(&file_path, false, false), Err(Error::IntegrityCheck)));
+    assert!(matches!(SQLiteSet::<String>::try_from_file(&file_path, false, false), Err(Error::IntegrityCheck)));
 }
 
 #[cfg(feature = "backup")]
@@ -1553,18 +1561,18 @@ fn test_sqlite_set_filebased_tofile() {
         let mut set = SQLiteSet::<String>::new().unwrap();
         {
             let mut tx = set.transaction().unwrap();
-            assert!(tx.insert("foo").unwrap());
-            assert!(tx.insert("FOO").unwrap());
-            assert!(tx.insert("bar").unwrap());
-            assert!(tx.insert("BAR").unwrap());
-            assert!(tx.insert("baz").unwrap());
-            assert!(tx.insert("BAZ").unwrap());
+            assert!(tx.insert("foo".to_owned()).unwrap());
+            assert!(tx.insert("FOO".to_owned()).unwrap());
+            assert!(tx.insert("bar".to_owned()).unwrap());
+            assert!(tx.insert("BAR".to_owned()).unwrap());
+            assert!(tx.insert("baz".to_owned()).unwrap());
+            assert!(tx.insert("BAZ".to_owned()).unwrap());
         }
         set.to_file(&file_path).unwrap();
     }
 
     {
-        let set = SQLiteSet::<String>::from_file(&file_path, false, false).unwrap();
+        let set = SQLiteSet::<String>::try_from_file(&file_path, false, false).unwrap();
         assert!(set.contains("foo").unwrap());
         assert!(set.contains("FOO").unwrap());
         assert!(set.contains("bar").unwrap());
@@ -1587,7 +1595,7 @@ fn sqlite_set_thread_worker<const COUNT: u64>(mut thread_set: SQLiteSet<String>,
     {
         let mut tx = thread_set.transaction().unwrap();
         for i in 0u64..COUNT {
-            assert!(tx.insert(hex.encode(mix64(i))).unwrap());
+            assert!(tx.insert_ref(hex.encode(mix64(i))).unwrap());
         }
     }
 
@@ -1625,11 +1633,11 @@ fn test_sqlite_set_to_map_i64() {
 
     {
         let mut tx = set.transaction().unwrap();
-        assert!(tx.insert(&0i64).unwrap());
-        assert!(tx.insert(&42i64).unwrap());
-        assert!(tx.insert(&2147483647i64).unwrap());
-        assert!(tx.insert(&i64::MIN).unwrap());
-        assert!(tx.insert(&i64::MAX).unwrap());
+        assert!(tx.insert(0i64).unwrap());
+        assert!(tx.insert(42i64).unwrap());
+        assert!(tx.insert(2147483647i64).unwrap());
+        assert!(tx.insert(i64::MIN).unwrap());
+        assert!(tx.insert(i64::MAX).unwrap());
     }
 
     let map = set.to_map(|key| if *key != 2147483647i64 { Some(mix64(*key as u64).to_string()) } else { None }).unwrap();
@@ -1653,12 +1661,12 @@ fn test_sqlite_set_to_map_string() {
 
     {
         let mut tx = set.transaction().unwrap();
-        assert!(tx.insert("foo").unwrap());
-        assert!(tx.insert("bar").unwrap());
-        assert!(tx.insert("qux").unwrap());
-        assert!(tx.insert("FOO").unwrap());
-        assert!(tx.insert("BAR").unwrap());
-        assert!(tx.insert("QUX").unwrap());
+        assert!(tx.insert("foo".to_owned()).unwrap());
+        assert!(tx.insert("bar".to_owned()).unwrap());
+        assert!(tx.insert("qux".to_owned()).unwrap());
+        assert!(tx.insert("FOO".to_owned()).unwrap());
+        assert!(tx.insert("BAR".to_owned()).unwrap());
+        assert!(tx.insert("QUX".to_owned()).unwrap());
     }
 
     let map_1 = set.to_map(|key| if !key.eq_ignore_ascii_case("qux") { Some(format!("~{}~", reverse_str(key))) } else { None }).unwrap();
@@ -1693,23 +1701,23 @@ cfg_if! {
 
             {
                 let mut tx = set.transaction().unwrap();
-                assert!(tx.insert("foo").unwrap());
-                assert!(tx.insert("baz").unwrap());
-                assert!(tx.insert("BAZ").unwrap());
+                assert!(tx.insert("foo".to_owned()).unwrap());
+                assert!(tx.insert("baz".to_owned()).unwrap());
+                assert!(tx.insert("BAZ".to_owned()).unwrap());
             }
 
             let mut set_clone = set.try_clone().unwrap();
 
             {
                 let mut tx = set.transaction().unwrap();
-                assert!(tx.insert("bar").unwrap());
-                assert!(tx.insert("QUX").unwrap());
+                assert!(tx.insert("bar".to_owned()).unwrap());
+                assert!(tx.insert("QUX".to_owned()).unwrap());
             }
 
             {
                 let mut tx = set_clone.transaction().unwrap();
-                assert!(tx.insert("BAR").unwrap());
-                assert!(tx.insert("qux").unwrap());
+                assert!(tx.insert("BAR".to_owned()).unwrap());
+                assert!(tx.insert("qux".to_owned()).unwrap());
             }
 
             assert!(set.contains("foo").unwrap());
@@ -1735,9 +1743,9 @@ cfg_if! {
 
             {
                 let mut tx = set.transaction().unwrap();
-                assert!(tx.insert("foo").unwrap());
-                assert!(tx.insert("baz").unwrap());
-                assert!(tx.insert("BAZ").unwrap());
+                assert!(tx.insert("foo".to_owned()).unwrap());
+                assert!(tx.insert("baz".to_owned()).unwrap());
+                assert!(tx.insert("BAZ".to_owned()).unwrap());
             }
 
             assert!(matches!(set.try_clone(), Err(Error::Unsupported)));
@@ -1768,7 +1776,7 @@ fn test_sqlite_set_to_destruction() {
 
     loop {
         let key = channel_rx.recv().expect("Out of items!");
-        match tx.insert(&key) {
+        match tx.insert(key) {
             Err(error) => match error.into_inner() {
                 Some(sqlite_containers::rusqlite::Error::SqliteFailure(sqlite_error, _)) => match sqlite_error.code {
                     sqlite_containers::rusqlite::ErrorCode::OutOfMemory => break,

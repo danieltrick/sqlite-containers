@@ -328,6 +328,12 @@ where
         SQLiteMapTransaction::from(&mut self.connection, &self.last_action)
     }
 
+    /// This is the “read-only” version of the [`transaction()`](Self::transaction) function.
+    #[inline]
+    pub(crate) fn transaction_readonly(&self) -> Result<SQLiteMapTransaction<'_, K, V>, Error> {
+        SQLiteMapTransaction::from_immutable(&self.connection, &self.last_action)
+    }
+
     /// Inserts the given key-value pair into the map, if the specified key does *not* exist yet.
     ///
     /// If the map already contains the specified key, then its associated value is **not** changed by this operation!
@@ -705,7 +711,7 @@ where
     ///
     /// The created set is case-sensitive.
     #[inline]
-    pub fn to_set(&mut self) -> Result<SQLiteSet<K>, Error> {
+    pub fn to_set(&self) -> Result<SQLiteSet<K>, Error> {
         let mut key_set = SQLiteSet::<K>::new()?;
         key_set.transaction()?.insert_mapped_keys(self)?;
         Ok(key_set)
@@ -806,6 +812,13 @@ where
     #[inline]
     fn from(connection: &'a mut Connection, last_action: &'a LastActionHolder) -> Result<Self, Error> {
         let mut transaction = connection.transaction()?;
+        transaction.set_drop_behavior(DropBehavior::Commit);
+        Ok(Self { _types: (PhantomData, PhantomData), transaction, last_action })
+    }
+
+    #[inline]
+    fn from_immutable(connection: &'a Connection, last_action: &'a LastActionHolder) -> Result<Self, Error> {
+        let mut transaction = connection.unchecked_transaction()?;
         transaction.set_drop_behavior(DropBehavior::Commit);
         Ok(Self { _types: (PhantomData, PhantomData), transaction, last_action })
     }
