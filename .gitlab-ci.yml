@@ -1,0 +1,26 @@
+stages:
+  - pre-check
+  - publish
+
+clippy:
+  image: rust:latest
+  stage: pre-check
+  script:
+    - rustup component add clippy rustfmt
+    - make clippy
+
+publish:
+  image: rust:latest
+  stage: publish
+  rules:
+    - if: '$CI_COMMIT_TAG'
+  script:
+    - make dist
+    - CRATE_FILE="$(find target/package -maxdepth 1 -name '*.crate' -print -quit)"
+    - CRATE_BASENAME="$(basename "${CRATE_FILE}")"
+    - PKGID_NAME="$(cargo metadata --no-deps --format-version 1 | grep -Eo '"name":"[^"]+"' | head -1 | cut -d'"' -f4)"
+    - PKGID_VERSION="$(cargo metadata --no-deps --format-version 1 | grep -Eo '"version":"[^"]+"' | head -1 | cut -d'"' -f4)"
+    - >
+      curl --fail-with-body --header "JOB-TOKEN: ${CI_JOB_TOKEN}"
+      --upload-file "${CRATE_FILE}"
+      "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/${PKGID_NAME}/${PKGID_VERSION}/${CRATE_BASENAME}"
