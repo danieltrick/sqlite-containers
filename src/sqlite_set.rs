@@ -562,13 +562,10 @@ where
     where
         P: AsRef<Path>,
     {
-        if let Some(path_str) = path.as_ref().to_str() {
-            let mut statement = self.connection.prepare_cached(SQL_STORE_INTO)?;
-            statement.execute([path_str])?;
-            Ok(())
-        } else {
-            Err(Error::InvalidPath)
-        }
+        let file = path.as_ref().to_str().ok_or(Error::InvalidPath)?;
+        let mut statement = self.connection.prepare_cached(SQL_STORE_INTO)?;
+        statement.execute([file])?;
+        Ok(())
     }
 }
 

@@ -334,18 +334,13 @@ where
 
 #[inline(always)]
 fn set_pragma_checked(connection: &mut Connection, schema: Option<&str>, name: &str, value: &str) -> Result<(), Error> {
-    let update_success = connection
-        .pragma_update_and_check(schema, name, value, |row| {
-            let updated_value: String = row.get(0).unwrap_or_default();
-            Ok(updated_value.eq_ignore_ascii_case(value))
-        })
-        .unwrap_or_default();
-
-    if !(update_success || connection.is_readonly("main").unwrap_or_default()) {
-        eprintln!("Boom!");
+    if !match connection.pragma_update_and_check(schema, name, value, |row| row.get::<_, String>(0)) {
+        Ok(updated_value) => updated_value.eq_ignore_ascii_case(value),
+        Err(RusqliteError::SqliteFailure(FfiError { code: FfiErrorCode::ReadOnly, .. }, _)) => true,
+        Err(_) => false,
+    } {
         return Err(Error::InitDbConnFailed);
     }
-
     Ok(())
 }
 
@@ -468,6 +463,7 @@ mod test {
     use super::*;
     use crate::rusqlite::ffi::{Error as FfiError, ErrorCode as FfiErrorCode, SQLITE_CONSTRAINT, SQLITE_NOMEM};
     use std::path::PathBuf;
+    use tempfile::NamedTempFile;
 
     #[cfg(target_pointer_width = "64")]
     #[test]
@@ -556,6 +552,19 @@ mod test {
 
         let error_3 = check_constraint_violation(RusqliteError::SqliteFailure(FfiError::new(SQLITE_NOMEM), None));
         assert!(matches!(error_3, Err(Error::SqlError(..))));
+    }
+
+    #[test]
+    fn test_set_pragma_checked() {
+        let mut connection_1 = Connection::open_in_memory().unwrap();
+        assert!(set_pragma_checked(&mut connection_1, None, "journal_mode", "OFF").is_ok());
+        assert!(matches!(set_pragma_checked(&mut connection_1, None, "journal_mode", "WAL"), Err(Error::InitDbConnFailed)));
+        assert!(matches!(set_pragma_checked(&mut connection_1, None, "unknown_flag", "YES"), Err(Error::InitDbConnFailed)));
+
+        let temp_file = NamedTempFile::with_suffix(".db").unwrap();
+        Connection::open_with_flags(temp_file.path(), OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_CREATE).unwrap();
+        let mut connection_2 = Connection::open_with_flags(temp_file.path(), OpenFlags::SQLITE_OPEN_READ_ONLY).unwrap();
+        assert!(set_pragma_checked(&mut connection_2, None, "journal_mode", "WAL").is_ok());
     }
 
     #[cfg(feature = "checked")]
