@@ -4,7 +4,7 @@
 
 use crate::{
     rusqlite::{
-        Error as RusqliteError, OpenFlags, TransactionBehavior,
+        Connection, Error as RusqliteError, OpenFlags, TransactionBehavior,
         ffi::{Error as FfiError, ErrorCode as FfiErrorCode},
         types::{FromSql, ToSql, Type as RusqliteType},
         version_number,
@@ -18,9 +18,6 @@ use std::{
     sync::LazyLock,
 };
 
-#[cfg(any(feature = "backup", feature = "checked"))]
-use crate::rusqlite::Connection;
-
 // ---------------------------------------------------------------------------
 // Flags
 // ---------------------------------------------------------------------------
@@ -29,7 +26,7 @@ use crate::rusqlite::Connection;
 pub type Blob = Vec<u8>;
 
 /// Flags to be used for [`Connection::open_with_flags()`](rusqlite::Connection::open_with_flags).
-pub(crate) static OPEN_FLAGS: LazyLock<OpenFlags> = LazyLock::new(|| {
+static OPEN_FLAGS: LazyLock<OpenFlags> = LazyLock::new(|| {
     let mut flags = OpenFlags::default();
     flags.remove(OpenFlags::SQLITE_OPEN_URI);
     flags
@@ -350,7 +347,7 @@ fn set_pragma_checked(connection: &mut Connection, schema: Option<&str>, name: &
 }
 
 #[inline(always)]
-pub(crate) fn initialize_connection(mut connection: Connection, file_based: bool) -> Result<Connection, Error> {
+fn initialize_connection(mut connection: Connection, file_based: bool) -> Result<Connection, Error> {
     connection.set_transaction_behavior(TransactionBehavior::Exclusive);
 
     if !file_based {
@@ -379,11 +376,34 @@ pub trait TryClone: Sized {
 cfg_if! {
     if #[cfg(feature = "backup")] {
         use crate::rusqlite::backup::Backup;
-        use std::time::Duration;
+        use std::{time::Duration, path::PathBuf, fs::canonicalize};
 
-        pub(crate) fn backup_db(src: &Connection, dst: &mut Connection) -> Result<(), Error> {
-            let backup = Backup::new(src, dst)?;
-            Ok(backup.run_to_completion(1000i32, Duration::ZERO, None)?)
+        #[inline]
+        pub fn duplicate_db<P>(source_db: &Connection, path_option: Option<P>) -> Result<Connection, Error>
+        where
+            P: AsRef<Path>,
+        {
+            if let Some(path_dst) = path_option.as_ref() {
+                if let Some(path_src) = source_db.path() {
+                    if !path_src.is_empty() && try_canonicalize(path_dst).eq(&try_canonicalize(path_src)) {
+                        return Err(Error::SourceAndDestSame);
+                    }
+                }
+            }
+
+            let connection = if let Some(path) = path_option.as_ref() { Connection::open_with_flags(path, *OPEN_FLAGS)? } else { Connection::open_in_memory()? };
+            let mut connection = initialize_connection(connection, path_option.is_some())?;
+
+            Backup::new(source_db, &mut connection)?.run_to_completion(1000i32, Duration::ZERO, None)?;
+            Ok(connection)
+        }
+
+        #[inline(always)]
+        fn try_canonicalize<P>(path: P) -> PathBuf
+        where
+            P: AsRef<Path>,
+        {
+            canonicalize(&path).unwrap_or_else(|_| path.as_ref().to_path_buf())
         }
     }
 }

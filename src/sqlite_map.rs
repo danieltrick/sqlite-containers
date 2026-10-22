@@ -756,9 +756,7 @@ where
     where
         P: AsRef<Path>,
     {
-        use crate::common::{OPEN_FLAGS, initialize_connection};
-        let mut connection_out = initialize_connection(Connection::open_with_flags(path, *OPEN_FLAGS)?, true)?;
-        crate::common::backup_db(&self.connection, &mut connection_out)?;
+        crate::common::duplicate_db(&self.connection, Some(path))?;
         Ok(())
     }
 }
@@ -777,10 +775,7 @@ cfg_if! {
             /// This function fails with [`Error::Unsupported`](crate::Error::Unsupported), if the optional [`backup`](crate#optional-features) feature is **not** enabled &#128549;
             #[inline]
             fn try_clone(&self) -> Result<Self, Self::Error> {
-                use crate::common::initialize_connection;
-                let mut connection_cloned = initialize_connection(Connection::open_in_memory()?, false)?;
-                crate::common::backup_db(&self.connection, &mut connection_cloned)?;
-                Self::from_connection(connection_cloned)
+                Self::from_connection(crate::common::duplicate_db::<&Path>(&self.connection, None)?)
             }
         }
     } else {

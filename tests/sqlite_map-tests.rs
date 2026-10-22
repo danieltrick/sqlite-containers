@@ -3907,9 +3907,10 @@ fn test_sqlite_map_filebased_integrity() {
 #[test]
 fn test_sqlite_map_filebased_tofile() {
     let temp_dir = tempdir_in(env!["CARGO_TARGET_TMPDIR"]).unwrap();
-    let file_path = temp_dir.path().join("sqlite_map.db");
+    let file_path_1 = temp_dir.path().join("sqlite_map-1.db");
+    let file_path_2 = temp_dir.path().join("sqlite_map-2.db");
 
-    assert!(!fs::exists(&file_path).unwrap());
+    assert!(!fs::exists(&file_path_1).unwrap());
 
     {
         let mut map = SQLiteMap::<String, String>::new().unwrap();
@@ -3922,11 +3923,11 @@ fn test_sqlite_map_filebased_tofile() {
             assert!(tx.insert("baz".to_owned(), "stuvwxyz".to_owned()).unwrap());
             assert!(tx.insert("BAZ".to_owned(), "zyxwvuts".to_owned()).unwrap());
         }
-        map.to_file(&file_path).unwrap();
+        map.to_file(&file_path_1).unwrap();
     }
 
     {
-        let map = SQLiteMap::<String, String>::try_from_file(&file_path, false, false).unwrap();
+        let map = SQLiteMap::<String, String>::try_from_file(&file_path_1, false, false).unwrap();
         assert!(map.get("foo").unwrap().is_some_and(|value| value.eq("12345678")));
         assert!(map.get("FOO").unwrap().is_some_and(|value| value.eq("87654321")));
         assert!(map.get("bar").unwrap().is_some_and(|value| value.eq("abcdefgh")));
@@ -3935,6 +3936,9 @@ fn test_sqlite_map_filebased_tofile() {
         assert!(map.get("BAZ").unwrap().is_some_and(|value| value.eq("zyxwvuts")));
         assert!(map.get("qux").unwrap().is_none());
         assert!(map.get("xyz").unwrap().is_none());
+
+        assert!(matches!(map.to_file(&file_path_1), Err(Error::SourceAndDestSame)));
+        assert!(map.to_file(&file_path_2).is_ok());
     }
 }
 

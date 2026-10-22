@@ -1636,9 +1636,10 @@ fn test_sqlite_set_filebased_integrity() {
 #[test]
 fn test_sqlite_set_filebased_tofile() {
     let temp_dir = tempdir_in(env!["CARGO_TARGET_TMPDIR"]).unwrap();
-    let file_path = temp_dir.path().join("sqlite_set.db");
+    let file_path_1 = temp_dir.path().join("sqlite_set-1.db");
+    let file_path_2 = temp_dir.path().join("sqlite_set-2.db");
 
-    assert!(!fs::exists(&file_path).unwrap());
+    assert!(!fs::exists(&file_path_1).unwrap());
 
     {
         let mut set = SQLiteSet::<String>::new().unwrap();
@@ -1651,11 +1652,11 @@ fn test_sqlite_set_filebased_tofile() {
             assert!(tx.insert("baz".to_owned()).unwrap());
             assert!(tx.insert("BAZ".to_owned()).unwrap());
         }
-        set.to_file(&file_path).unwrap();
+        set.to_file(&file_path_1).unwrap();
     }
 
     {
-        let set = SQLiteSet::<String>::try_from_file(&file_path, false, false).unwrap();
+        let set = SQLiteSet::<String>::try_from_file(&file_path_1, false, false).unwrap();
         assert!(set.contains("foo").unwrap());
         assert!(set.contains("FOO").unwrap());
         assert!(set.contains("bar").unwrap());
@@ -1664,6 +1665,9 @@ fn test_sqlite_set_filebased_tofile() {
         assert!(set.contains("BAZ").unwrap());
         assert!(!set.contains("qux").unwrap());
         assert!(!set.contains("xyz").unwrap());
+
+        assert!(matches!(set.to_file(&file_path_1), Err(Error::SourceAndDestSame)));
+        assert!(set.to_file(&file_path_2).is_ok());
     }
 }
 
