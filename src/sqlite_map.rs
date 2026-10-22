@@ -4,8 +4,8 @@
 
 use crate::{
     CharType, Error, IterationError, SQLiteSet, Size, SizeExt, TryClone, Type,
-    common::{OPEN_FLAGS, OPEN_FLAGS_NOCREATE, OPEN_FLAGS_RDONLY, SQL_TYPE_TEXT, SQL_TYPES, SqlType, check_constraint_violation, increment, verify_schema},
-    rusqlite::{Connection, DropBehavior, OptionalExtension, ToSql, Transaction, TransactionBehavior, params},
+    common::{SQL_TYPE_TEXT, SQL_TYPES, SqlType, check_constraint_violation, create_new_connection, increment},
+    rusqlite::{Connection, DropBehavior, OptionalExtension, ToSql, Transaction, params},
 };
 use cfg_if::cfg_if;
 use const_format::concatcp;
@@ -180,6 +180,13 @@ where
         Self::from_connection(Self::create_connection::<true, &Path>(None, false, false)?)
     }
 
+    #[inline(always)]
+    fn from_connection(connection: Connection) -> Result<Self, Error> {
+        let last_action = LastActionHolder::default();
+        Self::install_update_hook(&connection, &last_action)?;
+        Ok(Self { _types: (PhantomData, PhantomData), connection, last_action })
+    }
+
     /// Creates a new map with case-sensitive keys containing all key-value pairs yielded by the given [iterable](std::iter::IntoIterator).
     ///
     /// The new hash map is backed by an *in-memory* SQLite database.
@@ -242,24 +249,11 @@ where
         Self::from_connection(Self::create_connection::<true, _>(Some(path), readonly, can_create)?)
     }
 
-    #[inline]
+    #[inline(always)]
     fn create_connection<const NO_CASE: bool, P>(path_option: Option<P>, readonly: bool, can_create: bool) -> Result<Connection, Error>
     where
         P: AsRef<Path>,
     {
-        let connection = if let Some(path) = path_option.as_ref() {
-            Connection::open_with_flags(path, if !readonly { if can_create { *OPEN_FLAGS } else { *OPEN_FLAGS_NOCREATE } } else { *OPEN_FLAGS_RDONLY })?
-        } else {
-            Connection::open_in_memory()?
-        };
-
-        let connection = Self::initialize_connection(connection)?;
-
-        #[cfg(feature = "checked")]
-        if path_option.is_some() {
-            crate::common::integrity_check(&connection)?;
-        }
-
         let sql_create_table = if !NO_CASE {
             SQL_CREATE_TBL.get(&(K::SQL_TYPE, V::SQL_TYPE)).unwrap()
         } else {
@@ -267,47 +261,23 @@ where
             SQL_CREATE_NOC.get(&V::SQL_TYPE).unwrap()
         };
 
-        connection.execute(sql_create_table, [])?;
-
-        if path_option.is_some() {
-            let sql_schema_table: String = connection.query_one(SQL_GET_SCHEMA, [], |row| row.get(0))?;
-            if !verify_schema(sql_create_table, &sql_schema_table) {
-                return Err(Error::InvalidSchema);
-            }
-        }
-
-        Ok(connection)
-    }
-
-    #[inline(always)]
-    fn initialize_connection(mut connection: Connection) -> Result<Connection, Error> {
-        connection.set_transaction_behavior(TransactionBehavior::Exclusive);
-        connection.pragma_update(None, "synchronous", "OFF")?;
-        connection.pragma_update(None, "journal_mode", "OFF")?;
-        Ok(connection)
-    }
-
-    #[inline(always)]
-    fn from_connection(connection: Connection) -> Result<Self, Error> {
-        let last_action = LastActionHolder::default();
-        Self::install_hook(&connection, &last_action);
-        Ok(Self { _types: (PhantomData, PhantomData), connection, last_action })
+        create_new_connection(sql_create_table, SQL_GET_SCHEMA, path_option, readonly, can_create)
     }
 
     cfg_if! {
         if #[cfg(feature = "hooks")] {
             #[inline(always)]
-            fn install_hook(connection: &Connection, last_action: &LastActionHolder) {
+            fn install_update_hook(connection: &Connection, last_action: &LastActionHolder) -> Result<(), Error> {
                 let last_action = Arc::clone(&last_action.0);
                 connection
                     .update_hook(Some(move |action, _db: &str, _table: &str, _rowid: i64| {
                         last_action.store(action as i32, Relaxed);
-                    }))
-                    .unwrap();
+                    }))?;
+                Ok(())
             }
         } else {
             #[inline(always)]
-            fn install_hook(_: &Connection, _: &LastActionHolder) {}
+            fn install_update_hook(_: &Connection, _: &LastActionHolder) -> Result<(), Error> { Ok(()) }
         }
     }
 
@@ -786,7 +756,8 @@ where
     where
         P: AsRef<Path>,
     {
-        let mut connection_out = Self::initialize_connection(Connection::open_with_flags(path, *OPEN_FLAGS)?)?;
+        use crate::common::{OPEN_FLAGS, initialize_connection};
+        let mut connection_out = initialize_connection(Connection::open_with_flags(path, *OPEN_FLAGS)?, true)?;
         crate::common::backup_db(&self.connection, &mut connection_out)?;
         Ok(())
     }
@@ -806,7 +777,8 @@ cfg_if! {
             /// This function fails with [`Error::Unsupported`](crate::Error::Unsupported), if the optional [`backup`](crate#optional-features) feature is **not** enabled &#128549;
             #[inline]
             fn try_clone(&self) -> Result<Self, Self::Error> {
-                let mut connection_cloned = Self::initialize_connection(Connection::open_in_memory()?)?;
+                use crate::common::initialize_connection;
+                let mut connection_cloned = initialize_connection(Connection::open_in_memory()?, false)?;
                 crate::common::backup_db(&self.connection, &mut connection_cloned)?;
                 Self::from_connection(connection_cloned)
             }

@@ -4,8 +4,8 @@
 
 use crate::{
     CharType, Error, IterationError, SQLiteMap, Size, SizeExt, TryClone, Type,
-    common::{OPEN_FLAGS, OPEN_FLAGS_NOCREATE, OPEN_FLAGS_RDONLY, SQL_TYPE_TEXT, SQL_TYPES, SqlType, check_constraint_violation, increment, verify_schema},
-    rusqlite::{Connection, DropBehavior, ToSql, Transaction, TransactionBehavior},
+    common::{SQL_TYPE_TEXT, SQL_TYPES, SqlType, check_constraint_violation, create_new_connection, increment},
+    rusqlite::{Connection, DropBehavior, ToSql, Transaction},
 };
 use cfg_if::cfg_if;
 use const_format::concatcp;
@@ -84,7 +84,7 @@ where
     /// Creates a new, empty hash set with case-sensitive keys, backed by an *in-memory* SQLite database.
     #[inline]
     pub fn new() -> Result<Self, Error> {
-        Self::from_connection(Self::create_connection::<false, &Path>(None, false, false)?)
+        Ok(Self::from_connection(Self::create_connection::<false, &Path>(None, false, false)?))
     }
 
     /// Creates a new, empty hash set with case-insensitive keys, backed by an *in-memory* SQLite database.
@@ -95,7 +95,12 @@ where
     where
         T: CharType,
     {
-        Self::from_connection(Self::create_connection::<true, &Path>(None, false, false)?)
+        Ok(Self::from_connection(Self::create_connection::<true, &Path>(None, false, false)?))
+    }
+
+    #[inline(always)]
+    fn from_connection(connection: Connection) -> Self {
+        Self { _type: PhantomData, connection }
     }
 
     /// Creates a new hash set with case-sensitive keys containing all keys yielded by the given [iterable](std::iter::IntoIterator).
@@ -139,7 +144,7 @@ where
     where
         P: AsRef<Path>,
     {
-        Self::from_connection(Self::create_connection::<false, _>(Some(path), readonly, can_create)?)
+        Ok(Self::from_connection(Self::create_connection::<false, _>(Some(path), readonly, can_create)?))
     }
 
     /// Creates a new or re-opens an existing hash set with case-insensitive keys, backed by a *file-based* SQLite database.
@@ -157,7 +162,7 @@ where
         T: CharType,
         P: AsRef<Path>,
     {
-        Self::from_connection(Self::create_connection::<true, _>(Some(path), readonly, can_create)?)
+        Ok(Self::from_connection(Self::create_connection::<true, _>(Some(path), readonly, can_create)?))
     }
 
     #[inline(always)]
@@ -165,19 +170,6 @@ where
     where
         P: AsRef<Path>,
     {
-        let connection = if let Some(path) = path_option.as_ref() {
-            Connection::open_with_flags(path, if !readonly { if can_create { *OPEN_FLAGS } else { *OPEN_FLAGS_NOCREATE } } else { *OPEN_FLAGS_RDONLY })?
-        } else {
-            Connection::open_in_memory()?
-        };
-
-        let connection = Self::initialize_connection(connection)?;
-
-        #[cfg(feature = "checked")]
-        if path_option.is_some() {
-            crate::common::integrity_check(&connection)?;
-        }
-
         let sql_create_table = if !NO_CASE {
             SQL_CREATE_TBL.get(&T::SQL_TYPE).unwrap()
         } else {
@@ -185,29 +177,7 @@ where
             SQL_CREATE_NOC
         };
 
-        connection.execute(sql_create_table, [])?;
-
-        if path_option.is_some() {
-            let sql_schema_table: String = connection.query_one(SQL_GET_SCHEMA, [], |row| row.get(0))?;
-            if !verify_schema(sql_create_table, &sql_schema_table) {
-                return Err(Error::InvalidSchema);
-            }
-        }
-
-        Ok(connection)
-    }
-
-    #[inline(always)]
-    fn initialize_connection(mut connection: Connection) -> Result<Connection, Error> {
-        connection.set_transaction_behavior(TransactionBehavior::Exclusive);
-        connection.pragma_update(None, "synchronous", "OFF")?;
-        connection.pragma_update(None, "journal_mode", "OFF")?;
-        Ok(connection)
-    }
-
-    #[inline(always)]
-    fn from_connection(connection: Connection) -> Result<Self, Error> {
-        Ok(Self { _type: PhantomData, connection })
+        create_new_connection(sql_create_table, SQL_GET_SCHEMA, path_option, readonly, can_create)
     }
 
     /// Starts a new SQLite transaction for this set.
@@ -592,7 +562,8 @@ where
     where
         P: AsRef<Path>,
     {
-        let mut connection_out = Self::initialize_connection(Connection::open_with_flags(path, *OPEN_FLAGS)?)?;
+        use crate::common::{OPEN_FLAGS, initialize_connection};
+        let mut connection_out = initialize_connection(Connection::open_with_flags(path, *OPEN_FLAGS)?, true)?;
         crate::common::backup_db(&self.connection, &mut connection_out)?;
         Ok(())
     }
@@ -611,9 +582,10 @@ cfg_if! {
             /// This function fails with [`Error::Unsupported`](crate::Error::Unsupported), if the optional [`backup`](crate#optional-features) feature is **not** enabled &#128549;
             #[inline]
             fn try_clone(&self) -> Result<Self, Self::Error> {
-                let mut connection_cloned = Self::initialize_connection(Connection::open_in_memory()?)?;
+                use crate::common::initialize_connection;
+                let mut connection_cloned = initialize_connection(Connection::open_in_memory()?, false)?;
                 crate::common::backup_db(&self.connection, &mut connection_cloned)?;
-                Self::from_connection(connection_cloned)
+                Ok(Self::from_connection(connection_cloned))
             }
         }
     } else {

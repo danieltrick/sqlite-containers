@@ -4,7 +4,7 @@
 
 use crate::{
     rusqlite::{
-        Error as RusqliteError, OpenFlags,
+        Error as RusqliteError, OpenFlags, TransactionBehavior,
         ffi::{Error as FfiError, ErrorCode as FfiErrorCode},
         types::{FromSql, ToSql, Type as RusqliteType},
         version_number,
@@ -14,6 +14,7 @@ use crate::{
 use cfg_if::cfg_if;
 use std::{
     fmt::{Debug, Display},
+    path::Path,
     sync::LazyLock,
 };
 
@@ -28,14 +29,14 @@ use crate::rusqlite::Connection;
 pub type Blob = Vec<u8>;
 
 /// Flags to be used for [`Connection::open_with_flags()`](rusqlite::Connection::open_with_flags).
-pub static OPEN_FLAGS: LazyLock<OpenFlags> = LazyLock::new(|| {
+pub(crate) static OPEN_FLAGS: LazyLock<OpenFlags> = LazyLock::new(|| {
     let mut flags = OpenFlags::default();
     flags.remove(OpenFlags::SQLITE_OPEN_URI);
     flags
 });
 
 /// Flags to be used for [`Connection::open_with_flags()`](rusqlite::Connection::open_with_flags) *without* `SQLITE_OPEN_CREATE`.
-pub static OPEN_FLAGS_NOCREATE: LazyLock<OpenFlags> = LazyLock::new(|| {
+static OPEN_FLAGS_NOCREATE: LazyLock<OpenFlags> = LazyLock::new(|| {
     let mut flags = OpenFlags::default();
     flags.remove(OpenFlags::SQLITE_OPEN_URI);
     flags.remove(OpenFlags::SQLITE_OPEN_CREATE);
@@ -43,7 +44,7 @@ pub static OPEN_FLAGS_NOCREATE: LazyLock<OpenFlags> = LazyLock::new(|| {
 });
 
 /// Flags to be used for [`Connection::open_with_flags()`](rusqlite::Connection::open_with_flags) *without* `SQLITE_OPEN_CREATE`.
-pub static OPEN_FLAGS_RDONLY: LazyLock<OpenFlags> = LazyLock::new(|| {
+static OPEN_FLAGS_RDONLY: LazyLock<OpenFlags> = LazyLock::new(|| {
     let mut flags = OpenFlags::default();
     flags.remove(OpenFlags::SQLITE_OPEN_URI);
     flags.remove(OpenFlags::SQLITE_OPEN_CREATE);
@@ -235,10 +236,14 @@ impl SizeExt for Size {
 pub enum Error {
     /// Indicates that the operation failed because of an SQLite error; wraps the underlying [`RusqliteError`](crate::rusqlite::Error).
     SqlError(RusqliteError),
+    /// The underlying SQLite database could **not** be initialized properly.
+    InitializationFailed,
     /// An attempt was made to open an existing container (database), but the existing database schema is incompatible.
     InvalidSchema,
     /// The [integrity check](https://www.sqlite.org/pragma.html#pragma_integrity_check) for the *file-based* container (database) file has failed. Take care!
     IntegrityCheck,
+    /// The source and the destination database are the same, which is **not** allowed.
+    SourceAndDestSame,
     /// An attempt was made to use a feature that is **not** supported by this build of `sqlite-containers`.
     Unsupported,
 }
@@ -288,6 +293,75 @@ impl From<IterationError<Error>> for Error {
             IterationError::Other(error) => error,
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// Connection Handling
+// ---------------------------------------------------------------------------
+
+#[inline]
+pub fn create_new_connection<P>(
+    sql_create_table: &str,
+    sql_get_schema: &str,
+    path_option: Option<P>,
+    readonly: bool,
+    can_create: bool,
+) -> Result<Connection, Error>
+where
+    P: AsRef<Path>,
+{
+    let connection = if let Some(path) = path_option.as_ref() {
+        Connection::open_with_flags(path, if !readonly { if can_create { *OPEN_FLAGS } else { *OPEN_FLAGS_NOCREATE } } else { *OPEN_FLAGS_RDONLY })?
+    } else {
+        Connection::open_in_memory()?
+    };
+
+    let connection = initialize_connection(connection, path_option.is_some())?;
+
+    #[cfg(feature = "checked")]
+    if path_option.is_some() {
+        crate::common::integrity_check(&connection)?;
+    }
+
+    connection.execute(sql_create_table, [])?;
+
+    if path_option.is_some() {
+        let sql_schema_table: String = connection.query_one(sql_get_schema, [], |row| row.get(0))?;
+        if !verify_schema(sql_create_table, &sql_schema_table) {
+            return Err(Error::InvalidSchema);
+        }
+    }
+
+    Ok(connection)
+}
+
+#[inline(always)]
+fn set_pragma_checked(connection: &mut Connection, schema: Option<&str>, name: &str, value: &str) -> Result<(), Error> {
+    if !connection
+        .pragma_update_and_check(schema, name, value, |row| {
+            let new_value: String = row.get(0).unwrap_or_default();
+            Ok(new_value.eq_ignore_ascii_case(value))
+        })
+        .unwrap_or_default()
+    {
+        return Err(Error::InitializationFailed);
+    }
+    Ok(())
+}
+
+#[inline(always)]
+pub(crate) fn initialize_connection(mut connection: Connection, file_based: bool) -> Result<Connection, Error> {
+    connection.set_transaction_behavior(TransactionBehavior::Exclusive);
+
+    if !file_based {
+        set_pragma_checked(&mut connection, None, "journal_mode", "OFF")?;
+        connection.pragma_update(None, "synchronous", "OFF")?;
+    } else {
+        set_pragma_checked(&mut connection, None, "journal_mode", "WAL")?;
+        connection.pragma_update(None, "synchronous", "NORMAL")?;
+    }
+
+    Ok(connection)
 }
 
 // ---------------------------------------------------------------------------
