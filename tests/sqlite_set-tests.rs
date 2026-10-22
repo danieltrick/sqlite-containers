@@ -1640,6 +1640,7 @@ fn test_sqlite_set_filebased_tofile() {
     let file_path_2 = temp_dir.path().join("sqlite_set-2.db");
 
     assert!(!fs::exists(&file_path_1).unwrap());
+    assert!(!fs::exists(&file_path_2).unwrap());
 
     {
         let mut set = SQLiteSet::<String>::new().unwrap();
@@ -1666,8 +1667,20 @@ fn test_sqlite_set_filebased_tofile() {
         assert!(!set.contains("qux").unwrap());
         assert!(!set.contains("xyz").unwrap());
 
-        assert!(matches!(set.to_file(&file_path_1), Err(Error::SourceAndDestSame)));
+        assert!(matches!(set.to_file(&file_path_1), Err(Error::SqlError(RusqliteError::SqliteFailure(..)))));
         assert!(set.to_file(&file_path_2).is_ok());
+    }
+
+    {
+        let set = SQLiteSet::<String>::try_from_file(&file_path_2, true, false).unwrap();
+        assert!(set.contains("foo").unwrap());
+        assert!(set.contains("FOO").unwrap());
+        assert!(set.contains("bar").unwrap());
+        assert!(set.contains("BAR").unwrap());
+        assert!(set.contains("baz").unwrap());
+        assert!(set.contains("BAZ").unwrap());
+        assert!(!set.contains("qux").unwrap());
+        assert!(!set.contains("xyz").unwrap());
     }
 }
 

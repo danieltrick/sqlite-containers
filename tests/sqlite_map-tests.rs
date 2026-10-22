@@ -3911,6 +3911,7 @@ fn test_sqlite_map_filebased_tofile() {
     let file_path_2 = temp_dir.path().join("sqlite_map-2.db");
 
     assert!(!fs::exists(&file_path_1).unwrap());
+    assert!(!fs::exists(&file_path_2).unwrap());
 
     {
         let mut map = SQLiteMap::<String, String>::new().unwrap();
@@ -3937,8 +3938,20 @@ fn test_sqlite_map_filebased_tofile() {
         assert!(map.get("qux").unwrap().is_none());
         assert!(map.get("xyz").unwrap().is_none());
 
-        assert!(matches!(map.to_file(&file_path_1), Err(Error::SourceAndDestSame)));
+        assert!(matches!(map.to_file(&file_path_1), Err(Error::SqlError(RusqliteError::SqliteFailure(..)))));
         assert!(map.to_file(&file_path_2).is_ok());
+    }
+
+    {
+        let map = SQLiteMap::<String, String>::try_from_file(&file_path_2, true, false).unwrap();
+        assert!(map.get("foo").unwrap().is_some_and(|value| value.eq("12345678")));
+        assert!(map.get("FOO").unwrap().is_some_and(|value| value.eq("87654321")));
+        assert!(map.get("bar").unwrap().is_some_and(|value| value.eq("abcdefgh")));
+        assert!(map.get("BAR").unwrap().is_some_and(|value| value.eq("hgfedcba")));
+        assert!(map.get("baz").unwrap().is_some_and(|value| value.eq("stuvwxyz")));
+        assert!(map.get("BAZ").unwrap().is_some_and(|value| value.eq("zyxwvuts")));
+        assert!(map.get("qux").unwrap().is_none());
+        assert!(map.get("xyz").unwrap().is_none());
     }
 }
 

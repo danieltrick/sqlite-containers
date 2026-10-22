@@ -233,14 +233,14 @@ impl SizeExt for Size {
 pub enum Error {
     /// Indicates that the operation failed because of an SQLite error; wraps the underlying [`RusqliteError`](crate::rusqlite::Error).
     SqlError(RusqliteError),
-    /// The underlying SQLite database could **not** be initialized properly.
-    InitializationFailed,
+    /// The underlying SQLite database connection could **not** be initialized properly.
+    InitDbConnFailed,
     /// An attempt was made to open an existing container (database), but the existing database schema is incompatible.
     InvalidSchema,
     /// The [integrity check](https://www.sqlite.org/pragma.html#pragma_integrity_check) for the *file-based* container (database) file has failed. Take care!
     IntegrityCheck,
-    /// The source and the destination database are the same, which is **not** allowed.
-    SourceAndDestSame,
+    /// The given path is **not** supported, because it can **not** be converted into a valid UTF encoded string.
+    InvalidPath,
     /// An attempt was made to use a feature that is **not** supported by this build of `sqlite-containers`.
     Unsupported,
 }
@@ -334,15 +334,18 @@ where
 
 #[inline(always)]
 fn set_pragma_checked(connection: &mut Connection, schema: Option<&str>, name: &str, value: &str) -> Result<(), Error> {
-    if !connection
+    let update_success = connection
         .pragma_update_and_check(schema, name, value, |row| {
-            let new_value: String = row.get(0).unwrap_or_default();
-            Ok(new_value.eq_ignore_ascii_case(value))
+            let updated_value: String = row.get(0).unwrap_or_default();
+            Ok(updated_value.eq_ignore_ascii_case(value))
         })
-        .unwrap_or_default()
-    {
-        return Err(Error::InitializationFailed);
+        .unwrap_or_default();
+
+    if !(update_success || connection.is_readonly("main").unwrap_or_default()) {
+        eprintln!("Boom!");
+        return Err(Error::InitDbConnFailed);
     }
+
     Ok(())
 }
 
@@ -373,39 +376,18 @@ pub trait TryClone: Sized {
     fn try_clone(&self) -> Result<Self, Self::Error>;
 }
 
-cfg_if! {
-    if #[cfg(feature = "backup")] {
-        use crate::rusqlite::backup::Backup;
-        use std::{time::Duration, path::PathBuf, fs::canonicalize};
+#[cfg(feature = "backup")]
+#[inline]
+pub fn duplicate_db(source_db: &Connection) -> Result<Connection, Error> {
+    let connection = Connection::open_in_memory()?;
+    let mut connection = initialize_connection(connection, false)?;
 
-        #[inline]
-        pub fn duplicate_db<P>(source_db: &Connection, path_option: Option<P>) -> Result<Connection, Error>
-        where
-            P: AsRef<Path>,
-        {
-            if let Some(path_dst) = path_option.as_ref() {
-                if let Some(path_src) = source_db.path() {
-                    if !path_src.is_empty() && try_canonicalize(path_dst).eq(&try_canonicalize(path_src)) {
-                        return Err(Error::SourceAndDestSame);
-                    }
-                }
-            }
-
-            let connection = if let Some(path) = path_option.as_ref() { Connection::open_with_flags(path, *OPEN_FLAGS)? } else { Connection::open_in_memory()? };
-            let mut connection = initialize_connection(connection, path_option.is_some())?;
-
-            Backup::new(source_db, &mut connection)?.run_to_completion(1000i32, Duration::ZERO, None)?;
-            Ok(connection)
-        }
-
-        #[inline(always)]
-        fn try_canonicalize<P>(path: P) -> PathBuf
-        where
-            P: AsRef<Path>,
-        {
-            canonicalize(&path).unwrap_or_else(|_| path.as_ref().to_path_buf())
-        }
+    {
+        let backup = crate::rusqlite::backup::Backup::new(source_db, &mut connection)?;
+        backup.run_to_completion(1000i32, std::time::Duration::ZERO, None)?;
     }
+
+    Ok(connection)
 }
 
 // ---------------------------------------------------------------------------
@@ -576,6 +558,7 @@ mod test {
         assert!(matches!(error_3, Err(Error::SqlError(..))));
     }
 
+    #[cfg(feature = "checked")]
     #[test]
     fn test_integrity_check_result() {
         assert_eq!(map_check_result(None), Err(Error::IntegrityCheck));

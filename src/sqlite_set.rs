@@ -51,6 +51,7 @@ const SQL_GLOBN_KEYS: &str = concatcp!("SELECT key FROM ", TABLE_NAME, " WHERE k
 const SQL_DELETE_KEY: &str = concatcp!("DELETE FROM ", TABLE_NAME, " WHERE key = ?1;");
 const SQL_DELETE_NOC: &str = concatcp!("DELETE FROM ", TABLE_NAME, " WHERE key COLLATE NOCASE = ?1;");
 const SQL_DELETE_ALL: &str = concatcp!("DELETE FROM ", TABLE_NAME, ";");
+const SQL_STORE_INTO: &str = concatcp!("VACUUM INTO ?1;");
 
 // ---------------------------------------------------------------------------
 // SQLiteSet
@@ -553,48 +554,39 @@ where
         Ok(map)
     }
 
-    #[cfg(feature = "backup")]
-    #[inline]
-    /// Stores all contents of this set in the specified database file.
+    /// Stores all contents of this set into the specified output database file.
     ///
     /// The file will be replaced, if it already exists!
+    #[inline]
     pub fn to_file<P>(&self, path: P) -> Result<(), Error>
     where
         P: AsRef<Path>,
     {
-        crate::common::duplicate_db(&self.connection, Some(path))?;
-        Ok(())
+        if let Some(path_str) = path.as_ref().to_str() {
+            let mut statement = self.connection.prepare_cached(SQL_STORE_INTO)?;
+            statement.execute([path_str])?;
+            Ok(())
+        } else {
+            Err(Error::InvalidPath)
+        }
     }
 }
 
-cfg_if! {
-    if #[cfg(feature = "backup")] {
-        impl<T> TryClone for SQLiteSet<T>
-        where
-            T: Type,
-        {
-            type Error = Error;
+impl<T> TryClone for SQLiteSet<T>
+where
+    T: Type,
+{
+    type Error = Error;
 
-            /// Creates an exact, independent *copy* of the given set instance.
-            ///
-            /// This function fails with [`Error::Unsupported`](crate::Error::Unsupported), if the optional [`backup`](crate#optional-features) feature is **not** enabled &#128549;
-            #[inline]
-            fn try_clone(&self) -> Result<Self, Self::Error> {
-                Ok(Self::from_connection(crate::common::duplicate_db::<&Path>(&self.connection, None)?))
-            }
-        }
-    } else {
-        impl<T> TryClone for SQLiteSet<T>
-        where
-            T: Type,
-        {
-            type Error = Error;
-
-            /// Creates an exact, independent *copy* of the given set instance.
-            ///
-            /// This function fails with [`Error::Unsupported`](crate::Error::Unsupported), if the optional [`backup`](crate#optional-features) feature is **not** enabled &#128549;
-            #[inline]
-            fn try_clone(&self) -> Result<Self, Self::Error> {
+    /// Creates an exact, independent *copy* of the given set instance.
+    ///
+    /// This function fails with [`Error::Unsupported`](crate::Error::Unsupported), if the optional [`backup`](crate#optional-features) feature is **not** enabled &#128549;
+    #[inline]
+    fn try_clone(&self) -> Result<Self, Self::Error> {
+        cfg_if! {
+            if #[cfg(feature = "backup")] {
+                Ok(Self::from_connection(crate::common::duplicate_db(&self.connection)?))
+            } else {
                 Err(Error::Unsupported)
             }
         }
