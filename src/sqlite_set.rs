@@ -279,75 +279,6 @@ where
         self.transaction()?.extend_set(other)
     }
 
-    /// Removes all keys that exist in another set from this sets, ignoring non-existing keys.
-    ///
-    /// Returns the number of keys that have been removed.
-    #[inline]
-    pub fn difference(&mut self, other: &Self) -> Result<Size, Error> {
-        let trx = self.transaction()?;
-        let mut statement_delete = trx.transaction.prepare_cached(SQL_DELETE_KEY)?;
-        let mut statement_query = other.connection.prepare_cached(SQL_QUERY_KEYS)?;
-        let mut counter = Size::default();
-        for key in statement_query.query_map([], |row| row.get::<_, T>(0))? {
-            if statement_delete.execute([key?])? != 0 {
-                increment(&mut counter);
-            }
-        }
-        Ok(counter)
-    }
-
-    /// Creates a new set containing all keys that are contained in both, this set *and* the other set.
-    ///
-    /// The created map is case-sensitive.
-    #[inline]
-    pub fn intersection(&mut self, other: &Self) -> Result<SQLiteSet<T>, Error> {
-        let tx_1 = other.transaction_readonly()?;
-        let mut statement_query = self.connection.prepare_cached(SQL_QUERY_KEYS)?;
-        let mut statement_find = tx_1.transaction.prepare_cached(SQL_EXISTS_KEY)?;
-        let mut intersected_map = SQLiteSet::new()?;
-        {
-            let tx_2 = intersected_map.transaction()?;
-            let mut statement_insert = tx_2.transaction.prepare_cached(SQL_INSERT_KEY)?;
-            for key in statement_query.query_map([], |row| row.get::<_, T>(0))? {
-                let key = key?;
-                if statement_find.exists([&key])? {
-                    statement_insert.execute([key])?;
-                }
-            }
-        }
-        Ok(intersected_map)
-    }
-
-    /// Creates a new set containing all keys that are contained in both, this set *and* the other set.
-    ///
-    /// The created map is case-insensitive.
-    ///
-    /// Only ASCII characters are case folded. SQLite does **not** attempt to do full UTF case folding!
-    #[inline]
-    pub fn intersection_nocase(&mut self, other: &Self) -> Result<SQLiteSet<T>, Error>
-    where
-        T: CharType,
-    {
-        let tx_1 = other.transaction_readonly()?;
-        let mut statement_query = self.connection.prepare_cached(SQL_QUERY_KEYS)?;
-        let mut statement_find = tx_1.transaction.prepare_cached(SQL_EXISTS_NOC)?;
-        let mut intersected_map = SQLiteSet::with_nocase()?;
-        {
-            let tx_2 = intersected_map.transaction()?;
-            let mut statement_insert = tx_2.transaction.prepare_cached(SQL_INSERT_KEY)?;
-            for key in statement_query.query_map([], |row| row.get::<_, T>(0))? {
-                let key = key?;
-                if statement_find.exists([&key])? {
-                    match statement_insert.execute([key]) {
-                        Ok(_) => true,
-                        Err(error) => check_constraint_violation(error)?,
-                    };
-                }
-            }
-        }
-        Ok(intersected_map)
-    }
-
     /// Checks whether the set contains the specified key.
     ///
     /// For case-sensitive sets, the check is case-sensitive; for case-insensitive sets, the check is case-insensitive.
@@ -406,6 +337,26 @@ where
     {
         let mut statement = self.connection.prepare_cached(SQL_DELETE_NOC)?;
         Ok(statement.execute([key])? != 0)
+    }
+
+    /// Removes *all* keys that exist in another set from this sets, ignoring non-existing keys.
+    ///
+    /// For case-sensitive sets, the keys are treated as case-sensitive; for case-insensitive sets, they are treated as case-insensitive.
+    ///
+    /// Returns the number of keys that have been removed.
+    #[inline]
+    pub fn remove_set(&mut self, other: &Self) -> Result<Size, Error> {
+        self.transaction()?.remove_set(other)
+    }
+
+    /// Removes *all* keys that exist in another set from this sets, ignoring non-existing keys.
+    ///
+    /// The keys are treated as case-insensitive.
+    ///
+    /// Returns the number of keys that have been removed.
+    #[inline]
+    pub fn remove_set_nocase(&mut self, other: &Self) -> Result<Size, Error> where T: CharType {
+        self.transaction()?.remove_set_nocase(other)
     }
 
     /// Invokes the given `callback` function for each key that is currently contained in the set.
@@ -505,6 +456,109 @@ where
         let mut statement = self.connection.prepare_cached(SQL_DELETE_ALL)?;
         statement.execute([])?;
         Ok(())
+    }
+
+    /// Creates a new set containing all keys that are contained in both, this set *and* the other set.
+    ///
+    /// The created set is case-sensitive.
+    #[inline]
+    pub fn and(&mut self, other: &Self) -> Result<SQLiteSet<T>, Error> {
+        let tx_1 = other.transaction_readonly()?;
+        let mut statement_query = self.connection.prepare_cached(SQL_QUERY_KEYS)?;
+        let mut statement_find = tx_1.transaction.prepare_cached(SQL_EXISTS_KEY)?;
+        let mut new_map = SQLiteSet::new()?;
+        {
+            let tx_2 = new_map.transaction()?;
+            let mut statement_insert = tx_2.transaction.prepare_cached(SQL_INSERT_KEY)?;
+            for key in statement_query.query_map([], |row| row.get::<_, T>(0))? {
+                let key = key?;
+                if statement_find.exists([&key])? {
+                    statement_insert.execute([key])?;
+                }
+            }
+        }
+        Ok(new_map)
+    }
+
+    /// Creates a new set containing all keys that are contained in both, this set *and* the other set.
+    ///
+    /// The created set is case-insensitive.
+    ///
+    /// Only ASCII characters are case folded. SQLite does **not** attempt to do full UTF case folding!
+    #[inline]
+    pub fn and_nocase(&mut self, other: &Self) -> Result<SQLiteSet<T>, Error>
+    where
+        T: CharType,
+    {
+        let tx_1 = other.transaction_readonly()?;
+        let mut statement_query = self.connection.prepare_cached(SQL_QUERY_KEYS)?;
+        let mut statement_find = tx_1.transaction.prepare_cached(SQL_EXISTS_NOC)?;
+        let mut new_map = SQLiteSet::with_nocase()?;
+        {
+            let tx_2 = new_map.transaction()?;
+            let mut statement_insert = tx_2.transaction.prepare_cached(SQL_INSERT_KEY)?;
+            for key in statement_query.query_map([], |row| row.get::<_, T>(0))? {
+                let key = key?;
+                if statement_find.exists([&key])? {
+                    match statement_insert.execute([key]) {
+                        Ok(_) => true,
+                        Err(error) => check_constraint_violation(error)?,
+                    };
+                }
+            }
+        }
+        Ok(new_map)
+    }
+
+    /// Creates a new set containing all keys that are contained in this set *or* the other set.
+    ///
+    /// The created set is case-sensitive.
+    #[inline]
+    pub fn or(&mut self, other: &Self) -> Result<SQLiteSet<T>, Error> {
+        let mut statement_query_1 = self.connection.prepare_cached(SQL_QUERY_KEYS)?;
+        let mut statement_query_2 = other.connection.prepare_cached(SQL_QUERY_KEYS)?;
+        let mut new_map = SQLiteSet::new()?;
+        let iter_1 = statement_query_1.query_map([], |row| row.get::<_, T>(0))?;
+        let iter_2 = statement_query_2.query_map([], |row| row.get::<_, T>(0))?;
+        {
+            let tx = new_map.transaction()?;
+            let mut statement_insert = tx.transaction.prepare_cached(SQL_INSERT_KEY)?;
+            for key in iter_1.chain(iter_2) {
+                match statement_insert.execute([key?]) {
+                    Ok(_) => true,
+                    Err(error) => check_constraint_violation(error)?,
+                };
+            }
+        }
+        Ok(new_map)
+    }
+
+    /// Creates a new set containing all keys that are contained in this set *or* the other set.
+    ///
+    /// The created set is case-insensitive.
+    ///
+    /// Only ASCII characters are case folded. SQLite does **not** attempt to do full UTF case folding!
+    #[inline]
+    pub fn or_nocase(&mut self, other: &Self) -> Result<SQLiteSet<T>, Error>
+    where
+        T: CharType,
+    {
+        let mut statement_query_1 = self.connection.prepare_cached(SQL_QUERY_KEYS)?;
+        let mut statement_query_2 = other.connection.prepare_cached(SQL_QUERY_KEYS)?;
+        let mut new_map = SQLiteSet::with_nocase()?;
+        let iter_1 = statement_query_1.query_map([], |row| row.get::<_, T>(0))?;
+        let iter_2 = statement_query_2.query_map([], |row| row.get::<_, T>(0))?;
+        {
+            let tx = new_map.transaction()?;
+            let mut statement_insert = tx.transaction.prepare_cached(SQL_INSERT_KEY)?;
+            for key in iter_1.chain(iter_2) {
+                match statement_insert.execute([key?]) {
+                    Ok(_) => true,
+                    Err(error) => check_constraint_violation(error)?,
+                };
+            }
+        }
+        Ok(new_map)
     }
 
     /// Creates a new [`SQLiteMap`] that contains *all* keys contained in this set.
@@ -755,6 +809,34 @@ where
     {
         let mut statement = self.transaction.prepare_cached(SQL_DELETE_NOC)?;
         Ok(statement.execute([key])? != 0)
+    }
+
+    /// This function is equivalent to [`SQLiteSet::remove_set()`].
+    #[inline]
+    pub fn remove_set(&mut self, other: &SQLiteSet<T>) -> Result<Size, Error> {
+        let mut statement_delete = self.transaction.prepare_cached(SQL_DELETE_KEY)?;
+        let mut statement_query = other.connection.prepare_cached(SQL_QUERY_KEYS)?;
+        let mut counter = Size::default();
+        for key in statement_query.query_map([], |row| row.get::<_, T>(0))? {
+            if statement_delete.execute([key?])? != 0 {
+                increment(&mut counter);
+            }
+        }
+        Ok(counter)
+    }
+
+    /// This function is equivalent to [`SQLiteSet::remove_set_nocase()`].
+    #[inline]
+    pub fn remove_set_nocase(&mut self, other: &SQLiteSet<T>) -> Result<Size, Error> where T: CharType {
+        let mut statement_delete = self.transaction.prepare_cached(SQL_DELETE_NOC)?;
+        let mut statement_query = other.connection.prepare_cached(SQL_QUERY_KEYS)?;
+        let mut counter = Size::default();
+        for key in statement_query.query_map([], |row| row.get::<_, T>(0))? {
+            if statement_delete.execute([key?])? != 0 {
+                increment(&mut counter);
+            }
+        }
+        Ok(counter)
     }
 
     /// This function is equivalent to [`SQLiteSet::for_each()`].

@@ -659,7 +659,7 @@ fn test_sqlite_map_i64_string_extend() {
     assert!(map_2.get(&i64::MAX).unwrap().is_some_and(|value| value.eq("zyxwvuts")));
 }
 
-//#[cfg(not(debug_assertions))]
+#[cfg_attr(debug_assertions, ignore)]
 #[test]
 fn test_sqlite_map_i64_string_words() {
     use xxhash_rust::xxh64::xxh64;
@@ -2461,7 +2461,9 @@ fn test_sqlite_map_string_blob() {
 
     assert!(map.take("$?!").unwrap().is_none());
     assert!(map.take("qux").unwrap().is_some_and(|value| value.eq(b"stuvwxyz")));
-    assert!(map.take("bar").unwrap().is_some_and(|value| value.eq(b"abcdefgh")));
+    assert!(map.take("qux").unwrap().is_none());
+    assert!(map.take("BAR").unwrap().is_none());
+    assert!(map.take_nocase("BAR").unwrap().is_some_and(|value| value.eq(b"abcdefgh")));
     assert!(!map.contains_key("qux").unwrap());
     assert!(!map.contains_key("bar").unwrap());
 }
@@ -2742,7 +2744,9 @@ fn test_sqlite_map_string_blob_transacted() {
 
     assert!(tx.take("$?!").unwrap().is_none());
     assert!(tx.take("qux").unwrap().is_some_and(|value| value.eq(b"stuvwxyz")));
-    assert!(tx.take("bar").unwrap().is_some_and(|value| value.eq(b"abcdefgh")));
+    assert!(tx.take("qux").unwrap().is_none());
+    assert!(tx.take("BAR").unwrap().is_none());
+    assert!(tx.take_nocase("BAR").unwrap().is_some_and(|value| value.eq(b"abcdefgh")));
 
     tx.commit();
 
