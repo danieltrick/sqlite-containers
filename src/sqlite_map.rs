@@ -380,18 +380,7 @@ where
     where
         I: IntoIterator<Item = (K, V)>,
     {
-        let trx = self.transaction()?;
-        let mut statement = trx.transaction.prepare_cached(SQL_INSERT_KEY)?;
-        let mut counter = Size::default();
-        for (key, value) in entries {
-            if match statement.execute(params![key, value]) {
-                Ok(_) => true,
-                Err(error) => check_constraint_violation(error)?,
-            } {
-                increment(&mut counter);
-            }
-        }
-        Ok(counter)
+        self.transaction()?.extend(entries)
     }
 
     /// Inserts all key-value pairs yielded by the given [iterable](std::iter::IntoIterator) into the map, skipping existing keys.
@@ -406,18 +395,7 @@ where
         V: Borrow<R>,
         R: ?Sized + ToSql + 'a,
     {
-        let trx = self.transaction()?;
-        let mut statement = trx.transaction.prepare_cached(SQL_INSERT_KEY)?;
-        let mut counter = Size::default();
-        for (key, value) in entries {
-            if match statement.execute(params![key, value]) {
-                Ok(_) => true,
-                Err(error) => check_constraint_violation(error)?,
-            } {
-                increment(&mut counter);
-            }
-        }
-        Ok(counter)
+        self.transaction()?.extend_ref(entries)
     }
 
     /// Inserts all key-value pairs from another map into this map.
@@ -904,11 +882,11 @@ where
     #[inline]
     pub fn extend_ref<'b, I, Q, R>(&mut self, entries: I) -> Result<Size, Error>
     where
-        I: IntoIterator<Item = (&'a Q, &'a R)>,
+        I: IntoIterator<Item = (&'b Q, &'b R)>,
         K: Borrow<Q>,
-        Q: ?Sized + ToSql + 'a,
+        Q: ?Sized + ToSql + 'b,
         V: Borrow<R>,
-        R: ?Sized + ToSql + 'a,
+        R: ?Sized + ToSql + 'b,
     {
         let mut statement = self.transaction.prepare_cached(SQL_INSERT_KEY)?;
         let mut counter = Size::default();

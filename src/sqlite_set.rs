@@ -233,18 +233,7 @@ where
     where
         I: IntoIterator<Item = T>,
     {
-        let trx = self.transaction()?;
-        let mut statement = trx.transaction.prepare_cached(SQL_INSERT_KEY)?;
-        let mut counter = Size::default();
-        for key in keys {
-            if match statement.execute([key]) {
-                Ok(_) => true,
-                Err(error) => check_constraint_violation(error)?,
-            } {
-                increment(&mut counter);
-            }
-        }
-        Ok(counter)
+        self.transaction()?.extend(keys)
     }
 
     /// Inserts all keys yielded by the given [iterable](std::iter::IntoIterator) into the set, skipping duplicate keys.
@@ -257,18 +246,7 @@ where
         T: Borrow<Q>,
         Q: ?Sized + ToSql + 'b,
     {
-        let trx = self.transaction()?;
-        let mut statement = trx.transaction.prepare_cached(SQL_INSERT_KEY)?;
-        let mut counter = Size::default();
-        for key in keys {
-            if match statement.execute([key]) {
-                Ok(_) => true,
-                Err(error) => check_constraint_violation(error)?,
-            } {
-                increment(&mut counter);
-            }
-        }
-        Ok(counter)
+        self.transaction()?.extend_ref(keys)
     }
 
     /// Inserts all keys from another set into this set, ignoring existing keys.
@@ -355,7 +333,10 @@ where
     ///
     /// Returns the number of keys that have been removed.
     #[inline]
-    pub fn remove_set_nocase(&mut self, other: &Self) -> Result<Size, Error> where T: CharType {
+    pub fn remove_set_nocase(&mut self, other: &Self) -> Result<Size, Error>
+    where
+        T: CharType,
+    {
         self.transaction()?.remove_set_nocase(other)
     }
 
@@ -827,7 +808,10 @@ where
 
     /// This function is equivalent to [`SQLiteSet::remove_set_nocase()`].
     #[inline]
-    pub fn remove_set_nocase(&mut self, other: &SQLiteSet<T>) -> Result<Size, Error> where T: CharType {
+    pub fn remove_set_nocase(&mut self, other: &SQLiteSet<T>) -> Result<Size, Error>
+    where
+        T: CharType,
+    {
         let mut statement_delete = self.transaction.prepare_cached(SQL_DELETE_NOC)?;
         let mut statement_query = other.connection.prepare_cached(SQL_QUERY_KEYS)?;
         let mut counter = Size::default();
