@@ -26,6 +26,7 @@ build:
 test:
 	cargo nextest run --locked
 	cargo nextest run --locked --all-features
+	cargo nextest run --locked --no-default-features --features bundled
 	cargo nextest run --locked --release
 	cargo nextest run --locked --release --all-features
 

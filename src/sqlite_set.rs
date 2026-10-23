@@ -275,20 +275,8 @@ where
     ///
     /// Returns the number of new keys that have been inserted.
     #[inline]
-    pub fn union(&mut self, other: &Self) -> Result<Size, Error> {
-        let trx = self.transaction()?;
-        let mut statement_insert = trx.transaction.prepare_cached(SQL_INSERT_KEY)?;
-        let mut statement_query = other.connection.prepare_cached(SQL_QUERY_KEYS)?;
-        let mut counter = Size::default();
-        for key in statement_query.query_map([], |row| row.get::<_, T>(0))? {
-            if match statement_insert.execute([key?]) {
-                Ok(_) => true,
-                Err(error) => check_constraint_violation(error)?,
-            } {
-                increment(&mut counter);
-            }
-        }
-        Ok(counter)
+    pub fn extend_set(&mut self, other: &Self) -> Result<Size, Error> {
+        self.transaction()?.extend_set(other)
     }
 
     /// Removes all keys that exist in another set from this sets, ignoring non-existing keys.
@@ -531,7 +519,7 @@ where
         V: Type,
     {
         let mut map = SQLiteMap::<T, V>::new()?;
-        map.transaction()?.extend_from_set(self, mapping)?;
+        map.transaction()?.extend_set(self, mapping)?;
         Ok(map)
     }
 
@@ -550,7 +538,7 @@ where
         T: CharType,
     {
         let mut map = SQLiteMap::<T, V>::with_nocase()?;
-        map.transaction()?.extend_from_set(self, mapping)?;
+        map.transaction()?.extend_set(self, mapping)?;
         Ok(map)
     }
 
@@ -693,9 +681,26 @@ where
         Ok(counter)
     }
 
+    /// This function is equivalent to [`SQLiteSet::extend_set()`].
+    #[inline]
+    pub fn extend_set(&mut self, other: &SQLiteSet<T>) -> Result<Size, Error> {
+        let mut statement_insert = self.transaction.prepare_cached(SQL_INSERT_KEY)?;
+        let mut statement_reader = other.connection.prepare_cached(SQL_QUERY_KEYS)?;
+        let mut counter = Size::default();
+        for key in statement_reader.query_map([], |row| row.get::<_, T>(0))? {
+            if match statement_insert.execute([key?]) {
+                Ok(_) => true,
+                Err(error) => check_constraint_violation(error)?,
+            } {
+                increment(&mut counter);
+            }
+        }
+        Ok(counter)
+    }
+
     /// Insert all keys from the given [`SQLiteMap`] into this set.
     #[inline]
-    pub(crate) fn extend_from_map<V>(&mut self, map: &SQLiteMap<T, V>) -> Result<(), Error>
+    pub(crate) fn extend_map<V>(&mut self, map: &SQLiteMap<T, V>) -> Result<(), Error>
     where
         V: Type,
     {

@@ -128,6 +128,8 @@ const SQL_GLOBN_PAIR: &str = concatcp!("SELECT key, value FROM ", TABLE_NAME, " 
 const SQL_DELETE_KEY: &str = concatcp!("DELETE FROM ", TABLE_NAME, " WHERE key = ?;");
 const SQL_DELETE_NOC: &str = concatcp!("DELETE FROM ", TABLE_NAME, " WHERE key COLLATE NOCASE = ?;");
 const SQL_DELETE_ALL: &str = concatcp!("DELETE FROM ", TABLE_NAME, ";");
+const SQL_RETURN_KEY: &str = concatcp!("DELETE FROM ", TABLE_NAME, " WHERE key = ?1 RETURNING value;");
+const SQL_RETURN_NOC: &str = concatcp!("DELETE FROM ", TABLE_NAME, " WHERE key COLLATE NOCASE = ?1 RETURNING value;");
 const SQL_STORE_INTO: &str = concatcp!("VACUUM INTO ?1;");
 
 // ---------------------------------------------------------------------------
@@ -426,34 +428,8 @@ where
     ///
     /// If [`hooks`](crate#optional-features) is **not** enabled and if `update` is `true`, the function *always* returns `None`, though &#128517;
     #[inline]
-    pub fn union(&mut self, other: &Self, update: bool) -> Result<Option<(Size, Size)>, Error> {
-        let trx = self.transaction()?;
-        let mut statement_insert = trx.transaction.prepare_cached(if update { SQL_UPSERT_KEY } else { SQL_INSERT_KEY })?;
-        let mut statement_query = other.connection.prepare_cached(SQL_QUERY_PAIR)?;
-        let mut result = statement_query.query([])?;
-        let mut counter = (Size::default(), Size::default());
-        while let Some(key_value) = result.next()? {
-            let (key, value): (K, V) = (key_value.get(0)?, key_value.get(1)?);
-            if !update {
-                match statement_insert.execute(params![key, value]) {
-                    Ok(_) => increment(&mut counter.0),
-                    Err(error) => {
-                        check_constraint_violation(error)?;
-                    }
-                }
-            } else {
-                statement_insert.execute(params![key, value])?;
-                #[cfg(feature = "hooks")]
-                update_counter(&mut counter, Action::from(trx.last_action));
-            }
-        }
-        cfg_if! {
-            if #[cfg(feature = "hooks")] {
-                Ok(Some(counter))
-            } else {
-                Ok(if !update { Some(counter) } else { None })
-            }
-        }
+    pub fn extend_map(&mut self, other: &Self, update: bool) -> Result<Option<(Size, Size)>, Error> {
+        self.transaction()?.extend_map(other, update)
     }
 
     /// Checks whether the map contains the specified key.
@@ -544,6 +520,36 @@ where
     {
         let mut statement = self.connection.prepare_cached(SQL_DELETE_NOC)?;
         Ok(statement.execute([key])? != 0)
+    }
+
+    /// Removes the specified key from the map, if present, and returns its associated value.
+    ///
+    /// For case-sensitive maps, the key is treated as case-sensitive; for case-insensitive maps, it is treated as case-insensitive.
+    ///
+    /// Returns `Some(value)`, if the map contained the key; otherwise returns `None`.
+    #[inline]
+    pub fn take<Q>(&mut self, key: &Q) -> Result<Option<V>, Error>
+    where
+        K: Borrow<Q>,
+        Q: ?Sized + ToSql,
+    {
+        let mut statement = self.connection.prepare_cached(SQL_RETURN_KEY)?;
+        Ok(statement.query_one([key], |row| row.get(0)).optional()?)
+    }
+
+    /// This is the "case-insensitive" version of the [`take()`](Self::take) function.
+    ///
+    /// The key is *always* treated as case-insensitive.
+    ///
+    /// Returns `Some(value)`, if the map contained the key; otherwise returns `None`.
+    #[inline]
+    pub fn take_nocase<Q>(&mut self, key: &Q) -> Result<Option<V>, Error>
+    where
+        K: Borrow<Q> + CharType,
+        Q: ?Sized + ToSql,
+    {
+        let mut statement = self.connection.prepare_cached(SQL_RETURN_NOC)?;
+        Ok(statement.query_one([key], |row| row.get(0)).optional()?)
     }
 
     /// Invokes the given `callback` function for each key that is currently contained in the map.
@@ -729,7 +735,7 @@ where
     #[inline]
     pub fn to_set(&self) -> Result<SQLiteSet<K>, Error> {
         let mut key_set = SQLiteSet::<K>::new()?;
-        key_set.transaction()?.extend_from_map(self)?;
+        key_set.transaction()?.extend_map(self)?;
         Ok(key_set)
     }
 
@@ -744,7 +750,7 @@ where
         K: CharType,
     {
         let mut key_set = SQLiteSet::<K>::with_nocase()?;
-        key_set.transaction()?.extend_from_map(self)?;
+        key_set.transaction()?.extend_map(self)?;
         Ok(key_set)
     }
 
@@ -917,9 +923,40 @@ where
         Ok(counter)
     }
 
+    /// This function is equivalent to [`SQLiteMap::extend_map()`].
+    #[inline]
+    pub fn extend_map(&mut self, other: &SQLiteMap<K, V>, update: bool) -> Result<Option<(Size, Size)>, Error> {
+        let mut statement_insert = self.transaction.prepare_cached(if update { SQL_UPSERT_KEY } else { SQL_INSERT_KEY })?;
+        let mut statement_reader = other.connection.prepare_cached(SQL_QUERY_PAIR)?;
+        let mut result = statement_reader.query([])?;
+        let mut counter = (Size::default(), Size::default());
+        while let Some(key_value) = result.next()? {
+            let (key, value): (K, V) = (key_value.get(0)?, key_value.get(1)?);
+            if !update {
+                match statement_insert.execute(params![key, value]) {
+                    Ok(_) => increment(&mut counter.0),
+                    Err(error) => {
+                        check_constraint_violation(error)?;
+                    }
+                }
+            } else {
+                statement_insert.execute(params![key, value])?;
+                #[cfg(feature = "hooks")]
+                update_counter(&mut counter, Action::from(self.last_action));
+            }
+        }
+        cfg_if! {
+            if #[cfg(feature = "hooks")] {
+                Ok(Some(counter))
+            } else {
+                Ok(if !update { Some(counter) } else { None })
+            }
+        }
+    }
+
     /// Insert all keys from the given [`SQLiteSet`] into this set.
     #[inline]
-    pub(crate) fn extend_from_set<F>(&mut self, set: &mut SQLiteSet<K>, mapping: F) -> Result<(), Error>
+    pub(crate) fn extend_set<F>(&mut self, set: &mut SQLiteSet<K>, mapping: F) -> Result<(), Error>
     where
         F: Fn(&K) -> Option<V>,
     {
@@ -999,6 +1036,28 @@ where
     {
         let mut statement = self.transaction.prepare_cached(SQL_DELETE_NOC)?;
         Ok(statement.execute([key])? != 0)
+    }
+
+    /// This function is equivalent to [`SQLiteMap::take()`].
+    #[inline]
+    pub fn take<Q>(&mut self, key: &Q) -> Result<Option<V>, Error>
+    where
+        K: Borrow<Q>,
+        Q: ?Sized + ToSql,
+    {
+        let mut statement = self.transaction.prepare_cached(SQL_RETURN_KEY)?;
+        Ok(statement.query_one([key], |row| row.get(0)).optional()?)
+    }
+
+    /// This function is equivalent to [`SQLiteMap::take_nocase()`].
+    #[inline]
+    pub fn take_nocase<Q>(&mut self, key: &Q) -> Result<Option<V>, Error>
+    where
+        K: Borrow<Q> + CharType,
+        Q: ?Sized + ToSql,
+    {
+        let mut statement = self.transaction.prepare_cached(SQL_RETURN_NOC)?;
+        Ok(statement.query_one([key], |row| row.get(0)).optional()?)
     }
 
     /// This function is equivalent to [`SQLiteMap::for_each_key()`].

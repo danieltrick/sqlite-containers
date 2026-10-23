@@ -343,7 +343,7 @@ fn test_sqlite_set_i64_randomized() {
 }
 
 #[test]
-fn test_sqlite_set_i64_union() {
+fn test_sqlite_set_i64_extend() {
     let mut set_1 = SQLiteSet::<i64>::new().unwrap();
     let mut set_2 = SQLiteSet::<i64>::new().unwrap();
 
@@ -370,7 +370,7 @@ fn test_sqlite_set_i64_union() {
     assert!(!set_1.contains(&i64::MIN).unwrap());
     assert!(!set_1.contains(&i64::MAX).unwrap());
 
-    assert_eq!(set_1.union(&set_2).unwrap(), 3);
+    assert_eq!(set_1.extend_set(&set_2).unwrap(), 3);
 
     assert!(set_1.contains(&0i64).unwrap());
     assert!(set_1.contains(&42i64).unwrap());
@@ -918,7 +918,7 @@ fn test_sqlite_set_string_randomized() {
 }
 
 #[test]
-fn test_sqlite_set_string_union() {
+fn test_sqlite_set_string_extend() {
     let mut set_1 = SQLiteSet::<String>::new().unwrap();
     let mut set_2 = SQLiteSet::<String>::new().unwrap();
 
@@ -945,7 +945,7 @@ fn test_sqlite_set_string_union() {
     assert!(!set_1.contains("$?!").unwrap());
     assert!(!set_1.contains("cor").unwrap());
 
-    assert_eq!(set_1.union(&set_2).unwrap(), 3);
+    assert_eq!(set_1.extend_set(&set_2).unwrap(), 3);
 
     assert!(set_1.contains("foo").unwrap());
     assert!(set_1.contains("bar").unwrap());
@@ -1391,7 +1391,7 @@ fn test_sqlite_set_blob_randomized() {
 }
 
 #[test]
-fn test_sqlite_set_blob_union() {
+fn test_sqlite_set_blob_extend() {
     let mut set_1 = SQLiteSet::<Blob>::new().unwrap();
     let mut set_2 = SQLiteSet::<Blob>::new().unwrap();
 
@@ -1418,7 +1418,7 @@ fn test_sqlite_set_blob_union() {
     assert!(!set_1.contains(&b"$?!"[..]).unwrap());
     assert!(!set_1.contains(&b"cor"[..]).unwrap());
 
-    assert_eq!(set_1.union(&set_2).unwrap(), 3);
+    assert_eq!(set_1.extend_set(&set_2).unwrap(), 3);
 
     assert!(set_1.contains(&b"foo"[..]).unwrap());
     assert!(set_1.contains(&b"bar"[..]).unwrap());
