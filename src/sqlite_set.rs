@@ -481,7 +481,10 @@ where
             for key in statement_query.query_map([], |row| row.get::<_, T>(0))? {
                 let key = key?;
                 if statement_find.exists([&key])? {
-                    statement_insert.execute([key])?;
+                    match statement_insert.execute([key]) {
+                        Ok(_) => (),
+                        Err(error) => check_constraint_violation(error).and(Ok(()))?,
+                    };
                 }
             }
         }
@@ -509,8 +512,8 @@ where
                 let key = key?;
                 if statement_find.exists([&key])? {
                     match statement_insert.execute([key]) {
-                        Ok(_) => true,
-                        Err(error) => check_constraint_violation(error)?,
+                        Ok(_) => (),
+                        Err(error) => check_constraint_violation(error).and(Ok(()))?,
                     };
                 }
             }
@@ -533,8 +536,8 @@ where
             let mut statement_insert = tx.transaction.prepare_cached(SQL_INSERT_KEY)?;
             for key in iter_1.chain(iter_2) {
                 match statement_insert.execute([key?]) {
-                    Ok(_) => true,
-                    Err(error) => check_constraint_violation(error)?,
+                    Ok(_) => (),
+                    Err(error) => check_constraint_violation(error).and(Ok(()))?,
                 };
             }
         }
@@ -561,9 +564,64 @@ where
             let mut statement_insert = tx.transaction.prepare_cached(SQL_INSERT_KEY)?;
             for key in iter_1.chain(iter_2) {
                 match statement_insert.execute([key?]) {
-                    Ok(_) => true,
-                    Err(error) => check_constraint_violation(error)?,
+                    Ok(_) => (),
+                    Err(error) => check_constraint_violation(error).and(Ok(()))?,
                 };
+            }
+        }
+        Ok(new_map)
+    }
+
+    /// Creates a new set containing all keys that are contained in this set but **not** in the other set.
+    ///
+    /// The created set is case-sensitive.
+    #[inline]
+    pub fn sub(&mut self, other: &Self) -> Result<SQLiteSet<T>, Error> {
+        let tx_1 = other.transaction_readonly()?;
+        let mut statement_query = self.connection.prepare_cached(SQL_QUERY_KEYS)?;
+        let mut statement_find = tx_1.transaction.prepare_cached(SQL_EXISTS_KEY)?;
+        let mut new_map = SQLiteSet::new()?;
+        {
+            let tx_2 = new_map.transaction()?;
+            let mut statement_insert = tx_2.transaction.prepare_cached(SQL_INSERT_KEY)?;
+            for key in statement_query.query_map([], |row| row.get::<_, T>(0))? {
+                let key = key?;
+                if !statement_find.exists([&key])? {
+                    match statement_insert.execute([key]) {
+                        Ok(_) => (),
+                        Err(error) => check_constraint_violation(error).and(Ok(()))?,
+                    };
+                }
+            }
+        }
+        Ok(new_map)
+    }
+
+    /// Creates a new set containing all keys that are contained in this set but **not** in the other set.
+    ///
+    /// The created set is case-insensitive.
+    ///
+    /// Only ASCII characters are case folded. SQLite does **not** attempt to do full UTF case folding!
+    #[inline]
+    pub fn sub_nocase(&mut self, other: &Self) -> Result<SQLiteSet<T>, Error>
+    where
+        T: CharType,
+    {
+        let tx_1 = other.transaction_readonly()?;
+        let mut statement_query = self.connection.prepare_cached(SQL_QUERY_KEYS)?;
+        let mut statement_find = tx_1.transaction.prepare_cached(SQL_EXISTS_NOC)?;
+        let mut new_map = SQLiteSet::with_nocase()?;
+        {
+            let tx_2 = new_map.transaction()?;
+            let mut statement_insert = tx_2.transaction.prepare_cached(SQL_INSERT_KEY)?;
+            for key in statement_query.query_map([], |row| row.get::<_, T>(0))? {
+                let key = key?;
+                if !statement_find.exists([&key])? {
+                    match statement_insert.execute([key]) {
+                        Ok(_) => (),
+                        Err(error) => check_constraint_violation(error).and(Ok(()))?,
+                    };
+                }
             }
         }
         Ok(new_map)

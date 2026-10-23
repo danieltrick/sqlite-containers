@@ -508,6 +508,43 @@ fn test_sqlite_set_i64_or() {
     assert!(set_3.contains(&i64::MAX).unwrap());
 }
 
+#[test]
+fn test_sqlite_set_i64_sub() {
+    let mut set_1 = SQLiteSet::<i64>::new().unwrap();
+    let mut set_2 = SQLiteSet::<i64>::new().unwrap();
+
+    {
+        let mut tx = set_1.transaction().unwrap();
+        assert!(tx.insert(0i64).unwrap());
+        assert!(tx.insert(42i64).unwrap());
+        assert!(tx.insert(131071i64).unwrap());
+        assert!(tx.insert(524287i64).unwrap());
+        assert!(tx.insert(2147483647i64).unwrap());
+        assert!(tx.insert(i64::MAX).unwrap());
+    }
+
+    {
+        let mut tx = set_2.transaction().unwrap();
+        assert!(tx.insert(42i64).unwrap());
+        assert!(tx.insert(524287i64).unwrap());
+        assert!(tx.insert(2147483647i64).unwrap());
+        assert!(tx.insert(2305843009213693951i64).unwrap());
+        assert!(tx.insert(i64::MIN).unwrap());
+    }
+
+    let set_3 = set_1.sub(&set_2).unwrap();
+    assert_eq!(set_3.len().unwrap(), 3);
+
+    assert!(set_3.contains(&0i64).unwrap());
+    assert!(!set_3.contains(&42i64).unwrap());
+    assert!(set_3.contains(&131071i64).unwrap());
+    assert!(!set_3.contains(&524287i64).unwrap());
+    assert!(!set_3.contains(&2147483647i64).unwrap());
+    assert!(!set_3.contains(&2305843009213693951i64).unwrap());
+    assert!(!set_3.contains(&i64::MIN).unwrap());
+    assert!(set_3.contains(&i64::MAX).unwrap());
+}
+
 #[cfg_attr(debug_assertions, ignore)]
 #[test]
 fn test_sqlite_set_i64_string_words() {
@@ -1254,6 +1291,82 @@ fn test_sqlite_set_string_or_nocase() {
     assert!(!set_3.contains("$?!").unwrap());
 }
 
+#[test]
+fn test_sqlite_set_string_sub() {
+    let mut set_1 = SQLiteSet::<String>::new().unwrap();
+    let mut set_2 = SQLiteSet::<String>::new().unwrap();
+
+    {
+        let mut tx = set_1.transaction().unwrap();
+        assert!(tx.insert("foo".to_owned()).unwrap());
+        assert!(tx.insert("bar".to_owned()).unwrap());
+        assert!(tx.insert("baz".to_owned()).unwrap());
+        assert!(tx.insert("qux".to_owned()).unwrap());
+        assert!(tx.insert("xyz".to_owned()).unwrap());
+    }
+
+    {
+        let mut tx = set_2.transaction().unwrap();
+        assert!(tx.insert("bar".to_owned()).unwrap());
+        assert!(tx.insert("qux".to_owned()).unwrap());
+        assert!(tx.insert("cor".to_owned()).unwrap());
+    }
+
+    let set_3 = set_1.sub(&set_2).unwrap();
+    assert_eq!(set_3.len().unwrap(), 3);
+
+    assert!(set_3.contains("foo").unwrap());
+    assert!(!set_3.contains("bar").unwrap());
+    assert!(set_3.contains("baz").unwrap());
+    assert!(!set_3.contains("qux").unwrap());
+    assert!(set_3.contains("xyz").unwrap());
+    assert!(!set_3.contains("cor").unwrap());
+    assert!(!set_3.contains("$?!").unwrap());
+}
+
+#[test]
+fn test_sqlite_set_string_sub_nocase() {
+    let mut set_1 = SQLiteSet::<String>::new().unwrap();
+    let mut set_2 = SQLiteSet::<String>::new().unwrap();
+
+    {
+        let mut tx = set_1.transaction().unwrap();
+        assert!(tx.insert("foo".to_owned()).unwrap());
+        assert!(tx.insert("BAR".to_owned()).unwrap());
+        assert!(tx.insert("qux".to_owned()).unwrap());
+        assert!(tx.insert("xyz".to_owned()).unwrap());
+        assert!(tx.insert("XYZ".to_owned()).unwrap());
+        assert!(tx.insert("cor".to_owned()).unwrap());
+        assert!(tx.insert("COR".to_owned()).unwrap());
+    }
+
+    {
+        let mut tx = set_2.transaction().unwrap();
+        assert!(tx.insert("bar".to_owned()).unwrap());
+        assert!(tx.insert("baz".to_owned()).unwrap());
+        assert!(tx.insert("QUX".to_owned()).unwrap());
+        assert!(tx.insert("xyz".to_owned()).unwrap());
+        assert!(tx.insert("$?!".to_owned()).unwrap());
+    }
+
+    let set_3 = set_1.sub_nocase(&set_2).unwrap();
+    assert_eq!(set_3.len().unwrap(), 2);
+
+    assert!(set_3.contains("foo").unwrap());
+    assert!(set_3.contains("FOO").unwrap());
+    assert!(!set_3.contains("bar").unwrap());
+    assert!(!set_3.contains("BAR").unwrap());
+    assert!(!set_3.contains("baz").unwrap());
+    assert!(!set_3.contains("BAZ").unwrap());
+    assert!(!set_3.contains("qux").unwrap());
+    assert!(!set_3.contains("QUX").unwrap());
+    assert!(!set_3.contains("xyz").unwrap());
+    assert!(!set_3.contains("XYZ").unwrap());
+    assert!(set_3.contains("cor").unwrap());
+    assert!(set_3.contains("COR").unwrap());
+    assert!(!set_3.contains("$?!").unwrap());
+}
+
 // ---------------------------------------------------------------------------
 // SQLiteSet<Blob> Tests
 // ---------------------------------------------------------------------------
@@ -1745,6 +1858,39 @@ fn test_sqlite_set_blob_or() {
     assert!(set_3.contains(&b"qux"[..]).unwrap());
     assert!(set_3.contains(&b"xyz"[..]).unwrap());
     assert!(set_3.contains(&b"cor"[..]).unwrap());
+    assert!(!set_3.contains(&b"$?!"[..]).unwrap());
+}
+
+#[test]
+fn test_sqlite_set_blob_sub() {
+    let mut set_1 = SQLiteSet::<Blob>::new().unwrap();
+    let mut set_2 = SQLiteSet::<Blob>::new().unwrap();
+
+    {
+        let mut tx = set_1.transaction().unwrap();
+        assert!(tx.insert(b"foo".to_vec()).unwrap());
+        assert!(tx.insert(b"bar".to_vec()).unwrap());
+        assert!(tx.insert(b"baz".to_vec()).unwrap());
+        assert!(tx.insert(b"qux".to_vec()).unwrap());
+        assert!(tx.insert(b"xyz".to_vec()).unwrap());
+    }
+
+    {
+        let mut tx = set_2.transaction().unwrap();
+        assert!(tx.insert(b"bar".to_vec()).unwrap());
+        assert!(tx.insert(b"qux".to_vec()).unwrap());
+        assert!(tx.insert(b"cor".to_vec()).unwrap());
+    }
+
+    let set_3 = set_1.sub(&set_2).unwrap();
+    assert_eq!(set_3.len().unwrap(), 3);
+
+    assert!(set_3.contains(&b"foo"[..]).unwrap());
+    assert!(!set_3.contains(&b"bar"[..]).unwrap());
+    assert!(set_3.contains(&b"baz"[..]).unwrap());
+    assert!(!set_3.contains(&b"qux"[..]).unwrap());
+    assert!(set_3.contains(&b"xyz"[..]).unwrap());
+    assert!(!set_3.contains(&b"cor"[..]).unwrap());
     assert!(!set_3.contains(&b"$?!"[..]).unwrap());
 }
 
