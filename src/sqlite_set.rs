@@ -317,6 +317,33 @@ where
         Ok(statement.execute([key])? != 0)
     }
 
+    /// Removes *all* keys that are yielded by the given [iterable](std::iter::IntoIterator), ignoring non-existing keys.
+    ///
+    /// For case-sensitive sets, the keys are treated as case-sensitive; for case-insensitive sets, they are treated as case-insensitive.
+    ///
+    /// Returns the number of keys that have been removed.
+    #[inline]
+    pub fn remove_all<I>(&mut self, keys: I) -> Result<Size, Error>
+    where
+        I: IntoIterator<Item = T>,
+    {
+        self.transaction()?.remove_all(keys)
+    }
+
+    /// Removes *all* keys that are yielded by the given [iterable](std::iter::IntoIterator), ignoring non-existing keys.
+    ///
+    /// The keys are treated as case-insensitive.
+    ///
+    /// Returns the number of keys that have been removed.
+    #[inline]
+    pub fn remove_all_nocase<I>(&mut self, keys: I) -> Result<Size, Error>
+    where
+        I: IntoIterator<Item = T>,
+        T: CharType,
+    {
+        self.transaction()?.remove_all_nocase(keys)
+    }
+
     /// Removes *all* keys that exist in another set from this sets, ignoring non-existing keys.
     ///
     /// For case-sensitive sets, the keys are treated as case-sensitive; for case-insensitive sets, they are treated as case-insensitive.
@@ -491,7 +518,7 @@ where
         Ok(new_map)
     }
 
-    /// Creates a new set containing all keys that are contained in this set *or* the other set.
+    /// Creates a new set containing all keys that are contained in this set *or* in the other set.
     ///
     /// The created set is case-sensitive.
     #[inline]
@@ -790,6 +817,39 @@ where
     {
         let mut statement = self.transaction.prepare_cached(SQL_DELETE_NOC)?;
         Ok(statement.execute([key])? != 0)
+    }
+
+    /// This function is equivalent to [`SQLiteSet::remove_all()`].
+    #[inline]
+    pub fn remove_all<I>(&mut self, keys: I) -> Result<Size, Error>
+    where
+        I: IntoIterator<Item = T>,
+    {
+        let mut statement = self.transaction.prepare_cached(SQL_DELETE_KEY)?;
+        let mut counter = Size::default();
+        for key in keys {
+            if statement.execute([key])? != 0 {
+                increment(&mut counter);
+            }
+        }
+        Ok(counter)
+    }
+
+    /// This function is equivalent to [`SQLiteSet::remove_all_nocase()`].
+    #[inline]
+    pub fn remove_all_nocase<I>(&mut self, keys: I) -> Result<Size, Error>
+    where
+        I: IntoIterator<Item = T>,
+        T: CharType,
+    {
+        let mut statement = self.transaction.prepare_cached(SQL_DELETE_NOC)?;
+        let mut counter = Size::default();
+        for key in keys {
+            if statement.execute([key])? != 0 {
+                increment(&mut counter);
+            }
+        }
+        Ok(counter)
     }
 
     /// This function is equivalent to [`SQLiteSet::remove_set()`].

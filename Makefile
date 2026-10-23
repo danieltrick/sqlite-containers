@@ -22,14 +22,15 @@ fmt:
 	cargo fmt --all
 
 build:
-	cargo build --locked
+	cargo build --locked --no-default-features --features bundled
+	cargo build --locked --all-features
+	cargo build --locked --release --no-default-features --features bundled
 	cargo build --locked --release --all-features
 
 test:
-	cargo nextest run --locked
-	cargo nextest run --locked --all-features
 	cargo nextest run --locked --no-default-features --features bundled
-	cargo nextest run --locked --release
+	cargo nextest run --locked --all-features
+	cargo nextest run --locked --release --no-default-features --features bundled
 	cargo nextest run --locked --release --all-features
 
 doc:

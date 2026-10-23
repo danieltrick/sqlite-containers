@@ -150,6 +150,17 @@ fn test_sqlite_set_i64() {
     assert!(set.contains(&131071i64).unwrap());
     assert!(!set.contains(&i64::MAX).unwrap());
     assert!(set.contains(&i64::MIN).unwrap());
+
+    assert_eq!(set.remove_all([1i64, 42i64, 524287i64, 131071i64]).unwrap(), 2);
+
+    assert_eq!(set.len().unwrap(), 3);
+    assert!(!set.is_empty().unwrap());
+    assert!(set.contains(&0i64).unwrap());
+    assert!(!set.contains(&42i64).unwrap());
+    assert!(set.contains(&8191i64).unwrap());
+    assert!(!set.contains(&131071i64).unwrap());
+    assert!(!set.contains(&i64::MAX).unwrap());
+    assert!(set.contains(&i64::MIN).unwrap());
 }
 
 #[test]
@@ -258,14 +269,25 @@ fn test_sqlite_set_i64_transacted() {
 
     assert_eq!(tx.extend_ref([&i64::MIN, &8191i64, &131071i64]).unwrap(), 1);
 
+    assert_eq!(tx.len().unwrap(), 5);
+    assert!(!tx.is_empty().unwrap());
+    assert!(tx.contains(&0i64).unwrap());
+    assert!(tx.contains(&42i64).unwrap());
+    assert!(tx.contains(&8191i64).unwrap());
+    assert!(tx.contains(&131071i64).unwrap());
+    assert!(!tx.contains(&i64::MAX).unwrap());
+    assert!(tx.contains(&i64::MIN).unwrap());
+
+    assert_eq!(tx.remove_all([1i64, 42i64, 524287i64, 131071i64]).unwrap(), 2);
+
     tx.commit();
 
-    assert_eq!(set.len().unwrap(), 5);
+    assert_eq!(set.len().unwrap(), 3);
     assert!(!set.is_empty().unwrap());
     assert!(set.contains(&0i64).unwrap());
-    assert!(set.contains(&42i64).unwrap());
+    assert!(!set.contains(&42i64).unwrap());
     assert!(set.contains(&8191i64).unwrap());
-    assert!(set.contains(&131071i64).unwrap());
+    assert!(!set.contains(&131071i64).unwrap());
     assert!(!set.contains(&i64::MAX).unwrap());
     assert!(set.contains(&i64::MIN).unwrap());
 }
@@ -671,6 +693,30 @@ fn test_sqlite_set_string() {
     assert!(set.contains("qux").unwrap());
     assert!(set.contains("xyz").unwrap());
     assert!(!set.contains("$?!").unwrap());
+
+    assert_eq!(set.remove_all(["FOO".to_owned(), "baz".to_owned(), "QUX".to_owned(), "xyz".to_owned()]).unwrap(), 2);
+    assert_eq!(set.remove_all(["FOO".to_owned(), "baz".to_owned(), "QUX".to_owned(), "xyz".to_owned()]).unwrap(), 0);
+
+    assert_eq!(set.len().unwrap(), 3);
+    assert!(!set.is_empty().unwrap());
+    assert!(set.contains("foo").unwrap());
+    assert!(set.contains("bar").unwrap());
+    assert!(!set.contains("baz").unwrap());
+    assert!(set.contains("qux").unwrap());
+    assert!(!set.contains("xyz").unwrap());
+    assert!(!set.contains("$?!").unwrap());
+
+    assert_eq!(set.remove_all_nocase(["FOO".to_owned(), "baz".to_owned(), "QUX".to_owned(), "xyz".to_owned()]).unwrap(), 2);
+    assert_eq!(set.remove_all_nocase(["FOO".to_owned(), "baz".to_owned(), "QUX".to_owned(), "xyz".to_owned()]).unwrap(), 0);
+
+    assert_eq!(set.len().unwrap(), 1);
+    assert!(!set.is_empty().unwrap());
+    assert!(!set.contains("foo").unwrap());
+    assert!(set.contains("bar").unwrap());
+    assert!(!set.contains("baz").unwrap());
+    assert!(!set.contains("qux").unwrap());
+    assert!(!set.contains("xyz").unwrap());
+    assert!(!set.contains("$?!").unwrap());
 }
 
 #[test]
@@ -813,15 +859,39 @@ fn test_sqlite_set_string_transacted() {
 
     assert_eq!(tx.extend_ref(["bar", "xyz", "qux"]).unwrap(), 1);
 
+    assert_eq!(tx.len().unwrap(), 5);
+    assert!(!tx.is_empty().unwrap());
+    assert!(tx.contains("foo").unwrap());
+    assert!(tx.contains("bar").unwrap());
+    assert!(tx.contains("baz").unwrap());
+    assert!(tx.contains("qux").unwrap());
+    assert!(tx.contains("xyz").unwrap());
+    assert!(!tx.contains("$?!").unwrap());
+
+    assert_eq!(tx.remove_all(["FOO".to_owned(), "baz".to_owned(), "QUX".to_owned(), "xyz".to_owned()]).unwrap(), 2);
+    assert_eq!(tx.remove_all(["FOO".to_owned(), "baz".to_owned(), "QUX".to_owned(), "xyz".to_owned()]).unwrap(), 0);
+
+    assert_eq!(tx.len().unwrap(), 3);
+    assert!(!tx.is_empty().unwrap());
+    assert!(tx.contains("foo").unwrap());
+    assert!(tx.contains("bar").unwrap());
+    assert!(!tx.contains("baz").unwrap());
+    assert!(tx.contains("qux").unwrap());
+    assert!(!tx.contains("xyz").unwrap());
+    assert!(!tx.contains("$?!").unwrap());
+
+    assert_eq!(tx.remove_all_nocase(["FOO".to_owned(), "baz".to_owned(), "QUX".to_owned(), "xyz".to_owned()]).unwrap(), 2);
+    assert_eq!(tx.remove_all_nocase(["FOO".to_owned(), "baz".to_owned(), "QUX".to_owned(), "xyz".to_owned()]).unwrap(), 0);
+
     tx.commit();
 
-    assert_eq!(set.len().unwrap(), 5);
+    assert_eq!(set.len().unwrap(), 1);
     assert!(!set.is_empty().unwrap());
-    assert!(set.contains("foo").unwrap());
+    assert!(!set.contains("foo").unwrap());
     assert!(set.contains("bar").unwrap());
-    assert!(set.contains("baz").unwrap());
-    assert!(set.contains("qux").unwrap());
-    assert!(set.contains("xyz").unwrap());
+    assert!(!set.contains("baz").unwrap());
+    assert!(!set.contains("qux").unwrap());
+    assert!(!set.contains("xyz").unwrap());
     assert!(!set.contains("$?!").unwrap());
 }
 
@@ -1307,6 +1377,18 @@ fn test_sqlite_set_blob() {
     assert!(set.contains::<[u8]>(b"qux").unwrap());
     assert!(set.contains::<[u8]>(b"xyz").unwrap());
     assert!(!set.contains::<[u8]>(b"$?!").unwrap());
+
+    assert_eq!(set.remove_all([b"FOO", b"baz", b"QUX", b"xyz"].map(|b| b.to_vec())).unwrap(), 2);
+    assert_eq!(set.remove_all([b"FOO", b"baz", b"QUX", b"xyz"].map(|b| b.to_vec())).unwrap(), 0);
+
+    assert_eq!(set.len().unwrap(), 3);
+    assert!(!set.is_empty().unwrap());
+    assert!(set.contains::<[u8]>(b"foo").unwrap());
+    assert!(set.contains::<[u8]>(b"bar").unwrap());
+    assert!(!set.contains::<[u8]>(b"baz").unwrap());
+    assert!(set.contains::<[u8]>(b"qux").unwrap());
+    assert!(!set.contains::<[u8]>(b"xyz").unwrap());
+    assert!(!set.contains::<[u8]>(b"$?!").unwrap());
 }
 
 #[test]
@@ -1421,15 +1503,27 @@ fn test_sqlite_set_blob_transacted() {
 
     assert_eq!(tx.extend_ref([&b"bar"[..], &b"xyz"[..], &b"qux"[..]]).unwrap(), 1);
 
+    assert_eq!(tx.len().unwrap(), 5);
+    assert!(!tx.is_empty().unwrap());
+    assert!(tx.contains::<[u8]>(b"foo").unwrap());
+    assert!(tx.contains::<[u8]>(b"bar").unwrap());
+    assert!(tx.contains::<[u8]>(b"baz").unwrap());
+    assert!(tx.contains::<[u8]>(b"qux").unwrap());
+    assert!(tx.contains::<[u8]>(b"xyz").unwrap());
+    assert!(!tx.contains::<[u8]>(b"$?!").unwrap());
+
+    assert_eq!(tx.remove_all([b"FOO", b"baz", b"QUX", b"xyz"].map(|b| b.to_vec())).unwrap(), 2);
+    assert_eq!(tx.remove_all([b"FOO", b"baz", b"QUX", b"xyz"].map(|b| b.to_vec())).unwrap(), 0);
+
     tx.commit();
 
-    assert_eq!(set.len().unwrap(), 5);
+    assert_eq!(set.len().unwrap(), 3);
     assert!(!set.is_empty().unwrap());
     assert!(set.contains::<[u8]>(b"foo").unwrap());
     assert!(set.contains::<[u8]>(b"bar").unwrap());
-    assert!(set.contains::<[u8]>(b"baz").unwrap());
+    assert!(!set.contains::<[u8]>(b"baz").unwrap());
     assert!(set.contains::<[u8]>(b"qux").unwrap());
-    assert!(set.contains::<[u8]>(b"xyz").unwrap());
+    assert!(!set.contains::<[u8]>(b"xyz").unwrap());
     assert!(!set.contains::<[u8]>(b"$?!").unwrap());
 }
 
