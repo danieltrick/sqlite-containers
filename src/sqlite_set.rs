@@ -112,9 +112,9 @@ where
     where
         I: IntoIterator<Item = T>,
     {
-        let mut set = Self::new()?;
-        set.extend(keys)?;
-        Ok(set)
+        let mut new_set = Self::new()?;
+        new_set.extend(keys)?;
+        Ok(new_set)
     }
 
     /// Creates a new hash set with case-insensitive keys containing all keys yielded by the given [iterable](std::iter::IntoIterator).
@@ -128,9 +128,9 @@ where
         I: IntoIterator<Item = T>,
         T: CharType,
     {
-        let mut set = Self::with_nocase()?;
-        set.extend(keys)?;
-        Ok(set)
+        let mut new_set = Self::with_nocase()?;
+        new_set.extend(keys)?;
+        Ok(new_set)
     }
 
     /// Creates a new or re-opens an existing hash set with case-sensitive keys, backed by a *file-based* SQLite database.

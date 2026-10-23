@@ -198,9 +198,9 @@ where
     where
         I: IntoIterator<Item = (K, V)>,
     {
-        let mut set = Self::new()?;
-        set.extend(entries)?;
-        Ok(set)
+        let mut new_map = Self::new()?;
+        new_map.extend(false, entries)?;
+        Ok(new_map)
     }
 
     /// Creates a map set with case-insensitive keys containing all key-value pairs yielded by the given [iterable](std::iter::IntoIterator).
@@ -214,9 +214,9 @@ where
         I: IntoIterator<Item = (K, V)>,
         K: CharType,
     {
-        let mut set = Self::with_nocase()?;
-        set.extend(entries)?;
-        Ok(set)
+        let mut new_map = Self::with_nocase()?;
+        new_map.extend(false, entries)?;
+        Ok(new_map)
     }
 
     /// Creates a new or re-opens an existing hash map with case-sensitive keys, backed by a *file-based* SQLite database.
@@ -372,22 +372,30 @@ where
         Ok(Action::from(&self.last_action))
     }
 
-    /// Inserts all key-value pairs yielded by the given [iterable](std::iter::IntoIterator) into the map, skipping existing keys.
+    /// Inserts all key-value pairs yielded by the given [iterable](std::iter::IntoIterator) into the map.
     ///
-    /// Returns the number of new key-value pairs that have been inserted.
+    /// If `update` is `true`, this function updates the values associated with existing keys in this map using the corresponding values from the iterator. Otherwise, the values associated with existing keys are **not** changed.
+    ///
+    /// Returns `Some((inserted, updated))`, i.e., the number of new keys inserted and existing keys updated, respectively.
+    ///
+    /// If [`hooks`](crate#optional-features) is **not** enabled and if `update` is `true`, the function *always* returns `None`, though &#128517;
     #[inline]
-    pub fn extend<I>(&mut self, entries: I) -> Result<Size, Error>
+    pub fn extend<I>(&mut self, update: bool, entries: I) -> Result<Option<(Size, Size)>, Error>
     where
         I: IntoIterator<Item = (K, V)>,
     {
-        self.transaction()?.extend(entries)
+        self.transaction()?.extend(update, entries)
     }
 
-    /// Inserts all key-value pairs yielded by the given [iterable](std::iter::IntoIterator) into the map, skipping existing keys.
+    /// Inserts all key-value pairs yielded by the given [iterable](std::iter::IntoIterator) into the map.
     ///
-    /// Returns the number of new key-value pairs that have been inserted.
+    /// If `update` is `true`, this function updates the values associated with existing keys in this map using the corresponding values from the iterator. Otherwise, the values associated with existing keys are **not** changed.
+    ///
+    /// Returns `Some((inserted, updated))`, i.e., the number of new keys inserted and existing keys updated, respectively.
+    ///
+    /// If [`hooks`](crate#optional-features) is **not** enabled and if `update` is `true`, the function *always* returns `None`, though &#128517;
     #[inline]
-    pub fn extend_ref<'a, I, Q, R>(&mut self, entries: I) -> Result<Size, Error>
+    pub fn extend_ref<'a, I, Q, R>(&mut self, update: bool, entries: I) -> Result<Option<(Size, Size)>, Error>
     where
         I: IntoIterator<Item = (&'a Q, &'a R)>,
         K: Borrow<Q>,
@@ -395,7 +403,7 @@ where
         V: Borrow<R>,
         R: ?Sized + ToSql + 'a,
     {
-        self.transaction()?.extend_ref(entries)
+        self.transaction()?.extend_ref(update, entries)
     }
 
     /// Inserts all key-value pairs from another map into this map.
@@ -861,26 +869,38 @@ where
 
     /// This function is equivalent to [`SQLiteMap::extend()`].
     #[inline]
-    pub fn extend<I>(&mut self, keys: I) -> Result<Size, Error>
+    pub fn extend<I>(&mut self, update: bool, keys: I) -> Result<Option<(Size, Size)>, Error>
     where
         I: IntoIterator<Item = (K, V)>,
     {
-        let mut statement = self.transaction.prepare_cached(SQL_INSERT_KEY)?;
-        let mut counter = Size::default();
+        let mut statement = self.transaction.prepare_cached(if update { SQL_UPSERT_KEY } else { SQL_INSERT_KEY })?;
+        let mut counter = (Size::default(), Size::default());
         for (key, value) in keys {
-            if match statement.execute(params![key, value]) {
-                Ok(_) => true,
-                Err(error) => check_constraint_violation(error)?,
-            } {
-                increment(&mut counter);
+            if !update {
+                match statement.execute(params![key, value]) {
+                    Ok(_) => increment(&mut counter.0),
+                    Err(error) => {
+                        check_constraint_violation(error)?;
+                    }
+                }
+            } else {
+                statement.execute(params![key, value])?;
+                #[cfg(feature = "hooks")]
+                update_counter(&mut counter, Action::from(self.last_action));
             }
         }
-        Ok(counter)
+        cfg_if! {
+            if #[cfg(feature = "hooks")] {
+                Ok(Some(counter))
+            } else {
+                Ok(if !update { Some(counter) } else { None })
+            }
+        }
     }
 
     /// This function is equivalent to [`SQLiteMap::extend_ref()`].
     #[inline]
-    pub fn extend_ref<'b, I, Q, R>(&mut self, entries: I) -> Result<Size, Error>
+    pub fn extend_ref<'b, I, Q, R>(&mut self, update: bool, entries: I) -> Result<Option<(Size, Size)>, Error>
     where
         I: IntoIterator<Item = (&'b Q, &'b R)>,
         K: Borrow<Q>,
@@ -888,17 +908,29 @@ where
         V: Borrow<R>,
         R: ?Sized + ToSql + 'b,
     {
-        let mut statement = self.transaction.prepare_cached(SQL_INSERT_KEY)?;
-        let mut counter = Size::default();
+        let mut statement = self.transaction.prepare_cached(if update { SQL_UPSERT_KEY } else { SQL_INSERT_KEY })?;
+        let mut counter = (Size::default(), Size::default());
         for (key, value) in entries {
-            if match statement.execute(params![key, value]) {
-                Ok(_) => true,
-                Err(error) => check_constraint_violation(error)?,
-            } {
-                increment(&mut counter);
+            if !update {
+                match statement.execute(params![key, value]) {
+                    Ok(_) => increment(&mut counter.0),
+                    Err(error) => {
+                        check_constraint_violation(error)?;
+                    }
+                }
+            } else {
+                statement.execute(params![key, value])?;
+                #[cfg(feature = "hooks")]
+                update_counter(&mut counter, Action::from(self.last_action));
             }
         }
-        Ok(counter)
+        cfg_if! {
+            if #[cfg(feature = "hooks")] {
+                Ok(Some(counter))
+            } else {
+                Ok(if !update { Some(counter) } else { None })
+            }
+        }
     }
 
     /// This function is equivalent to [`SQLiteMap::extend_map()`].
