@@ -390,10 +390,11 @@ pub fn duplicate_db(source_db: &Connection) -> Result<Connection, Error> {
 // ---------------------------------------------------------------------------
 
 #[inline(always)]
-pub(crate) fn check_constraint_violation(error: RusqliteError) -> Result<bool, Error> {
-    match error {
-        RusqliteError::SqliteFailure(FfiError { code: FfiErrorCode::ConstraintViolation, .. }, _) => Ok(false),
-        _ => Err(error.into()),
+pub fn check_constraint(result: Result<usize, RusqliteError>) -> Result<bool, RusqliteError> {
+    match result {
+        Ok(value) => Ok(value != 0),
+        Err(RusqliteError::SqliteFailure(FfiError { code: FfiErrorCode::ConstraintViolation, .. }, _)) => Ok(false),
+        Err(error) => Err(error),
     }
 }
 
@@ -544,14 +545,16 @@ mod test {
 
     #[test]
     fn test_check_constraint_violation() {
-        let error_1 = check_constraint_violation(RusqliteError::InvalidQuery);
-        assert!(matches!(error_1, Err(Error::SqlError(..))));
+        assert!(matches!(check_constraint(Ok(2147483647usize)), Ok(true)));
 
-        let error_2 = check_constraint_violation(RusqliteError::SqliteFailure(FfiError::new(SQLITE_CONSTRAINT), None));
+        let error_1 = check_constraint(Err(RusqliteError::InvalidQuery));
+        assert!(matches!(error_1, Err(RusqliteError::InvalidQuery)));
+
+        let error_2 = check_constraint(Err(RusqliteError::SqliteFailure(FfiError::new(SQLITE_CONSTRAINT), None)));
         assert!(matches!(error_2, Ok(false)));
 
-        let error_3 = check_constraint_violation(RusqliteError::SqliteFailure(FfiError::new(SQLITE_NOMEM), None));
-        assert!(matches!(error_3, Err(Error::SqlError(..))));
+        let error_3 = check_constraint(Err(RusqliteError::SqliteFailure(FfiError::new(SQLITE_NOMEM), None)));
+        assert!(matches!(error_3, Err(RusqliteError::SqliteFailure(..))));
     }
 
     #[test]

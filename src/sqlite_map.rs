@@ -4,7 +4,7 @@
 
 use crate::{
     CharType, Error, IterationError, SQLiteSet, Size, SizeExt, TryClone, Type,
-    common::{SQL_TYPE_TEXT, SQL_TYPES, SqlType, check_constraint_violation, create_new_connection, increment},
+    common::{SQL_TYPE_TEXT, SQL_TYPES, SqlType, check_constraint, create_new_connection, increment},
     rusqlite::{Connection, DropBehavior, OptionalExtension, ToSql, Transaction, params},
 };
 use cfg_if::cfg_if;
@@ -310,10 +310,7 @@ where
     #[inline]
     pub fn insert(&mut self, key: K, value: V) -> Result<bool, Error> {
         let mut statement = self.connection.prepare_cached(SQL_INSERT_KEY)?;
-        match statement.execute(params![key, value]) {
-            Ok(_) => Ok(true),
-            Err(error) => check_constraint_violation(error),
-        }
+        Ok(check_constraint(statement.execute(params![key, value]))?)
     }
 
     /// Inserts the given key-value pair into the map, if the specified key does *not* exist yet.
@@ -332,10 +329,7 @@ where
         R: ?Sized + ToSql,
     {
         let mut statement = self.connection.prepare_cached(SQL_INSERT_KEY)?;
-        match statement.execute(params![key, value]) {
-            Ok(_) => Ok(true),
-            Err(error) => check_constraint_violation(error),
-        }
+        Ok(check_constraint(statement.execute(params![key, value]))?)
     }
 
     /// Associates the specified value with the specified key, regardless of whether the key already exists in the map.
@@ -823,10 +817,7 @@ where
     #[inline]
     pub fn insert(&mut self, key: K, value: V) -> Result<bool, Error> {
         let mut statement = self.transaction.prepare_cached(SQL_INSERT_KEY)?;
-        match statement.execute(params![key, value]) {
-            Ok(_) => Ok(true),
-            Err(error) => check_constraint_violation(error),
-        }
+        Ok(check_constraint(statement.execute(params![key, value]))?)
     }
 
     /// This function is equivalent to [`SQLiteMap::insert_ref()`].
@@ -839,10 +830,7 @@ where
         R: ?Sized + ToSql,
     {
         let mut statement = self.transaction.prepare_cached(SQL_INSERT_KEY)?;
-        match statement.execute(params![key, value]) {
-            Ok(_) => Ok(true),
-            Err(error) => check_constraint_violation(error),
-        }
+        Ok(check_constraint(statement.execute(params![key, value]))?)
     }
 
     /// This function is equivalent to [`SQLiteMap::update()`].
@@ -877,11 +865,8 @@ where
         let mut counter = (Size::default(), Size::default());
         for (key, value) in keys {
             if !update {
-                match statement.execute(params![key, value]) {
-                    Ok(_) => increment(&mut counter.0),
-                    Err(error) => {
-                        check_constraint_violation(error)?;
-                    }
+                if check_constraint(statement.execute(params![key, value]))? {
+                    increment(&mut counter.0);
                 }
             } else {
                 statement.execute(params![key, value])?;
@@ -912,11 +897,8 @@ where
         let mut counter = (Size::default(), Size::default());
         for (key, value) in entries {
             if !update {
-                match statement.execute(params![key, value]) {
-                    Ok(_) => increment(&mut counter.0),
-                    Err(error) => {
-                        check_constraint_violation(error)?;
-                    }
+                if check_constraint(statement.execute(params![key, value]))? {
+                    increment(&mut counter.0);
                 }
             } else {
                 statement.execute(params![key, value])?;
@@ -943,11 +925,8 @@ where
         while let Some(key_value) = result.next()? {
             let (key, value): (K, V) = (key_value.get(0)?, key_value.get(1)?);
             if !update {
-                match statement_insert.execute(params![key, value]) {
-                    Ok(_) => increment(&mut counter.0),
-                    Err(error) => {
-                        check_constraint_violation(error)?;
-                    }
+                if check_constraint(statement_insert.execute(params![key, value]))? {
+                    increment(&mut counter.0);
                 }
             } else {
                 statement_insert.execute(params![key, value])?;
@@ -973,10 +952,10 @@ where
         let mut statement = self.transaction.prepare_cached(SQL_INSERT_KEY)?;
         let trx = set.transaction()?;
         trx.try_for_each(|key| match mapping(&key) {
-            Some(value) => match statement.execute(params![key, value]) {
-                Ok(_) => Ok(()),
-                Err(error) => check_constraint_violation(error).map(|_| ()),
-            },
+            Some(value) => {
+                check_constraint(statement.execute(params![key, value]))?;
+                Ok(())
+            }
             None => Ok(()),
         })
         .map_err(|error| error.into())

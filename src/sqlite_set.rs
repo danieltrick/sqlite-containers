@@ -4,7 +4,7 @@
 
 use crate::{
     CharType, Error, IterationError, SQLiteMap, Size, SizeExt, TryClone, Type,
-    common::{SQL_TYPE_TEXT, SQL_TYPES, SqlType, check_constraint_violation, create_new_connection, increment},
+    common::{SQL_TYPE_TEXT, SQL_TYPES, SqlType, check_constraint, create_new_connection, increment},
     rusqlite::{Connection, DropBehavior, ToSql, Transaction},
 };
 use cfg_if::cfg_if;
@@ -203,10 +203,7 @@ where
     #[inline]
     pub fn insert(&mut self, key: T) -> Result<bool, Error> {
         let mut statement = self.connection.prepare_cached(SQL_INSERT_KEY)?;
-        match statement.execute([key]) {
-            Ok(_) => Ok(true),
-            Err(error) => check_constraint_violation(error),
-        }
+        Ok(check_constraint(statement.execute([key]))?)
     }
 
     /// Inserts the given key reference into the set.
@@ -219,10 +216,7 @@ where
         Q: ?Sized + ToSql,
     {
         let mut statement = self.connection.prepare_cached(SQL_INSERT_KEY)?;
-        match statement.execute([key]) {
-            Ok(_) => Ok(true),
-            Err(error) => check_constraint_violation(error),
-        }
+        Ok(check_constraint(statement.execute([key]))?)
     }
 
     /// Inserts all keys yielded by the given [iterable](std::iter::IntoIterator) into the set, skipping duplicate keys.
@@ -481,10 +475,7 @@ where
             for key in statement_query.query_map([], |row| row.get::<_, T>(0))? {
                 let key = key?;
                 if statement_find.exists([&key])? {
-                    match statement_insert.execute([key]) {
-                        Ok(_) => (),
-                        Err(error) => check_constraint_violation(error).and(Ok(()))?,
-                    };
+                    check_constraint(statement_insert.execute([key]))?;
                 }
             }
         }
@@ -511,10 +502,7 @@ where
             for key in statement_query.query_map([], |row| row.get::<_, T>(0))? {
                 let key = key?;
                 if statement_find.exists([&key])? {
-                    match statement_insert.execute([key]) {
-                        Ok(_) => (),
-                        Err(error) => check_constraint_violation(error).and(Ok(()))?,
-                    };
+                    check_constraint(statement_insert.execute([key]))?;
                 }
             }
         }
@@ -535,10 +523,7 @@ where
             let tx = new_map.transaction()?;
             let mut statement_insert = tx.transaction.prepare_cached(SQL_INSERT_KEY)?;
             for key in iter_1.chain(iter_2) {
-                match statement_insert.execute([key?]) {
-                    Ok(_) => (),
-                    Err(error) => check_constraint_violation(error).and(Ok(()))?,
-                };
+                check_constraint(statement_insert.execute([key?]))?;
             }
         }
         Ok(new_map)
@@ -563,10 +548,7 @@ where
             let tx = new_map.transaction()?;
             let mut statement_insert = tx.transaction.prepare_cached(SQL_INSERT_KEY)?;
             for key in iter_1.chain(iter_2) {
-                match statement_insert.execute([key?]) {
-                    Ok(_) => (),
-                    Err(error) => check_constraint_violation(error).and(Ok(()))?,
-                };
+                check_constraint(statement_insert.execute([key?]))?;
             }
         }
         Ok(new_map)
@@ -587,10 +569,7 @@ where
             for key in statement_query.query_map([], |row| row.get::<_, T>(0))? {
                 let key = key?;
                 if !statement_find.exists([&key])? {
-                    match statement_insert.execute([key]) {
-                        Ok(_) => (),
-                        Err(error) => check_constraint_violation(error).and(Ok(()))?,
-                    };
+                    check_constraint(statement_insert.execute([key]))?;
                 }
             }
         }
@@ -617,10 +596,7 @@ where
             for key in statement_query.query_map([], |row| row.get::<_, T>(0))? {
                 let key = key?;
                 if !statement_find.exists([&key])? {
-                    match statement_insert.execute([key]) {
-                        Ok(_) => (),
-                        Err(error) => check_constraint_violation(error).and(Ok(()))?,
-                    };
+                    check_constraint(statement_insert.execute([key]))?;
                 }
             }
         }
@@ -741,10 +717,7 @@ where
     #[inline]
     pub fn insert(&mut self, key: T) -> Result<bool, Error> {
         let mut statement = self.transaction.prepare_cached(SQL_INSERT_KEY)?;
-        match statement.execute([key]) {
-            Ok(_) => Ok(true),
-            Err(error) => check_constraint_violation(error),
-        }
+        Ok(check_constraint(statement.execute([key]))?)
     }
 
     /// This function is equivalent to [`SQLiteSet::insert_ref()`].
@@ -755,10 +728,7 @@ where
         Q: ?Sized + ToSql,
     {
         let mut statement = self.transaction.prepare_cached(SQL_INSERT_KEY)?;
-        match statement.execute([key]) {
-            Ok(_) => Ok(true),
-            Err(error) => check_constraint_violation(error),
-        }
+        Ok(check_constraint(statement.execute([key]))?)
     }
 
     /// This function is equivalent to [`SQLiteSet::extend()`].
@@ -770,10 +740,7 @@ where
         let mut statement = self.transaction.prepare_cached(SQL_INSERT_KEY)?;
         let mut counter = Size::default();
         for key in keys {
-            if match statement.execute([key]) {
-                Ok(_) => true,
-                Err(error) => check_constraint_violation(error)?,
-            } {
+            if check_constraint(statement.execute([key]))? {
                 increment(&mut counter);
             }
         }
@@ -791,10 +758,7 @@ where
         let mut statement = self.transaction.prepare_cached(SQL_INSERT_KEY)?;
         let mut counter = Size::default();
         for key in keys {
-            if match statement.execute([key]) {
-                Ok(_) => true,
-                Err(error) => check_constraint_violation(error)?,
-            } {
+            if check_constraint(statement.execute([key]))? {
                 increment(&mut counter);
             }
         }
@@ -808,10 +772,7 @@ where
         let mut statement_reader = other.connection.prepare_cached(SQL_QUERY_KEYS)?;
         let mut counter = Size::default();
         for key in statement_reader.query_map([], |row| row.get::<_, T>(0))? {
-            if match statement_insert.execute([key?]) {
-                Ok(_) => true,
-                Err(error) => check_constraint_violation(error)?,
-            } {
+            if check_constraint(statement_insert.execute([key?]))? {
                 increment(&mut counter);
             }
         }
@@ -826,11 +787,11 @@ where
     {
         let mut statement = self.transaction.prepare_cached(SQL_INSERT_KEY)?;
         let trx = map.transaction_readonly()?;
-        trx.try_for_each_key(|key| match statement.execute([key]) {
-            Ok(_) => Ok(()),
-            Err(error) => check_constraint_violation(error).and(Ok(())),
+        trx.try_for_each_key(|key| {
+            check_constraint(statement.execute([key]))?;
+            Ok(())
         })
-        .map_err(|error| error.into())
+        .map_err(|err| err.into())
     }
 
     /// This function is equivalent to [`SQLiteSet::contains()`].
