@@ -603,6 +603,73 @@ where
         Ok(new_map)
     }
 
+    /// Creates a new set containing all keys that are contained in *one* of the sets but **not** in both.
+    ///
+    /// The created set is case-sensitive.
+    #[inline]
+    pub fn xor(&mut self, other: &Self) -> Result<SQLiteSet<T>, Error> {
+        let tx_1 = self.transaction()?;
+        let tx_2 = other.transaction_readonly()?;
+        let mut statement_query_1 = tx_1.transaction.prepare_cached(SQL_QUERY_KEYS)?;
+        let mut statement_find_1 = tx_1.transaction.prepare_cached(SQL_EXISTS_KEY)?;
+        let mut statement_query_2 = tx_2.transaction.prepare_cached(SQL_QUERY_KEYS)?;
+        let mut statement_find_2 = tx_2.transaction.prepare_cached(SQL_EXISTS_KEY)?;
+        let mut new_map = SQLiteSet::new()?;
+        {
+            let tx_3 = new_map.transaction()?;
+            let mut statement_insert = tx_3.transaction.prepare_cached(SQL_INSERT_KEY)?;
+            for key in statement_query_1.query_map([], |row| row.get::<_, T>(0))? {
+                let key = key?;
+                if !statement_find_2.exists([&key])? {
+                    check_constraint(statement_insert.execute([key]))?;
+                }
+            }
+            for key in statement_query_2.query_map([], |row| row.get::<_, T>(0))? {
+                let key = key?;
+                if !statement_find_1.exists([&key])? {
+                    check_constraint(statement_insert.execute([key]))?;
+                }
+            }
+        }
+        Ok(new_map)
+    }
+
+    /// Creates a new set containing all keys that are contained in *one* of the sets but **not** in both.
+    ///
+    /// The created set is case-insensitive.
+    ///
+    /// Only ASCII characters are case folded. SQLite does **not** attempt to do full UTF case folding!
+    #[inline]
+    pub fn xor_nocase(&mut self, other: &Self) -> Result<SQLiteSet<T>, Error>
+    where
+        T: CharType,
+    {
+        let tx_1 = self.transaction()?;
+        let tx_2 = other.transaction_readonly()?;
+        let mut statement_query_1 = tx_1.transaction.prepare_cached(SQL_QUERY_KEYS)?;
+        let mut statement_find_1 = tx_1.transaction.prepare_cached(SQL_EXISTS_NOC)?;
+        let mut statement_query_2 = tx_2.transaction.prepare_cached(SQL_QUERY_KEYS)?;
+        let mut statement_find_2 = tx_2.transaction.prepare_cached(SQL_EXISTS_NOC)?;
+        let mut new_map = SQLiteSet::with_nocase()?;
+        {
+            let tx_3 = new_map.transaction()?;
+            let mut statement_insert = tx_3.transaction.prepare_cached(SQL_INSERT_KEY)?;
+            for key in statement_query_1.query_map([], |row| row.get::<_, T>(0))? {
+                let key = key?;
+                if !statement_find_2.exists([&key])? {
+                    check_constraint(statement_insert.execute([key]))?;
+                }
+            }
+            for key in statement_query_2.query_map([], |row| row.get::<_, T>(0))? {
+                let key = key?;
+                if !statement_find_1.exists([&key])? {
+                    check_constraint(statement_insert.execute([key]))?;
+                }
+            }
+        }
+        Ok(new_map)
+    }
+
     /// Creates a new [`SQLiteMap`] that contains *all* keys contained in this set.
     ///
     /// The given `mapping` function is used to generate the map’s values. If it returns `Some(value)` for a key, that key is inserted into the map with the returned `value` as its associated value. If it returns `None`, the key is **not** inserted into the map.
