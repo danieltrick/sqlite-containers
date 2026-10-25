@@ -706,6 +706,38 @@ fn test_sqlite_map_i64_string_update() {
     assert!(map.get(&i64::MAX).unwrap().is_some_and(|value| value.eq("zyxwvuts")));
 }
 
+#[test]
+fn test_sqlite_map_i64_string_or() {
+    let mut map_1 = SQLiteMap::<i64, String>::new().unwrap();
+    let mut map_2 = SQLiteMap::<i64, String>::new().unwrap();
+
+    {
+        let mut tx = map_1.transaction().unwrap();
+        assert!(tx.insert(0i64, "12345678".to_owned()).unwrap());
+        assert!(tx.insert(42i64, "87654321".to_owned()).unwrap());
+        assert!(tx.insert(2147483647i64, "abcdefgh".to_owned()).unwrap());
+        assert!(tx.insert(i64::MIN, "hgfedcba".to_owned()).unwrap());
+    }
+
+    {
+        let mut tx = map_2.transaction().unwrap();
+        assert!(tx.insert(42i64, "stuvwxyz".to_owned()).unwrap());
+        assert!(tx.insert(2305843009213693951i64, "zyxwvuts".to_owned()).unwrap());
+        assert!(tx.insert(i64::MAX, "deadbeef".to_owned()).unwrap());
+    }
+
+    let set_3 = map_1.or(&map_2).unwrap();
+    assert_eq!(set_3.len().unwrap(), 6);
+
+    assert!(set_3.get(&0i64).unwrap().is_some_and(|value| value.eq("12345678")));
+    assert!(set_3.get(&42i64).unwrap().is_some_and(|value| value.eq("87654321")));
+    assert!(set_3.get(&524287).unwrap().is_none());
+    assert!(set_3.get(&2147483647i64).unwrap().is_some_and(|value| value.eq("abcdefgh")));
+    assert!(set_3.get(&2305843009213693951i64).unwrap().is_some_and(|value| value.eq("zyxwvuts")));
+    assert!(set_3.get(&i64::MIN).unwrap().is_some_and(|value| value.eq("hgfedcba")));
+    assert!(set_3.get(&i64::MAX).unwrap().is_some_and(|value| value.eq("deadbeef")));
+}
+
 #[cfg_attr(debug_assertions, ignore)]
 #[test]
 fn test_sqlite_map_i64_string_words() {
@@ -1430,6 +1462,40 @@ fn test_sqlite_map_blob_string_update() {
     assert!(map.get(&b"baz"[..]).unwrap().is_some_and(|value| value.eq("deadbeef")));
     assert!(map.get(&b"qux"[..]).unwrap().is_some_and(|value| value.eq("zyxwvuts")));
     assert!(map.get(&b"xyz"[..]).unwrap().is_some_and(|value| value.eq("cafebabe")));
+}
+
+#[test]
+fn test_sqlite_map_blob_string_or() {
+    let mut map_1 = SQLiteMap::<Blob, String>::new().unwrap();
+    let mut map_2 = SQLiteMap::<Blob, String>::new().unwrap();
+
+    {
+        let mut tx = map_1.transaction().unwrap();
+        assert!(tx.insert(b"foo".to_vec(), "12345678".to_owned()).unwrap());
+        assert!(tx.insert(b"bar".to_vec(), "87654321".to_owned()).unwrap());
+        assert!(tx.insert(b"qux".to_vec(), "abcdefgh".to_owned()).unwrap());
+        assert!(tx.insert(b"xyz".to_vec(), "hgfedcba".to_owned()).unwrap());
+    }
+
+    {
+        let mut tx = map_2.transaction().unwrap();
+        assert!(tx.insert(b"bar".to_vec(), "stuvwxyz".to_owned()).unwrap());
+        assert!(tx.insert(b"baz".to_vec(), "zyxwvuts".to_owned()).unwrap());
+        assert!(tx.insert(b"qux".to_vec(), "c0deba5e".to_owned()).unwrap());
+        assert!(tx.insert(b"xyz".to_vec(), "deadbeef".to_owned()).unwrap());
+        assert!(tx.insert(b"cor".to_vec(), "cafebabe".to_owned()).unwrap());
+    }
+
+    let map_3 = map_1.or(&map_2).unwrap();
+    assert_eq!(map_3.len().unwrap(), 6);
+
+    assert!(map_3.get(&b"foo"[..]).unwrap().is_some_and(|value| value.eq("12345678")));
+    assert!(map_3.get(&b"bar"[..]).unwrap().is_some_and(|value| value.eq("87654321")));
+    assert!(map_3.get(&b"baz"[..]).unwrap().is_some_and(|value| value.eq("zyxwvuts")));
+    assert!(map_3.get(&b"qux"[..]).unwrap().is_some_and(|value| value.eq("abcdefgh")));
+    assert!(map_3.get(&b"xyz"[..]).unwrap().is_some_and(|value| value.eq("hgfedcba")));
+    assert!(map_3.get(&b"cor"[..]).unwrap().is_some_and(|value| value.eq("cafebabe")));
+    assert!(map_3.get(&b"$?!"[..]).unwrap().is_none());
 }
 
 // ---------------------------------------------------------------------------
@@ -2302,6 +2368,81 @@ fn test_sqlite_map_string_string_update() {
     assert!(map.get("baz").unwrap().is_some_and(|value| value.eq("deadbeef")));
     assert!(map.get("qux").unwrap().is_some_and(|value| value.eq("zyxwvuts")));
     assert!(map.get("xyz").unwrap().is_some_and(|value| value.eq("cafebabe")));
+}
+
+#[test]
+fn test_sqlite_map_string_string_or() {
+    let mut map_1 = SQLiteMap::<String, String>::new().unwrap();
+    let mut map_2 = SQLiteMap::<String, String>::new().unwrap();
+
+    {
+        let mut tx = map_1.transaction().unwrap();
+        assert!(tx.insert("foo".to_owned(), "12345678".to_owned()).unwrap());
+        assert!(tx.insert("bar".to_owned(), "87654321".to_owned()).unwrap());
+        assert!(tx.insert("qux".to_owned(), "abcdefgh".to_owned()).unwrap());
+        assert!(tx.insert("xyz".to_owned(), "hgfedcba".to_owned()).unwrap());
+    }
+
+    {
+        let mut tx = map_2.transaction().unwrap();
+        assert!(tx.insert("bar".to_owned(), "stuvwxyz".to_owned()).unwrap());
+        assert!(tx.insert("baz".to_owned(), "zyxwvuts".to_owned()).unwrap());
+        assert!(tx.insert("qux".to_owned(), "c0deba5e".to_owned()).unwrap());
+        assert!(tx.insert("xyz".to_owned(), "deadbeef".to_owned()).unwrap());
+        assert!(tx.insert("cor".to_owned(), "cafebabe".to_owned()).unwrap());
+    }
+
+    let map_3 = map_1.or(&map_2).unwrap();
+    assert_eq!(map_3.len().unwrap(), 6);
+
+    assert!(map_3.get("foo").unwrap().is_some_and(|value| value.eq("12345678")));
+    assert!(map_3.get("bar").unwrap().is_some_and(|value| value.eq("87654321")));
+    assert!(map_3.get("baz").unwrap().is_some_and(|value| value.eq("zyxwvuts")));
+    assert!(map_3.get("qux").unwrap().is_some_and(|value| value.eq("abcdefgh")));
+    assert!(map_3.get("xyz").unwrap().is_some_and(|value| value.eq("hgfedcba")));
+    assert!(map_3.get("cor").unwrap().is_some_and(|value| value.eq("cafebabe")));
+    assert!(map_3.get("$?!").unwrap().is_none());
+}
+
+#[test]
+fn test_sqlite_map_string_string_or_nocase() {
+    let mut map_1 = SQLiteMap::<String, String>::new().unwrap();
+    let mut map_2 = SQLiteMap::<String, String>::new().unwrap();
+
+    {
+        let mut tx = map_1.transaction().unwrap();
+        assert!(tx.insert("foo".to_owned(), "12345678".to_owned()).unwrap());
+        assert!(tx.insert("BAR".to_owned(), "87654321".to_owned()).unwrap());
+        assert!(tx.insert("qux".to_owned(), "abcdefgh".to_owned()).unwrap());
+        assert!(tx.insert("xyz".to_owned(), "hgfedcba".to_owned()).unwrap());
+        assert!(tx.insert("XYZ".to_owned(), "stuvwxyz".to_owned()).unwrap());
+    }
+
+    {
+        let mut tx = map_2.transaction().unwrap();
+        assert!(tx.insert("bar".to_owned(), "zyxwvuts".to_owned()).unwrap());
+        assert!(tx.insert("baz".to_owned(), "c0deba5e".to_owned()).unwrap());
+        assert!(tx.insert("QUX".to_owned(), "deadbeef".to_owned()).unwrap());
+        assert!(tx.insert("xyz".to_owned(), "cafebabe".to_owned()).unwrap());
+        assert!(tx.insert("cor".to_owned(), "feedface".to_owned()).unwrap());
+    }
+
+    let map_3 = map_1.or_nocase(&map_2).unwrap();
+    assert_eq!(map_3.len().unwrap(), 6);
+
+    assert!(map_3.get("foo").unwrap().is_some_and(|value| value.eq("12345678")));
+    assert!(map_3.get("FOO").unwrap().is_some_and(|value| value.eq("12345678")));
+    assert!(map_3.get("bar").unwrap().is_some_and(|value| value.eq("87654321")));
+    assert!(map_3.get("BAR").unwrap().is_some_and(|value| value.eq("87654321")));
+    assert!(map_3.get("baz").unwrap().is_some_and(|value| value.eq("c0deba5e")));
+    assert!(map_3.get("BAZ").unwrap().is_some_and(|value| value.eq("c0deba5e")));
+    assert!(map_3.get("qux").unwrap().is_some_and(|value| value.eq("abcdefgh")));
+    assert!(map_3.get("QUX").unwrap().is_some_and(|value| value.eq("abcdefgh")));
+    assert!(map_3.get("xyz").unwrap().is_some_and(|value| value.eq("hgfedcba") || value.eq("stuvwxyz")));
+    assert!(map_3.get("XYZ").unwrap().is_some_and(|value| value.eq("hgfedcba") || value.eq("stuvwxyz")));
+    assert!(map_3.get("cor").unwrap().is_some_and(|value| value.eq("feedface")));
+    assert!(map_3.get("COR").unwrap().is_some_and(|value| value.eq("feedface")));
+    assert!(map_3.get("$?!").unwrap().is_none());
 }
 
 // ---------------------------------------------------------------------------
@@ -3182,6 +3323,40 @@ fn test_sqlite_map_string_blob_update() {
     assert!(map.get("xyz").unwrap().is_some_and(|value| value.eq(b"cafebabe")));
 }
 
+#[test]
+fn test_sqlite_map_string_blob_or() {
+    let mut map_1 = SQLiteMap::<String, Blob>::new().unwrap();
+    let mut map_2 = SQLiteMap::<String, Blob>::new().unwrap();
+
+    {
+        let mut tx = map_1.transaction().unwrap();
+        assert!(tx.insert("foo".to_owned(), b"12345678".to_vec()).unwrap());
+        assert!(tx.insert("bar".to_owned(), b"87654321".to_vec()).unwrap());
+        assert!(tx.insert("qux".to_owned(), b"abcdefgh".to_vec()).unwrap());
+        assert!(tx.insert("xyz".to_owned(), b"hgfedcba".to_vec()).unwrap());
+    }
+
+    {
+        let mut tx = map_2.transaction().unwrap();
+        assert!(tx.insert("bar".to_owned(), b"stuvwxyz".to_vec()).unwrap());
+        assert!(tx.insert("baz".to_owned(), b"zyxwvuts".to_vec()).unwrap());
+        assert!(tx.insert("qux".to_owned(), b"c0deba5e".to_vec()).unwrap());
+        assert!(tx.insert("xyz".to_owned(), b"deadbeef".to_vec()).unwrap());
+        assert!(tx.insert("cor".to_owned(), b"cafebabe".to_vec()).unwrap());
+    }
+
+    let map_3 = map_1.or(&map_2).unwrap();
+    assert_eq!(map_3.len().unwrap(), 6);
+
+    assert!(map_3.get("foo").unwrap().is_some_and(|value| value.eq(b"12345678")));
+    assert!(map_3.get("bar").unwrap().is_some_and(|value| value.eq(b"87654321")));
+    assert!(map_3.get("baz").unwrap().is_some_and(|value| value.eq(b"zyxwvuts")));
+    assert!(map_3.get("qux").unwrap().is_some_and(|value| value.eq(b"abcdefgh")));
+    assert!(map_3.get("xyz").unwrap().is_some_and(|value| value.eq(b"hgfedcba")));
+    assert!(map_3.get("cor").unwrap().is_some_and(|value| value.eq(b"cafebabe")));
+    assert!(map_3.get("$?!").unwrap().is_none());
+}
+
 // ---------------------------------------------------------------------------
 // SQLiteMap<String, i64> Tests
 // ---------------------------------------------------------------------------
@@ -4048,17 +4223,51 @@ fn test_sqlite_map_string_i64_update() {
     assert!(map.get("xyz").unwrap().is_some_and(|value| value.eq(&0xDEAD10CCi64)));
 }
 
+#[test]
+fn test_sqlite_map_string_i64_or() {
+    let mut map_1 = SQLiteMap::<String, i64>::new().unwrap();
+    let mut map_2 = SQLiteMap::<String, i64>::new().unwrap();
+
+    {
+        let mut tx = map_1.transaction().unwrap();
+        assert!(tx.insert("foo".to_owned(), 0x12345678i64).unwrap());
+        assert!(tx.insert("bar".to_owned(), 0x87654321i64).unwrap());
+        assert!(tx.insert("qux".to_owned(), 0x90ABCDEFi64).unwrap());
+        assert!(tx.insert("xyz".to_owned(), 0xFEDCBA09i64).unwrap());
+    }
+
+    {
+        let mut tx = map_2.transaction().unwrap();
+        assert!(tx.insert("bar".to_owned(), 0x5C5C5C5Ci64).unwrap());
+        assert!(tx.insert("baz".to_owned(), 0x36363636i64).unwrap());
+        assert!(tx.insert("qux".to_owned(), 0xC0DEBA5Ei64).unwrap());
+        assert!(tx.insert("xyz".to_owned(), 0xDEADBEEFi64).unwrap());
+        assert!(tx.insert("cor".to_owned(), 0xCAFEBABEi64).unwrap());
+    }
+
+    let map_3 = map_1.or(&map_2).unwrap();
+    assert_eq!(map_3.len().unwrap(), 6);
+
+    assert!(map_3.get("foo").unwrap().is_some_and(|value| value.eq(&0x12345678i64)));
+    assert!(map_3.get("bar").unwrap().is_some_and(|value| value.eq(&0x87654321i64)));
+    assert!(map_3.get("baz").unwrap().is_some_and(|value| value.eq(&0x36363636i64)));
+    assert!(map_3.get("qux").unwrap().is_some_and(|value| value.eq(&0x90ABCDEFi64)));
+    assert!(map_3.get("xyz").unwrap().is_some_and(|value| value.eq(&0xFEDCBA09i64)));
+    assert!(map_3.get("cor").unwrap().is_some_and(|value| value.eq(&0xCAFEBABEi64)));
+    assert!(map_3.get("$?!").unwrap().is_none());
+}
+
 // ---------------------------------------------------------------------------
 // SQLiteSet IterationOrder Test
 // ---------------------------------------------------------------------------
 
 #[allow(clippy::get_first)]
 #[test]
-fn test_sqlite_set_iteration_order() {
-    let mut set = SQLiteMap::<String, String>::new().unwrap();
+fn test_sqlite_map_iteration_order() {
+    let mut map = SQLiteMap::<String, String>::new().unwrap();
 
     {
-        let mut tx = set.transaction().unwrap();
+        let mut tx = map.transaction().unwrap();
         tx.insert_ref("mmm", "11111111").unwrap();
         tx.insert_ref("aaa", "22222222").unwrap();
         tx.insert_ref("zzz", "33333333").unwrap();
@@ -4070,7 +4279,7 @@ fn test_sqlite_set_iteration_order() {
 
     {
         let mut list_asc = Vec::new();
-        set.try_for_each_key(Order::ASC, |key| {
+        map.try_for_each_key(Order::ASC, |key| {
             list_asc.push(key);
             Ok::<_, ()>(())
         })
@@ -4086,7 +4295,7 @@ fn test_sqlite_set_iteration_order() {
 
     {
         let mut list_dsc = Vec::new();
-        set.try_for_each_key(Order::DSC, |key| {
+        map.try_for_each_key(Order::DSC, |key| {
             list_dsc.push(key);
             Ok::<_, ()>(())
         })
@@ -4102,7 +4311,7 @@ fn test_sqlite_set_iteration_order() {
 
     {
         let mut list_asc = Vec::new();
-        set.try_for_each_entry(Order::ASC, |key, value| {
+        map.try_for_each_entry(Order::ASC, |key, value| {
             list_asc.push((key, value));
             Ok::<_, ()>(())
         })
@@ -4118,7 +4327,7 @@ fn test_sqlite_set_iteration_order() {
 
     {
         let mut list_dsc = Vec::new();
-        set.try_for_each_entry(Order::DSC, |key, value| {
+        map.try_for_each_entry(Order::DSC, |key, value| {
             list_dsc.push((key, value));
             Ok::<_, ()>(())
         })
@@ -4706,20 +4915,20 @@ fn test_sqlite_map_eq() {
     assert!(map_8.try_eq(&map_7).unwrap());
 
     {
-        fn eq_helper<T>(set_1: &T, set_2: &T)
+        fn eq_helper<T>(map_1: &T, map_2: &T)
         where
             T: Eq,
         {
-            assert!(set_1.eq(set_2));
-            assert!(set_2.eq(set_1));
+            assert!(map_1.eq(map_2));
+            assert!(map_2.eq(map_1));
         }
 
-        fn ne_helper<T>(set_1: &T, set_2: &T)
+        fn ne_helper<T>(map_1: &T, map_2: &T)
         where
             T: Eq,
         {
-            assert!(set_1.ne(set_2));
-            assert!(set_2.ne(set_1));
+            assert!(map_1.ne(map_2));
+            assert!(map_2.ne(map_1));
         }
 
         let wrapper_1 = EqWrapper(map_1);

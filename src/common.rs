@@ -128,7 +128,7 @@ pub static SQL_TYPES: [SqlType; 3usize] = [SqlType::new(RusqliteType::Integer), 
 ///
 /// </div>
 #[allow(private_bounds)]
-pub trait Type: FromSql + ToSql + Sealed {
+pub trait Type: Debug + FromSql + ToSql + Sealed {
     /// The SQLite storage datatype that corresponds to this type.
     const SQL_TYPE: SqlType;
 }
@@ -269,11 +269,13 @@ impl From<RusqliteError> for Error {
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 /// The iteration order to be used by the [`for_each`](crate::SQLiteSet::for_each) function.
 pub enum Order {
-    /// Ascending iteration order.
+    /// Ascending iteration order. For strings, this means lexicographic order.
     ASC,
-    /// Descending iteration order.
+    /// Descending iteration order. For strings this means reverse lexicographic order.
     DSC,
-    /// Undefined iteration order, which may be faster than the other ones &#128640;
+    /// Undefined iteration order. May be faster than the other ones &#128640;
+    ///
+    /// Note: The “undefined” iteration order may happen to be equal to the “ascending” or the “descending” order, but it may also be entirely different. In any case, a specific iteration order **must not** be assumed when “undefined” is selected.
     UND,
 }
 

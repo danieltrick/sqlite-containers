@@ -713,6 +713,57 @@ where
         Ok(())
     }
 
+    /// Creates a new map containing all key-value pairs that are contained in this map *or* in the other map.
+    ///
+    /// If a key exists in both maps, the associated value from the first map takes precedence.
+    ///
+    /// The created map is case-sensitive.
+    #[inline]
+    pub fn or(&mut self, other: &Self) -> Result<SQLiteMap<K, V>, Error> {
+        let mut statement_query_1 = self.connection.prepare_cached(SQL_ENUM_P_UND)?;
+        let mut statement_query_2 = other.connection.prepare_cached(SQL_ENUM_P_UND)?;
+        let mut new_map = SQLiteMap::new()?;
+        let iter_1 = statement_query_1.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?;
+        let iter_2 = statement_query_2.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?;
+        {
+            let tx = new_map.transaction()?;
+            let mut statement_insert = tx.transaction.prepare_cached(SQL_INSERT_KEY)?;
+            for key_value in iter_1.chain(iter_2) {
+                let (key, value): (K, V) = key_value?;
+                check_constraint(statement_insert.execute(params![key, value]))?;
+            }
+        }
+        Ok(new_map)
+    }
+
+    /// Creates a new map containing all key-value pairs that are contained in this map *or* in the other map.
+    ///
+    /// If a key exists in both maps, the associated value from the first map takes precedence.
+    ///
+    /// The created map is case-insensitive.
+    ///
+    /// Only ASCII characters are case folded. SQLite does **not** attempt to do full UTF case folding!
+    #[inline]
+    pub fn or_nocase(&mut self, other: &Self) -> Result<SQLiteMap<K, V>, Error>
+    where
+        K: CharType,
+    {
+        let mut statement_query_1 = self.connection.prepare_cached(SQL_ENUM_P_UND)?;
+        let mut statement_query_2 = other.connection.prepare_cached(SQL_ENUM_P_UND)?;
+        let mut new_map = SQLiteMap::with_nocase()?;
+        let iter_1 = statement_query_1.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?;
+        let iter_2 = statement_query_2.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?;
+        {
+            let tx = new_map.transaction()?;
+            let mut statement_insert = tx.transaction.prepare_cached(SQL_INSERT_KEY)?;
+            for key_value in iter_1.chain(iter_2) {
+                let (key, value): (K, V) = key_value?;
+                check_constraint(statement_insert.execute(params![key, value]))?;
+            }
+        }
+        Ok(new_map)
+    }
+
     /// Creates a new [`SQLiteSet`] that contains *all* keys contained in this map.
     ///
     /// The created set is case-sensitive.
