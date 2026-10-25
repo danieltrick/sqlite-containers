@@ -9,14 +9,14 @@ all: clean clippy build test doc
 
 check:
 	cargo fmt --all --check
+	cargo check --locked --all-targets --no-default-features --features bundled
 	cargo check --locked --all-targets
 	cargo check --locked --all-targets --all-features
-	cargo check --locked --all-targets --no-default-features --features bundled
 
 clippy: check
+	cargo clippy --locked --all-targets --no-default-features --features bundled -- -D warnings
 	cargo clippy --locked --all-targets -- -D warnings
 	cargo clippy --locked --all-targets --all-features -- -D warnings
-	cargo clippy --locked --all-targets --no-default-features --features bundled -- -D warnings
 
 fmt:
 	cargo fmt --all

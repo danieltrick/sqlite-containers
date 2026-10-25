@@ -3,13 +3,13 @@
 // SPDX-License-Identifier: Unlicense
 
 use crate::{
-    CharType, Error, IterationError, SQLiteMap, Size, SizeExt, TryClone, Type,
+    CharType, Error, IterationError, SQLiteMap, Size, SizeExt, TryClone, TryEq, Type,
     common::{SQL_TYPE_TEXT, SQL_TYPES, SqlType, check_constraint, create_new_connection, increment},
     rusqlite::{Connection, DropBehavior, ToSql, Transaction},
 };
 use cfg_if::cfg_if;
 use const_format::concatcp;
-use std::{borrow::Borrow, collections::BTreeMap, marker::PhantomData, path::Path, sync::LazyLock};
+use std::{borrow::Borrow, collections::BTreeMap, marker::PhantomData, path::Path, ptr::addr_eq, sync::LazyLock};
 
 // ---------------------------------------------------------------------------
 // Statements
@@ -41,7 +41,7 @@ cfg_if! {
 
 const SQL_GET_SCHEMA: &str = concatcp!("SELECT sql FROM sqlite_schema WHERE type = 'table' AND name = '", TABLE_NAME, "';");
 const SQL_COUNT_KEYS: &str = concatcp!("SELECT COUNT(*) FROM ", TABLE_NAME, ";");
-const SQL_EXIST_KEYS: &str = concatcp!("SELECT EXISTS (SELECT 1 FROM ", TABLE_NAME, ");");
+const SQL_TEST_EMPTY: &str = concatcp!("SELECT EXISTS (SELECT 1 FROM ", TABLE_NAME, ");");
 const SQL_INSERT_KEY: &str = concatcp!("INSERT INTO ", TABLE_NAME, " (key) VALUES (?1);");
 const SQL_EXISTS_KEY: &str = concatcp!("SELECT 1 FROM ", TABLE_NAME, " WHERE key = ?1 LIMIT 1;");
 const SQL_EXISTS_NOC: &str = concatcp!("SELECT 1 FROM ", TABLE_NAME, " WHERE key COLLATE NOCASE = ? LIMIT 1;");
@@ -447,7 +447,7 @@ where
     /// Returns `true` if the set contains **no** keys; otherwise returns `false`.
     #[inline]
     pub fn is_empty(&self) -> Result<bool, Error> {
-        let mut statement = self.connection.prepare_cached(SQL_EXIST_KEYS)?;
+        let mut statement = self.connection.prepare_cached(SQL_TEST_EMPTY)?;
         let any_elements: bool = statement.query_one([], |row| row.get(0))?;
         Ok(!any_elements)
     }
@@ -717,6 +717,45 @@ where
         let mut statement = self.connection.prepare_cached(SQL_STORE_INTO)?;
         statement.execute([file])?;
         Ok(())
+    }
+}
+
+// ---------------------------------------------------------------------------
+// SQLiteMap Traits
+// ---------------------------------------------------------------------------
+
+impl<T> TryEq for SQLiteSet<T>
+where
+    T: Type,
+{
+    type Error = Error;
+
+    /// Implementation of the “is equal to” operator for [`SQLiteSet`].
+    ///
+    /// Two sets are considered equal if and only if they contain the same keys, i.e., every key in the first set also exists in the second set and vice versa. The keys are matched using the case-sensitivity of the underlying sets.
+    fn try_eq(&self, other: &Self) -> Result<bool, Error> {
+        if addr_eq(self, other) {
+            return Ok(true);
+        }
+        let tx_1 = self.transaction_readonly()?;
+        let tx_2 = other.transaction_readonly()?;
+        let mut statement_query_1 = tx_1.transaction.prepare_cached(SQL_QUERY_KEYS)?;
+        let mut statement_find_1 = tx_1.transaction.prepare_cached(SQL_EXISTS_KEY)?;
+        let mut statement_query_2 = tx_2.transaction.prepare_cached(SQL_QUERY_KEYS)?;
+        let mut statement_find_2 = tx_2.transaction.prepare_cached(SQL_EXISTS_KEY)?;
+        for key in statement_query_1.query_map([], |row| row.get(0))? {
+            let key: T = key?;
+            if !statement_find_2.exists([key])? {
+                return Ok(false);
+            }
+        }
+        for key in statement_query_2.query_map([], |row| row.get(0))? {
+            let key: T = key?;
+            if !statement_find_1.exists([key])? {
+                return Ok(false);
+            }
+        }
+        Ok(true)
     }
 }
 
@@ -1041,7 +1080,7 @@ where
     /// This function is equivalent to [`SQLiteSet::is_empty()`].
     #[inline]
     pub fn is_empty(&self) -> Result<bool, Error> {
-        let mut statement = self.transaction.prepare_cached(SQL_EXIST_KEYS)?;
+        let mut statement = self.transaction.prepare_cached(SQL_TEST_EMPTY)?;
         let any_elements: bool = statement.query_one([], |row| row.get(0))?;
         Ok(!any_elements)
     }

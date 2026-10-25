@@ -17,7 +17,7 @@ use rand_xoshiro::{
     rand_core::{Rng, SeedableRng},
 };
 use sqlite_containers::{
-    Action, Blob, Error, IterationError, SQLiteMap, SizeExt, TryClone,
+    Action, Blob, EqWrapper, Error, IterationError, SQLiteMap, SizeExt, TryClone, TryEq,
     rusqlite::{
         Error as RusqliteError,
         ffi::{Error as FfiError, ErrorCode as FfiErrorCode},
@@ -4457,6 +4457,8 @@ fn test_sqlite_map_to_set() {
 
 cfg_if! {
     if #[cfg(feature = "backup")] {
+        use sqlite_containers::CloneWrapper;
+
         #[test]
         fn test_sqlite_map_clone() {
             let mut map = SQLiteMap::<String, String>::new().unwrap();
@@ -4507,6 +4509,13 @@ cfg_if! {
                     assert_eq!(tx.update("xyz".to_owned(), "c0deba5e".to_owned()).unwrap(), Action::Update);
                 }
             }
+
+            fn clone_helper(src: &impl Clone) {
+                let clone = src.clone();
+                assert!(!std::ptr::addr_eq(&clone, src));
+            }
+
+            clone_helper(&CloneWrapper(map));
         }
     } else {
         #[test]
@@ -4522,6 +4531,115 @@ cfg_if! {
 
             assert!(matches!(map.try_clone(), Err(Error::Unsupported)));
         }
+    }
+}
+
+#[test]
+fn test_sqlite_map_eq() {
+    let mut map_1 = SQLiteMap::<String, String>::new().unwrap();
+    let mut map_2 = SQLiteMap::<String, String>::new().unwrap();
+    let mut map_3 = SQLiteMap::<String, String>::new().unwrap();
+    let mut map_4 = SQLiteMap::<String, String>::new().unwrap();
+    let mut map_5 = SQLiteMap::<String, String>::new().unwrap();
+    let mut map_6 = SQLiteMap::<String, String>::new().unwrap();
+    let mut map_7 = SQLiteMap::<String, String>::with_nocase().unwrap();
+    let mut map_8 = SQLiteMap::<String, String>::with_nocase().unwrap();
+
+    {
+        let mut tx = map_1.transaction().unwrap();
+        assert!(tx.insert("foo".to_owned(), "12345678".to_owned()).unwrap());
+        assert!(tx.insert("baz".to_owned(), "87654321".to_owned()).unwrap());
+        assert!(tx.insert("BAZ".to_owned(), "deadbeef".to_owned()).unwrap());
+    }
+
+    {
+        let mut tx = map_2.transaction().unwrap();
+        assert!(tx.insert("BAZ".to_owned(), "deadbeef".to_owned()).unwrap());
+        assert!(tx.insert("foo".to_owned(), "12345678".to_owned()).unwrap());
+        assert!(tx.insert("baz".to_owned(), "87654321".to_owned()).unwrap());
+    }
+
+    {
+        let mut tx = map_3.transaction().unwrap();
+        assert!(tx.insert("foo".to_owned(), "12345678".to_owned()).unwrap());
+        assert!(tx.insert("baz".to_owned(), "87654321".to_owned()).unwrap());
+    }
+
+    {
+        let mut tx = map_4.transaction().unwrap();
+        assert!(tx.insert("BAZ".to_owned(), "deadbeef".to_owned()).unwrap());
+        assert!(tx.insert("foo".to_owned(), "12345678".to_owned()).unwrap());
+        assert!(tx.insert("baz".to_owned(), "87654321".to_owned()).unwrap());
+        assert!(tx.insert("qux".to_owned(), "cafebabe".to_owned()).unwrap());
+    }
+
+    {
+        let mut tx = map_5.transaction().unwrap();
+        assert!(tx.insert("BAZ".to_owned(), "deadbeef".to_owned()).unwrap());
+        assert!(tx.insert("foo".to_owned(), "12345678".to_owned()).unwrap());
+        assert!(tx.insert("baz".to_owned(), "feedface".to_owned()).unwrap());
+    }
+
+    {
+        let mut tx = map_6.transaction().unwrap();
+        assert!(tx.insert("FOO".to_owned(), "12345678".to_owned()).unwrap());
+        assert!(tx.insert("baz".to_owned(), "87654321".to_owned()).unwrap());
+        assert!(tx.insert("BAZ".to_owned(), "deadbeef".to_owned()).unwrap());
+    }
+
+    {
+        let mut tx = map_7.transaction().unwrap();
+        assert!(tx.insert("FOO".to_owned(), "12345678".to_owned()).unwrap());
+        assert!(tx.insert("baz".to_owned(), "87654321".to_owned()).unwrap());
+    }
+
+    {
+        let mut tx = map_8.transaction().unwrap();
+        assert!(tx.insert("foo".to_owned(), "12345678".to_owned()).unwrap());
+        assert!(tx.insert("BAZ".to_owned(), "87654321".to_owned()).unwrap());
+    }
+
+    assert!(map_1.try_eq(&map_1).unwrap());
+    assert!(map_2.try_eq(&map_2).unwrap());
+    assert!(map_1.try_eq(&map_2).unwrap());
+    assert!(map_2.try_eq(&map_1).unwrap());
+
+    assert!(!map_1.try_eq(&map_3).unwrap());
+    assert!(!map_3.try_eq(&map_1).unwrap());
+    assert!(!map_1.try_eq(&map_4).unwrap());
+    assert!(!map_4.try_eq(&map_1).unwrap());
+    assert!(!map_1.try_eq(&map_5).unwrap());
+    assert!(!map_5.try_eq(&map_1).unwrap());
+    assert!(!map_1.try_eq(&map_6).unwrap());
+    assert!(!map_6.try_eq(&map_1).unwrap());
+    assert!(!map_1.try_eq(&map_7).unwrap());
+    assert!(!map_7.try_eq(&map_1).unwrap());
+    assert!(!map_1.try_eq(&map_8).unwrap());
+    assert!(!map_8.try_eq(&map_1).unwrap());
+
+    assert!(map_7.try_eq(&map_8).unwrap());
+    assert!(map_8.try_eq(&map_7).unwrap());
+
+    {
+        fn eq_helper<T>(set_1: &T, set_2: &T)
+        where
+            T: Eq,
+        {
+            assert!(set_1.eq(set_2));
+            assert!(set_2.eq(set_1));
+        }
+
+        fn ne_helper<T>(set_1: &T, set_2: &T)
+        where
+            T: Eq,
+        {
+            assert!(set_1.ne(set_2));
+            assert!(set_2.ne(set_1));
+        }
+
+        let wrapper_1 = EqWrapper(map_1);
+        eq_helper(&wrapper_1, &EqWrapper(map_2));
+        ne_helper(&wrapper_1, &EqWrapper(map_3));
     }
 }
 

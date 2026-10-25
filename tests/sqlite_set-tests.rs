@@ -17,7 +17,7 @@ use rand_xoshiro::{
     rand_core::{Rng, SeedableRng},
 };
 use sqlite_containers::{
-    Blob, Error, IterationError, SQLiteSet, SizeExt, TryClone,
+    Blob, EqWrapper, Error, IterationError, SQLiteSet, SizeExt, TryClone, TryEq,
     rusqlite::{
         Error as RusqliteError,
         ffi::{Error as FfiError, ErrorCode as FfiErrorCode},
@@ -2330,6 +2330,8 @@ fn test_sqlite_set_to_map_string() {
 
 cfg_if! {
     if #[cfg(feature = "backup")] {
+        use sqlite_containers::CloneWrapper;
+
         #[test]
         fn test_sqlite_set_clone() {
             let mut set = SQLiteSet::<String>::new().unwrap();
@@ -2370,6 +2372,13 @@ cfg_if! {
             assert!(set_clone.contains("BAR").unwrap());
             assert!(!set_clone.contains("QUX").unwrap());
             assert!(set_clone.contains("qux").unwrap());
+
+            fn clone_helper(src: &impl Clone) {
+                let clone = src.clone();
+                assert!(!std::ptr::addr_eq(&clone, src));
+            }
+
+            clone_helper(&CloneWrapper(set));
         }
     } else {
         #[test]
@@ -2385,6 +2394,105 @@ cfg_if! {
 
             assert!(matches!(set.try_clone(), Err(Error::Unsupported)));
         }
+    }
+}
+
+#[test]
+fn test_sqlite_set_eq() {
+    let mut set_1 = SQLiteSet::<String>::new().unwrap();
+    let mut set_2 = SQLiteSet::<String>::new().unwrap();
+    let mut set_3 = SQLiteSet::<String>::new().unwrap();
+    let mut set_4 = SQLiteSet::<String>::new().unwrap();
+    let mut set_5 = SQLiteSet::<String>::new().unwrap();
+    let mut set_6 = SQLiteSet::<String>::with_nocase().unwrap();
+    let mut set_7 = SQLiteSet::<String>::with_nocase().unwrap();
+
+    {
+        let mut tx = set_1.transaction().unwrap();
+        assert!(tx.insert("foo".to_owned()).unwrap());
+        assert!(tx.insert("baz".to_owned()).unwrap());
+        assert!(tx.insert("BAZ".to_owned()).unwrap());
+    }
+
+    {
+        let mut tx = set_2.transaction().unwrap();
+        assert!(tx.insert("BAZ".to_owned()).unwrap());
+        assert!(tx.insert("foo".to_owned()).unwrap());
+        assert!(tx.insert("baz".to_owned()).unwrap());
+    }
+
+    {
+        let mut tx = set_3.transaction().unwrap();
+        assert!(tx.insert("foo".to_owned()).unwrap());
+        assert!(tx.insert("baz".to_owned()).unwrap());
+    }
+
+    {
+        let mut tx = set_4.transaction().unwrap();
+        assert!(tx.insert("BAZ".to_owned()).unwrap());
+        assert!(tx.insert("foo".to_owned()).unwrap());
+        assert!(tx.insert("baz".to_owned()).unwrap());
+        assert!(tx.insert("qux".to_owned()).unwrap());
+    }
+
+    {
+        let mut tx = set_5.transaction().unwrap();
+        assert!(tx.insert("FOO".to_owned()).unwrap());
+        assert!(tx.insert("baz".to_owned()).unwrap());
+        assert!(tx.insert("BAZ".to_owned()).unwrap());
+    }
+
+    {
+        let mut tx = set_6.transaction().unwrap();
+        assert!(tx.insert("FOO".to_owned()).unwrap());
+        assert!(tx.insert("baz".to_owned()).unwrap());
+    }
+
+    {
+        let mut tx = set_7.transaction().unwrap();
+        assert!(tx.insert("foo".to_owned()).unwrap());
+        assert!(tx.insert("BAZ".to_owned()).unwrap());
+    }
+
+    assert!(set_1.try_eq(&set_1).unwrap());
+    assert!(set_2.try_eq(&set_2).unwrap());
+    assert!(set_1.try_eq(&set_2).unwrap());
+    assert!(set_2.try_eq(&set_1).unwrap());
+
+    assert!(!set_1.try_eq(&set_3).unwrap());
+    assert!(!set_3.try_eq(&set_1).unwrap());
+    assert!(!set_1.try_eq(&set_4).unwrap());
+    assert!(!set_4.try_eq(&set_1).unwrap());
+    assert!(!set_1.try_eq(&set_5).unwrap());
+    assert!(!set_5.try_eq(&set_1).unwrap());
+    assert!(!set_1.try_eq(&set_6).unwrap());
+    assert!(!set_6.try_eq(&set_1).unwrap());
+
+    assert!(set_1.try_eq(&set_7).unwrap());
+    assert!(set_7.try_eq(&set_1).unwrap());
+    assert!(set_6.try_eq(&set_7).unwrap());
+    assert!(set_7.try_eq(&set_6).unwrap());
+
+    {
+        fn eq_helper<T>(set_1: &T, set_2: &T)
+        where
+            T: Eq,
+        {
+            assert!(set_1.eq(set_2));
+            assert!(set_2.eq(set_1));
+        }
+
+        fn ne_helper<T>(set_1: &T, set_2: &T)
+        where
+            T: Eq,
+        {
+            assert!(set_1.ne(set_2));
+            assert!(set_2.ne(set_1));
+        }
+
+        let wrapper_1 = EqWrapper(set_1);
+        eq_helper(&wrapper_1, &EqWrapper(set_2));
+        ne_helper(&wrapper_1, &EqWrapper(set_3));
     }
 }
 

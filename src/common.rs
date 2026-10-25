@@ -360,7 +360,7 @@ fn initialize_connection(mut connection: Connection, file_based: bool) -> Result
 }
 
 // ---------------------------------------------------------------------------
-// TryClone Trait
+// Traits
 // ---------------------------------------------------------------------------
 
 /// This is the *failable* version of the standard [`Clone`](std::clone::Clone) trait.
@@ -371,19 +371,57 @@ pub trait TryClone: Sized {
     fn try_clone(&self) -> Result<Self, Self::Error>;
 }
 
-#[cfg(feature = "backup")]
-#[inline]
-pub fn duplicate_db(source_db: &Connection) -> Result<Connection, Error> {
-    let connection = Connection::open_in_memory()?;
-    let mut connection = initialize_connection(connection, false)?;
-
-    {
-        let backup = crate::rusqlite::backup::Backup::new(source_db, &mut connection)?;
-        backup.run_to_completion(1000i32, std::time::Duration::ZERO, None)?;
-    }
-
-    Ok(connection)
+/// This is the *failable* version of the standard [`PartialEq`](std::cmp::PartialEq) trait.
+pub trait TryEq {
+    /// The error type to be returned by [`try_eq()`](Self::try_eq).
+    type Error: Debug;
+    /// This is the *failable* version of the standard [`eq()`](std::cmp::PartialEq::eq) function.
+    fn try_eq(&self, other: &Self) -> Result<bool, Error>;
 }
+
+// ---------------------------------------------------------------------------
+// Blanket Implementations
+// ---------------------------------------------------------------------------
+
+/// Wrapper to implement the standard [`Clone`](std::clone::Clone) trait for all [`TryClone`] types.
+pub struct CloneWrapper<T>(pub T)
+where
+    T: TryClone;
+
+impl<T> Clone for CloneWrapper<T>
+where
+    T: TryClone,
+{
+    /// Implements the [`clone`](std::clone::Clone::clone) function by calling the [`try_clone`](TryClone::try_clone) function of the wrapped object.
+    ///
+    /// ## Panics
+    ///
+    /// This function panics if the underlying [`try_clone`](TryClone::try_clone) returns an error &#128165;
+    fn clone(&self) -> Self {
+        CloneWrapper(self.0.try_clone().unwrap())
+    }
+}
+
+/// Wrapper to implement the standard [`PartialEq`](std::cmp::PartialEq) and [`Eq`](std::cmp::Eq) traits for all [`TryEq`] types.
+pub struct EqWrapper<T>(pub T)
+where
+    T: TryEq;
+
+impl<T> PartialEq for EqWrapper<T>
+where
+    T: TryEq,
+{
+    /// Implements the [`eq`](std::cmp::PartialEq::eq) function by calling the [`try_eq`](TryEq::try_eq) function of the wrapped object.
+    ///
+    /// ## Panics
+    ///
+    /// This function panics if the underlying [`try_eq`](TryEq::try_eq) returns an error &#128165;
+    fn eq(&self, other: &Self) -> bool {
+        self.0.try_eq(&other.0).unwrap()
+    }
+}
+
+impl<T> Eq for EqWrapper<T> where T: TryEq {}
 
 // ---------------------------------------------------------------------------
 // Helper Functions
@@ -434,6 +472,20 @@ cfg_if! {
 #[inline(always)]
 pub(crate) fn increment(value: &mut Size) {
     *value = value.saturating_add(1)
+}
+
+#[cfg(feature = "backup")]
+#[inline]
+pub fn duplicate_db(source_db: &Connection) -> Result<Connection, Error> {
+    let connection = Connection::open_in_memory()?;
+    let mut connection = initialize_connection(connection, false)?;
+
+    {
+        let backup = crate::rusqlite::backup::Backup::new(source_db, &mut connection)?;
+        backup.run_to_completion(1000i32, std::time::Duration::ZERO, None)?;
+    }
+
+    Ok(connection)
 }
 
 // ---------------------------------------------------------------------------

@@ -3,13 +3,13 @@
 // SPDX-License-Identifier: Unlicense
 
 use crate::{
-    CharType, Error, IterationError, SQLiteSet, Size, SizeExt, TryClone, Type,
+    CharType, Error, IterationError, SQLiteSet, Size, SizeExt, TryClone, TryEq, Type,
     common::{SQL_TYPE_TEXT, SQL_TYPES, SqlType, check_constraint, create_new_connection, increment},
     rusqlite::{Connection, DropBehavior, OptionalExtension, ToSql, Transaction, params},
 };
 use cfg_if::cfg_if;
 use const_format::concatcp;
-use std::{borrow::Borrow, collections::BTreeMap, marker::PhantomData, path::Path, sync::LazyLock};
+use std::{borrow::Borrow, collections::BTreeMap, marker::PhantomData, path::Path, ptr::addr_eq, sync::LazyLock};
 
 // ---------------------------------------------------------------------------
 // Action Type
@@ -112,7 +112,7 @@ static SQL_CREATE_NOC: LazyLock<BTreeMap<SqlType, String>> = LazyLock::new(|| {
 
 const SQL_GET_SCHEMA: &str = concatcp!("SELECT sql FROM sqlite_schema WHERE type = 'table' AND name = '", TABLE_NAME, "';");
 const SQL_COUNT_KEYS: &str = concatcp!("SELECT COUNT(*) FROM ", TABLE_NAME, ";");
-const SQL_EXIST_KEYS: &str = concatcp!("SELECT EXISTS (SELECT 1 FROM ", TABLE_NAME, ");");
+const SQL_TEST_EMPTY: &str = concatcp!("SELECT EXISTS (SELECT 1 FROM ", TABLE_NAME, ");");
 const SQL_INSERT_KEY: &str = concatcp!("INSERT INTO ", TABLE_NAME, " (key, value) VALUES (?1, ?2);");
 const SQL_UPSERT_KEY: &str = concatcp!("INSERT INTO ", TABLE_NAME, " (key, value) VALUES (?1, ?2) ON CONFLICT(key) DO UPDATE SET value = excluded.value;");
 const SQL_EXISTS_KEY: &str = concatcp!("SELECT 1 FROM ", TABLE_NAME, " WHERE key = ? LIMIT 1;");
@@ -696,7 +696,7 @@ where
     /// Returns `true` if the map contains **no** keys; otherwise returns `false`.
     #[inline]
     pub fn is_empty(&self) -> Result<bool, Error> {
-        let mut statement = self.connection.prepare_cached(SQL_EXIST_KEYS)?;
+        let mut statement = self.connection.prepare_cached(SQL_TEST_EMPTY)?;
         let any_elements: bool = statement.query_one([], |row| row.get(0))?;
         Ok(!any_elements)
     }
@@ -746,6 +746,48 @@ where
         let mut statement = self.connection.prepare_cached(SQL_STORE_INTO)?;
         statement.execute([file])?;
         Ok(())
+    }
+}
+
+// ---------------------------------------------------------------------------
+// SQLiteMap Traits
+// ---------------------------------------------------------------------------
+
+impl<K, V> TryEq for SQLiteMap<K, V>
+where
+    K: Type,
+    V: Type + PartialEq,
+{
+    type Error = Error;
+
+    /// Implementation of the “is equal to” operator for [`SQLiteMap`].
+    ///
+    /// Two maps are considered equal if and only if they contain the same keys with the same associated values, i.e., every key in the first set also exists in the second set with the same associated value and vice versa.
+    fn try_eq(&self, other: &Self) -> Result<bool, Error> {
+        if addr_eq(self, other) {
+            return Ok(true);
+        }
+        let tx_1 = self.transaction_readonly()?;
+        let tx_2 = other.transaction_readonly()?;
+        let mut statement_query_1 = tx_1.transaction.prepare_cached(SQL_QUERY_PAIR)?;
+        let mut statement_find_1 = tx_1.transaction.prepare_cached(SQL_LOOKUP_KEY)?;
+        let mut statement_query_2 = tx_2.transaction.prepare_cached(SQL_QUERY_PAIR)?;
+        let mut statement_find_2 = tx_2.transaction.prepare_cached(SQL_LOOKUP_KEY)?;
+        let mut result_1 = statement_query_1.query([])?;
+        while let Some(key_value) = result_1.next()? {
+            let (key, value_1): (K, V) = (key_value.get(0)?, key_value.get(1)?);
+            if !statement_find_2.query_one([key], |row| row.get::<_, V>(0)).optional()?.is_some_and(|value_2| value_2.eq(&value_1)) {
+                return Ok(false);
+            }
+        }
+        let mut result_2 = statement_query_2.query([])?;
+        while let Some(key_value) = result_2.next()? {
+            let (key, value_2): (K, V) = (key_value.get(0)?, key_value.get(1)?);
+            if !statement_find_1.query_one([key], |row| row.get::<_, V>(0)).optional()?.is_some_and(|value_1| value_1.eq(&value_2)) {
+                return Ok(false);
+            }
+        }
+        Ok(true)
     }
 }
 
@@ -1185,7 +1227,7 @@ where
     /// This function is equivalent to [`SQLiteMap::is_empty()`].
     #[inline]
     pub fn is_empty(&self) -> Result<bool, Error> {
-        let mut statement = self.transaction.prepare_cached(SQL_EXIST_KEYS)?;
+        let mut statement = self.transaction.prepare_cached(SQL_TEST_EMPTY)?;
         let any_elements: bool = statement.query_one([], |row| row.get(0))?;
         Ok(!any_elements)
     }
