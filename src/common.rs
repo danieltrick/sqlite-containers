@@ -263,11 +263,36 @@ impl From<RusqliteError> for Error {
 }
 
 // ---------------------------------------------------------------------------
+// IterationOrder
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+/// The iteration order to be used by the [`for_each`](crate::SQLiteSet::for_each) function.
+pub enum Order {
+    /// Ascending iteration order.
+    ASC,
+    /// Descending iteration order.
+    DSC,
+    /// Undefined iteration order, which may be faster than the other ones &#128640;
+    UND,
+}
+
+impl Order {
+    pub(crate) fn get<'a>(&self, sql_asc: &'a str, sql_dsc: &'a str, sql_und: &'a str) -> &'a str {
+        match self {
+            Order::ASC => sql_asc,
+            Order::DSC => sql_dsc,
+            Order::UND => sql_und,
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // IterationError
 // ---------------------------------------------------------------------------
 
 /// The error type used by the [`try_for_each`](crate::SQLiteSet::try_for_each) function.
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum IterationError<C> {
     /// Indicates that the iteration was aborted because the callback function returned an error.
     CallbackError(C),

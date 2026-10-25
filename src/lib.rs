@@ -83,7 +83,7 @@ mod common;
 mod sqlite_map;
 mod sqlite_set;
 
-pub use crate::common::{Blob, CharType, CloneWrapper, EqWrapper, Error, IterationError, Size, SizeExt, TryClone, TryEq, Type, sqlite_version, version};
+pub use crate::common::{Blob, CharType, CloneWrapper, EqWrapper, Error, IterationError, Order, Size, SizeExt, TryClone, TryEq, Type, sqlite_version, version};
 pub use crate::sqlite_map::{Action, SQLiteMap, SQLiteMapTransaction};
 pub use crate::sqlite_set::{SQLiteSet, SQLiteSetTransaction};
 

@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Unlicense
 
 use crate::{
-    CharType, Error, IterationError, SQLiteMap, Size, SizeExt, TryClone, TryEq, Type,
+    CharType, Error, IterationError, Order, SQLiteMap, Size, SizeExt, TryClone, TryEq, Type,
     common::{SQL_TYPE_TEXT, SQL_TYPES, SqlType, check_constraint, create_new_connection, increment},
     rusqlite::{Connection, DropBehavior, ToSql, Transaction},
 };
@@ -45,7 +45,9 @@ const SQL_TEST_EMPTY: &str = concatcp!("SELECT EXISTS (SELECT 1 FROM ", TABLE_NA
 const SQL_INSERT_KEY: &str = concatcp!("INSERT INTO ", TABLE_NAME, " (key) VALUES (?1);");
 const SQL_EXISTS_KEY: &str = concatcp!("SELECT 1 FROM ", TABLE_NAME, " WHERE key = ?1 LIMIT 1;");
 const SQL_EXISTS_NOC: &str = concatcp!("SELECT 1 FROM ", TABLE_NAME, " WHERE key COLLATE NOCASE = ? LIMIT 1;");
-const SQL_QUERY_KEYS: &str = concatcp!("SELECT key FROM ", TABLE_NAME, ";");
+const SQL_ENUM_K_UND: &str = concatcp!("SELECT key FROM ", TABLE_NAME, ";");
+const SQL_ENUM_K_ASC: &str = concatcp!("SELECT key FROM ", TABLE_NAME, " ORDER BY key ASC;");
+const SQL_ENUM_K_DSC: &str = concatcp!("SELECT key FROM ", TABLE_NAME, " ORDER BY key DESC;");
 const SQL_GLOBA_KEYS: &str = concatcp!("SELECT key FROM ", TABLE_NAME, " WHERE key GLOB ?1;");
 const SQL_GLOBN_KEYS: &str = concatcp!("SELECT key FROM ", TABLE_NAME, " WHERE key NOT GLOB ?1;");
 const SQL_DELETE_KEY: &str = concatcp!("DELETE FROM ", TABLE_NAME, " WHERE key = ?1;");
@@ -363,13 +365,13 @@ where
 
     /// Invokes the given `callback` function for each key that is currently contained in the set.
     ///
-    /// This function does **not** guarantee a specific iteration order.
+    /// This function iterates over the keys in the specified [`order`](crate::Order).
     #[inline]
-    pub fn for_each<F>(&self, mut callback: F) -> Result<(), Error>
+    pub fn for_each<F>(&self, order: Order, mut callback: F) -> Result<(), Error>
     where
         F: FnMut(T),
     {
-        let mut statement = self.connection.prepare_cached(SQL_QUERY_KEYS)?;
+        let mut statement = self.connection.prepare_cached(order.get(SQL_ENUM_K_ASC, SQL_ENUM_K_DSC, SQL_ENUM_K_UND))?;
         for key in statement.query_map([], |row| row.get(0))? {
             callback(key?);
         }
@@ -378,11 +380,11 @@ where
 
     /// This is the *failable* version of the [`for_each()`](Self::for_each) function.
     #[inline]
-    pub fn try_for_each<F, E>(&self, mut callback: F) -> Result<(), IterationError<E>>
+    pub fn try_for_each<F, E>(&self, order: Order, mut callback: F) -> Result<(), IterationError<E>>
     where
         F: FnMut(T) -> Result<(), E>,
     {
-        let mut statement = self.connection.prepare_cached(SQL_QUERY_KEYS)?;
+        let mut statement = self.connection.prepare_cached(order.get(SQL_ENUM_K_ASC, SQL_ENUM_K_DSC, SQL_ENUM_K_UND))?;
         for key in statement.query_map([], |row| row.get(0))? {
             if let Err(error) = callback(key?) {
                 return Err(IterationError::CallbackError(error));
@@ -405,7 +407,7 @@ where
         T: Borrow<Q>,
         Q: ?Sized,
     {
-        let mut statement = self.connection.prepare_cached(SQL_QUERY_KEYS)?;
+        let mut statement = self.connection.prepare_cached(SQL_ENUM_K_UND)?;
         for key in statement.query_map([], |row| row.get(0))? {
             let key: T = key?;
             if predicate(key.borrow()) {
@@ -466,7 +468,7 @@ where
     #[inline]
     pub fn and(&mut self, other: &Self) -> Result<SQLiteSet<T>, Error> {
         let tx_1 = other.transaction_readonly()?;
-        let mut statement_query = self.connection.prepare_cached(SQL_QUERY_KEYS)?;
+        let mut statement_query = self.connection.prepare_cached(SQL_ENUM_K_UND)?;
         let mut statement_find = tx_1.transaction.prepare_cached(SQL_EXISTS_KEY)?;
         let mut new_map = SQLiteSet::new()?;
         {
@@ -493,7 +495,7 @@ where
         T: CharType,
     {
         let tx_1 = other.transaction_readonly()?;
-        let mut statement_query = self.connection.prepare_cached(SQL_QUERY_KEYS)?;
+        let mut statement_query = self.connection.prepare_cached(SQL_ENUM_K_UND)?;
         let mut statement_find = tx_1.transaction.prepare_cached(SQL_EXISTS_NOC)?;
         let mut new_map = SQLiteSet::with_nocase()?;
         {
@@ -514,8 +516,8 @@ where
     /// The created set is case-sensitive.
     #[inline]
     pub fn or(&mut self, other: &Self) -> Result<SQLiteSet<T>, Error> {
-        let mut statement_query_1 = self.connection.prepare_cached(SQL_QUERY_KEYS)?;
-        let mut statement_query_2 = other.connection.prepare_cached(SQL_QUERY_KEYS)?;
+        let mut statement_query_1 = self.connection.prepare_cached(SQL_ENUM_K_UND)?;
+        let mut statement_query_2 = other.connection.prepare_cached(SQL_ENUM_K_UND)?;
         let mut new_map = SQLiteSet::new()?;
         let iter_1 = statement_query_1.query_map([], |row| row.get::<_, T>(0))?;
         let iter_2 = statement_query_2.query_map([], |row| row.get::<_, T>(0))?;
@@ -539,8 +541,8 @@ where
     where
         T: CharType,
     {
-        let mut statement_query_1 = self.connection.prepare_cached(SQL_QUERY_KEYS)?;
-        let mut statement_query_2 = other.connection.prepare_cached(SQL_QUERY_KEYS)?;
+        let mut statement_query_1 = self.connection.prepare_cached(SQL_ENUM_K_UND)?;
+        let mut statement_query_2 = other.connection.prepare_cached(SQL_ENUM_K_UND)?;
         let mut new_map = SQLiteSet::with_nocase()?;
         let iter_1 = statement_query_1.query_map([], |row| row.get::<_, T>(0))?;
         let iter_2 = statement_query_2.query_map([], |row| row.get::<_, T>(0))?;
@@ -560,7 +562,7 @@ where
     #[inline]
     pub fn sub(&mut self, other: &Self) -> Result<SQLiteSet<T>, Error> {
         let tx_1 = other.transaction_readonly()?;
-        let mut statement_query = self.connection.prepare_cached(SQL_QUERY_KEYS)?;
+        let mut statement_query = self.connection.prepare_cached(SQL_ENUM_K_UND)?;
         let mut statement_find = tx_1.transaction.prepare_cached(SQL_EXISTS_KEY)?;
         let mut new_map = SQLiteSet::new()?;
         {
@@ -587,7 +589,7 @@ where
         T: CharType,
     {
         let tx_1 = other.transaction_readonly()?;
-        let mut statement_query = self.connection.prepare_cached(SQL_QUERY_KEYS)?;
+        let mut statement_query = self.connection.prepare_cached(SQL_ENUM_K_UND)?;
         let mut statement_find = tx_1.transaction.prepare_cached(SQL_EXISTS_NOC)?;
         let mut new_map = SQLiteSet::with_nocase()?;
         {
@@ -610,9 +612,9 @@ where
     pub fn xor(&mut self, other: &Self) -> Result<SQLiteSet<T>, Error> {
         let tx_1 = self.transaction()?;
         let tx_2 = other.transaction_readonly()?;
-        let mut statement_query_1 = tx_1.transaction.prepare_cached(SQL_QUERY_KEYS)?;
+        let mut statement_query_1 = tx_1.transaction.prepare_cached(SQL_ENUM_K_UND)?;
         let mut statement_find_1 = tx_1.transaction.prepare_cached(SQL_EXISTS_KEY)?;
-        let mut statement_query_2 = tx_2.transaction.prepare_cached(SQL_QUERY_KEYS)?;
+        let mut statement_query_2 = tx_2.transaction.prepare_cached(SQL_ENUM_K_UND)?;
         let mut statement_find_2 = tx_2.transaction.prepare_cached(SQL_EXISTS_KEY)?;
         let mut new_map = SQLiteSet::new()?;
         {
@@ -646,9 +648,9 @@ where
     {
         let tx_1 = self.transaction()?;
         let tx_2 = other.transaction_readonly()?;
-        let mut statement_query_1 = tx_1.transaction.prepare_cached(SQL_QUERY_KEYS)?;
+        let mut statement_query_1 = tx_1.transaction.prepare_cached(SQL_ENUM_K_UND)?;
         let mut statement_find_1 = tx_1.transaction.prepare_cached(SQL_EXISTS_NOC)?;
-        let mut statement_query_2 = tx_2.transaction.prepare_cached(SQL_QUERY_KEYS)?;
+        let mut statement_query_2 = tx_2.transaction.prepare_cached(SQL_ENUM_K_UND)?;
         let mut statement_find_2 = tx_2.transaction.prepare_cached(SQL_EXISTS_NOC)?;
         let mut new_map = SQLiteSet::with_nocase()?;
         {
@@ -739,9 +741,9 @@ where
         }
         let tx_1 = self.transaction_readonly()?;
         let tx_2 = other.transaction_readonly()?;
-        let mut statement_query_1 = tx_1.transaction.prepare_cached(SQL_QUERY_KEYS)?;
+        let mut statement_query_1 = tx_1.transaction.prepare_cached(SQL_ENUM_K_UND)?;
         let mut statement_find_1 = tx_1.transaction.prepare_cached(SQL_EXISTS_KEY)?;
-        let mut statement_query_2 = tx_2.transaction.prepare_cached(SQL_QUERY_KEYS)?;
+        let mut statement_query_2 = tx_2.transaction.prepare_cached(SQL_ENUM_K_UND)?;
         let mut statement_find_2 = tx_2.transaction.prepare_cached(SQL_EXISTS_KEY)?;
         for key in statement_query_1.query_map([], |row| row.get(0))? {
             let key: T = key?;
@@ -875,7 +877,7 @@ where
     #[inline]
     pub fn extend_set(&mut self, other: &SQLiteSet<T>) -> Result<Size, Error> {
         let mut statement_insert = self.transaction.prepare_cached(SQL_INSERT_KEY)?;
-        let mut statement_reader = other.connection.prepare_cached(SQL_QUERY_KEYS)?;
+        let mut statement_reader = other.connection.prepare_cached(SQL_ENUM_K_UND)?;
         let mut counter = Size::default();
         for key in statement_reader.query_map([], |row| row.get::<_, T>(0))? {
             if check_constraint(statement_insert.execute([key?]))? {
@@ -893,7 +895,7 @@ where
     {
         let mut statement = self.transaction.prepare_cached(SQL_INSERT_KEY)?;
         let trx = map.transaction_readonly()?;
-        trx.try_for_each_key(|key| {
+        trx.try_for_each_key(Order::UND, |key| {
             check_constraint(statement.execute([key]))?;
             Ok(())
         })
@@ -981,7 +983,7 @@ where
     #[inline]
     pub fn remove_set(&mut self, other: &SQLiteSet<T>) -> Result<Size, Error> {
         let mut statement_delete = self.transaction.prepare_cached(SQL_DELETE_KEY)?;
-        let mut statement_query = other.connection.prepare_cached(SQL_QUERY_KEYS)?;
+        let mut statement_query = other.connection.prepare_cached(SQL_ENUM_K_UND)?;
         let mut counter = Size::default();
         for key in statement_query.query_map([], |row| row.get::<_, T>(0))? {
             if statement_delete.execute([key?])? != 0 {
@@ -998,7 +1000,7 @@ where
         T: CharType,
     {
         let mut statement_delete = self.transaction.prepare_cached(SQL_DELETE_NOC)?;
-        let mut statement_query = other.connection.prepare_cached(SQL_QUERY_KEYS)?;
+        let mut statement_query = other.connection.prepare_cached(SQL_ENUM_K_UND)?;
         let mut counter = Size::default();
         for key in statement_query.query_map([], |row| row.get::<_, T>(0))? {
             if statement_delete.execute([key?])? != 0 {
@@ -1010,11 +1012,11 @@ where
 
     /// This function is equivalent to [`SQLiteSet::for_each()`].
     #[inline]
-    pub fn for_each<F>(&self, mut callback: F) -> Result<(), Error>
+    pub fn for_each<F>(&self, order: Order, mut callback: F) -> Result<(), Error>
     where
         F: FnMut(T),
     {
-        let mut statement = self.transaction.prepare_cached(SQL_QUERY_KEYS)?;
+        let mut statement = self.transaction.prepare_cached(order.get(SQL_ENUM_K_ASC, SQL_ENUM_K_DSC, SQL_ENUM_K_UND))?;
         for key in statement.query_map([], |row| row.get(0))? {
             callback(key?);
         }
@@ -1023,11 +1025,11 @@ where
 
     /// This is the *failable* version of the [`for_each()`](Self::for_each) function.
     #[inline]
-    pub fn try_for_each<F, E>(&self, mut callback: F) -> Result<(), IterationError<E>>
+    pub fn try_for_each<F, E>(&self, order: Order, mut callback: F) -> Result<(), IterationError<E>>
     where
         F: FnMut(T) -> Result<(), E>,
     {
-        let mut statement = self.transaction.prepare_cached(SQL_QUERY_KEYS)?;
+        let mut statement = self.transaction.prepare_cached(order.get(SQL_ENUM_K_ASC, SQL_ENUM_K_DSC, SQL_ENUM_K_UND))?;
         for key in statement.query_map([], |row| row.get(0))? {
             if let Err(error) = callback(key?) {
                 return Err(IterationError::CallbackError(error));
@@ -1044,7 +1046,7 @@ where
         T: Borrow<Q>,
         Q: ?Sized,
     {
-        let mut statement = self.transaction.prepare_cached(SQL_QUERY_KEYS)?;
+        let mut statement = self.transaction.prepare_cached(SQL_ENUM_K_UND)?;
         for key in statement.query_map([], |row| row.get(0))? {
             let key: T = key?;
             if predicate(key.borrow()) {

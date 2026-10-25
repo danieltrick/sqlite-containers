@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Unlicense
 
 use crate::{
-    CharType, Error, IterationError, SQLiteSet, Size, SizeExt, TryClone, TryEq, Type,
+    CharType, Error, IterationError, Order, SQLiteSet, Size, SizeExt, TryClone, TryEq, Type,
     common::{SQL_TYPE_TEXT, SQL_TYPES, SqlType, check_constraint, create_new_connection, increment},
     rusqlite::{Connection, DropBehavior, OptionalExtension, ToSql, Transaction, params},
 };
@@ -119,8 +119,12 @@ const SQL_EXISTS_KEY: &str = concatcp!("SELECT 1 FROM ", TABLE_NAME, " WHERE key
 const SQL_EXISTS_NOC: &str = concatcp!("SELECT 1 FROM ", TABLE_NAME, " WHERE key COLLATE NOCASE = ? LIMIT 1;");
 const SQL_LOOKUP_KEY: &str = concatcp!("SELECT value FROM ", TABLE_NAME, " WHERE key = ? LIMIT 1;");
 const SQL_LOOKUP_NOC: &str = concatcp!("SELECT value FROM ", TABLE_NAME, " WHERE key COLLATE NOCASE = ? LIMIT 1;");
-const SQL_QUERY_KEYS: &str = concatcp!("SELECT key FROM ", TABLE_NAME, ";");
-const SQL_QUERY_PAIR: &str = concatcp!("SELECT key, value FROM ", TABLE_NAME, ";");
+const SQL_ENUM_K_UND: &str = concatcp!("SELECT key FROM ", TABLE_NAME, ";");
+const SQL_ENUM_K_ASC: &str = concatcp!("SELECT key FROM ", TABLE_NAME, " ORDER BY key ASC;");
+const SQL_ENUM_K_DSC: &str = concatcp!("SELECT key FROM ", TABLE_NAME, " ORDER BY key DESC;");
+const SQL_ENUM_P_UND: &str = concatcp!("SELECT key, value FROM ", TABLE_NAME, ";");
+const SQL_ENUM_P_ASC: &str = concatcp!("SELECT key, value FROM ", TABLE_NAME, " ORDER BY key ASC;");
+const SQL_ENUM_P_DSC: &str = concatcp!("SELECT key, value FROM ", TABLE_NAME, " ORDER BY key DESC;");
 const SQL_GLOBA_KEYS: &str = concatcp!("SELECT key FROM ", TABLE_NAME, " WHERE key GLOB ?1;");
 const SQL_GLOBN_KEYS: &str = concatcp!("SELECT key FROM ", TABLE_NAME, " WHERE key NOT GLOB ?1;");
 const SQL_GLOBA_PAIR: &str = concatcp!("SELECT key, value FROM ", TABLE_NAME, " WHERE key GLOB ?1;");
@@ -534,13 +538,13 @@ where
 
     /// Invokes the given `callback` function for each key that is currently contained in the map.
     ///
-    /// This function does **not** guarantee a specific iteration order.
+    /// This function iterates over the keys in the specified [`order`](crate::Order).
     #[inline]
-    pub fn for_each_key<F>(&self, mut callback: F) -> Result<(), Error>
+    pub fn for_each_key<F>(&self, order: Order, mut callback: F) -> Result<(), Error>
     where
         F: FnMut(K),
     {
-        let mut statement = self.connection.prepare_cached(SQL_QUERY_KEYS)?;
+        let mut statement = self.connection.prepare_cached(order.get(SQL_ENUM_K_ASC, SQL_ENUM_K_DSC, SQL_ENUM_K_UND))?;
         for key in statement.query_map([], |row| row.get(0))? {
             callback(key?);
         }
@@ -549,11 +553,11 @@ where
 
     /// This is the *failable* version of the [`for_each_key()`](Self::for_each_key) function.
     #[inline]
-    pub fn try_for_each_key<F, E>(&self, mut callback: F) -> Result<(), IterationError<E>>
+    pub fn try_for_each_key<F, E>(&self, order: Order, mut callback: F) -> Result<(), IterationError<E>>
     where
         F: FnMut(K) -> Result<(), E>,
     {
-        let mut statement = self.connection.prepare_cached(SQL_QUERY_KEYS)?;
+        let mut statement = self.connection.prepare_cached(order.get(SQL_ENUM_K_ASC, SQL_ENUM_K_DSC, SQL_ENUM_K_UND))?;
         for key in statement.query_map([], |row| row.get(0))? {
             if let Err(error) = callback(key?) {
                 return Err(IterationError::CallbackError(error));
@@ -564,13 +568,13 @@ where
 
     /// Invokes the given `callback` function for each key-value pair that is currently contained in the map.
     ///
-    /// This function does **not** guarantee a specific iteration order.
+    /// This function iterates over the key-value pairs in the specified [`order`](crate::Order).
     #[inline]
-    pub fn for_each_entry<F>(&self, mut callback: F) -> Result<(), Error>
+    pub fn for_each_entry<F>(&self, order: Order, mut callback: F) -> Result<(), Error>
     where
         F: FnMut(K, V),
     {
-        let mut statement = self.connection.prepare_cached(SQL_QUERY_PAIR)?;
+        let mut statement = self.connection.prepare_cached(order.get(SQL_ENUM_P_ASC, SQL_ENUM_P_DSC, SQL_ENUM_P_UND))?;
         let mut result = statement.query([])?;
         while let Some(key_value) = result.next()? {
             let (key, value): (K, V) = (key_value.get(0)?, key_value.get(1)?);
@@ -581,11 +585,11 @@ where
 
     /// This is the *failable* version of the [`for_each_entry()`](Self::for_each_entry) function.
     #[inline]
-    pub fn try_for_each_entry<F, E>(&self, mut callback: F) -> Result<(), IterationError<E>>
+    pub fn try_for_each_entry<F, E>(&self, order: Order, mut callback: F) -> Result<(), IterationError<E>>
     where
         F: FnMut(K, V) -> Result<(), E>,
     {
-        let mut statement = self.connection.prepare_cached(SQL_QUERY_PAIR)?;
+        let mut statement = self.connection.prepare_cached(order.get(SQL_ENUM_P_ASC, SQL_ENUM_P_DSC, SQL_ENUM_P_UND))?;
         let mut result = statement.query([])?;
         while let Some(key_value) = result.next()? {
             let (key, value): (K, V) = (key_value.get(0)?, key_value.get(1)?);
@@ -608,7 +612,7 @@ where
     where
         P: Fn(&K) -> bool,
     {
-        let mut statement = self.connection.prepare_cached(SQL_QUERY_KEYS)?;
+        let mut statement = self.connection.prepare_cached(SQL_ENUM_K_UND)?;
         for key in statement.query_map([], |row| row.get(0))? {
             let key: K = key?;
             if predicate(key.borrow()) {
@@ -630,7 +634,7 @@ where
     where
         P: Fn(&K, &V) -> bool,
     {
-        let mut statement = self.connection.prepare_cached(SQL_QUERY_PAIR)?;
+        let mut statement = self.connection.prepare_cached(SQL_ENUM_P_UND)?;
         let mut result = statement.query([])?;
         while let Some(key_value) = result.next()? {
             let (key, value): (K, V) = (key_value.get(0)?, key_value.get(1)?);
@@ -769,9 +773,9 @@ where
         }
         let tx_1 = self.transaction_readonly()?;
         let tx_2 = other.transaction_readonly()?;
-        let mut statement_query_1 = tx_1.transaction.prepare_cached(SQL_QUERY_PAIR)?;
+        let mut statement_query_1 = tx_1.transaction.prepare_cached(SQL_ENUM_P_UND)?;
         let mut statement_find_1 = tx_1.transaction.prepare_cached(SQL_LOOKUP_KEY)?;
-        let mut statement_query_2 = tx_2.transaction.prepare_cached(SQL_QUERY_PAIR)?;
+        let mut statement_query_2 = tx_2.transaction.prepare_cached(SQL_ENUM_P_UND)?;
         let mut statement_find_2 = tx_2.transaction.prepare_cached(SQL_LOOKUP_KEY)?;
         let mut result_1 = statement_query_1.query([])?;
         while let Some(key_value) = result_1.next()? {
@@ -961,7 +965,7 @@ where
     #[inline]
     pub fn extend_map(&mut self, other: &SQLiteMap<K, V>, update: bool) -> Result<Option<(Size, Size)>, Error> {
         let mut statement_insert = self.transaction.prepare_cached(if update { SQL_UPSERT_KEY } else { SQL_INSERT_KEY })?;
-        let mut statement_reader = other.connection.prepare_cached(SQL_QUERY_PAIR)?;
+        let mut statement_reader = other.connection.prepare_cached(SQL_ENUM_P_UND)?;
         let mut result = statement_reader.query([])?;
         let mut counter = (Size::default(), Size::default());
         while let Some(key_value) = result.next()? {
@@ -993,7 +997,7 @@ where
     {
         let mut statement = self.transaction.prepare_cached(SQL_INSERT_KEY)?;
         let trx = set.transaction()?;
-        trx.try_for_each(|key| match mapping(&key) {
+        trx.try_for_each(Order::UND, |key| match mapping(&key) {
             Some(value) => {
                 check_constraint(statement.execute(params![key, value]))?;
                 Ok(())
@@ -1093,11 +1097,11 @@ where
 
     /// This function is equivalent to [`SQLiteMap::for_each_key()`].
     #[inline]
-    pub fn for_each_key<F>(&self, mut callback: F) -> Result<(), Error>
+    pub fn for_each_key<F>(&self, order: Order, mut callback: F) -> Result<(), Error>
     where
         F: FnMut(K),
     {
-        let mut statement = self.transaction.prepare_cached(SQL_QUERY_KEYS)?;
+        let mut statement = self.transaction.prepare_cached(order.get(SQL_ENUM_K_ASC, SQL_ENUM_K_DSC, SQL_ENUM_K_UND))?;
         for key in statement.query_map([], |row| row.get(0))? {
             callback(key?);
         }
@@ -1106,11 +1110,11 @@ where
 
     /// This is the *failable* version of the [`for_each_key()`](Self::for_each_key) function.
     #[inline]
-    pub fn try_for_each_key<F, E>(&self, mut callback: F) -> Result<(), IterationError<E>>
+    pub fn try_for_each_key<F, E>(&self, order: Order, mut callback: F) -> Result<(), IterationError<E>>
     where
         F: FnMut(K) -> Result<(), E>,
     {
-        let mut statement = self.transaction.prepare_cached(SQL_QUERY_KEYS)?;
+        let mut statement = self.transaction.prepare_cached(order.get(SQL_ENUM_K_ASC, SQL_ENUM_K_DSC, SQL_ENUM_K_UND))?;
         for key in statement.query_map([], |row| row.get(0))? {
             if let Err(error) = callback(key?) {
                 return Err(IterationError::CallbackError(error));
@@ -1121,11 +1125,11 @@ where
 
     /// This function is equivalent to [`SQLiteMap::for_each_entry()`].
     #[inline]
-    pub fn for_each_entry<F>(&self, mut callback: F) -> Result<(), Error>
+    pub fn for_each_entry<F>(&self, order: Order, mut callback: F) -> Result<(), Error>
     where
         F: FnMut(K, V),
     {
-        let mut statement = self.transaction.prepare_cached(SQL_QUERY_PAIR)?;
+        let mut statement = self.transaction.prepare_cached(order.get(SQL_ENUM_P_ASC, SQL_ENUM_P_DSC, SQL_ENUM_P_UND))?;
         let mut result = statement.query([])?;
         while let Some(key_value) = result.next()? {
             let (key, value): (K, V) = (key_value.get(0)?, key_value.get(1)?);
@@ -1136,11 +1140,11 @@ where
 
     /// This is the *failable* version of the [`for_each_entry()`](Self::for_each_entry) function.
     #[inline]
-    pub fn try_for_each_entry<F, E>(&self, mut callback: F) -> Result<(), IterationError<E>>
+    pub fn try_for_each_entry<F, E>(&self, order: Order, mut callback: F) -> Result<(), IterationError<E>>
     where
         F: FnMut(K, V) -> Result<(), E>,
     {
-        let mut statement = self.transaction.prepare_cached(SQL_QUERY_PAIR)?;
+        let mut statement = self.transaction.prepare_cached(order.get(SQL_ENUM_P_ASC, SQL_ENUM_P_DSC, SQL_ENUM_P_UND))?;
         let mut result = statement.query([])?;
         while let Some(key_value) = result.next()? {
             let (key, value): (K, V) = (key_value.get(0)?, key_value.get(1)?);
@@ -1157,7 +1161,7 @@ where
     where
         P: Fn(&K) -> bool,
     {
-        let mut statement = self.transaction.prepare_cached(SQL_QUERY_KEYS)?;
+        let mut statement = self.transaction.prepare_cached(SQL_ENUM_K_UND)?;
         for key in statement.query_map([], |row| row.get(0))? {
             let key: K = key?;
             if predicate(key.borrow()) {
@@ -1173,7 +1177,7 @@ where
     where
         P: Fn(&K, &V) -> bool,
     {
-        let mut statement = self.transaction.prepare_cached(SQL_QUERY_PAIR)?;
+        let mut statement = self.transaction.prepare_cached(SQL_ENUM_P_UND)?;
         let mut result = statement.query([])?;
         while let Some(key_value) = result.next()? {
             let (key, value): (K, V) = (key_value.get(0)?, key_value.get(1)?);
