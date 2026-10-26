@@ -378,6 +378,32 @@ where
         Ok(Action::from(&self.last_action))
     }
 
+    /// Associates the specified value with the specified key and returns the value previously associated with that key.
+    ///
+    /// If the map does *not* already contain the specified key, then the key is inserted automatically.
+    ///
+    /// Returns `Some(old_value)` if the key was already present in the map, or `None` if the key was newly inserted.
+    #[inline]
+    pub fn replace(&mut self, key: K, value: V) -> Result<Option<V>, Error> {
+        self.transaction()?.replace(key, value)
+    }
+
+    /// Associates the specified value with the specified key and returns the value previously associated with that key.
+    ///
+    /// If the map does *not* already contain the specified key, then the key is inserted automatically.
+    ///
+    /// Returns `Some(old_value)` if the key was already present in the map, or `None` if the key was newly inserted.
+    #[inline]
+    pub fn replace_ref<Q, R>(&mut self, key: &Q, value: &R) -> Result<Option<V>, Error>
+    where
+        K: Borrow<Q>,
+        Q: ?Sized + ToSql,
+        V: Borrow<R>,
+        R: ?Sized + ToSql,
+    {
+        self.transaction()?.replace_ref(key, value)
+    }
+
     /// Inserts all key-value pairs yielded by the given [iterable](std::iter::IntoIterator) into the map.
     ///
     /// If `update` is `true`, this function updates the values associated with existing keys in this map using the corresponding values from the iterator. Otherwise, the values associated with existing keys are **not** changed.
@@ -996,6 +1022,32 @@ where
         let mut statement = self.transaction.prepare_cached(SQL_UPSERT_KEY)?;
         statement.execute(params![key, value])?;
         Ok(Action::from(self.last_action))
+    }
+
+    /// This function is equivalent to [`SQLiteMap::replace()`].
+    #[inline]
+    pub fn replace(&mut self, key: K, value: V) -> Result<Option<V>, Error> {
+        let mut statement_lookup = self.transaction.prepare_cached(SQL_LOOKUP_KEY)?;
+        let mut statement_update = self.transaction.prepare_cached(SQL_UPSERT_KEY)?;
+        let previous_value = statement_lookup.query_one([&key], |row| row.get(0)).optional()?;
+        statement_update.execute(params![key, value])?;
+        Ok(previous_value)
+    }
+
+    /// This function is equivalent to [`SQLiteMap::replace_ref()`].
+    #[inline]
+    pub fn replace_ref<Q, R>(&mut self, key: &Q, value: &R) -> Result<Option<V>, Error>
+    where
+        K: Borrow<Q>,
+        Q: ?Sized + ToSql,
+        V: Borrow<R>,
+        R: ?Sized + ToSql,
+    {
+        let mut statement_lookup = self.transaction.prepare_cached(SQL_LOOKUP_KEY)?;
+        let mut statement_update = self.transaction.prepare_cached(SQL_UPSERT_KEY)?;
+        let previous_value = statement_lookup.query_one([&key], |row| row.get(0)).optional()?;
+        statement_update.execute(params![key, value])?;
+        Ok(previous_value)
     }
 
     /// This function is equivalent to [`SQLiteMap::extend()`].
