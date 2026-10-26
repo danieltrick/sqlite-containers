@@ -196,9 +196,9 @@ where
     }
 
     #[inline(always)]
-    fn from_connection(connection: Connection) -> Result<Self, Error> {
+    fn from_connection(mut connection: Connection) -> Result<Self, Error> {
         let last_action = LastActionHolder::default();
-        Self::install_update_hook(&connection, &last_action)?;
+        Self::install_update_hook(&mut connection, &last_action)?;
         Ok(Self { _types: (PhantomData, PhantomData), connection, last_action })
     }
 
@@ -282,7 +282,7 @@ where
     cfg_if! {
         if #[cfg(feature = "hooks")] {
             #[inline(always)]
-            fn install_update_hook(connection: &Connection, last_action: &LastActionHolder) -> Result<(), Error> {
+            fn install_update_hook(connection: &mut Connection, last_action: &LastActionHolder) -> Result<(), Error> {
                 let last_action = Arc::clone(&last_action.0);
                 connection
                     .update_hook(Some(move |action, _db: &str, _table: &str, _rowid: i64| {
@@ -292,7 +292,7 @@ where
             }
         } else {
             #[inline(always)]
-            fn install_update_hook(_: &Connection, _: &LastActionHolder) -> Result<(), Error> { Ok(()) }
+            fn install_update_hook(_: &mut Connection, _: &LastActionHolder) -> Result<(), Error> { Ok(()) }
         }
     }
 

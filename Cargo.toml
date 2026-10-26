@@ -3,7 +3,7 @@ name = "sqlite-containers"
 description = "SQLite-based containers for Rust"
 version = "2.4.0-dev"
 edition = "2024"
-rust-version = "1.87.0"
+rust-version = "1.89.0"
 authors = ["Daniel Trick <daniel.trick@sit.fraunhofer.de>"]
 license = "Unlicense"
 repository = "https://github.com/danieltrick/sqlite-containers/"
@@ -19,8 +19,8 @@ with_rowid = []
 
 [dependencies]
 cfg-if = "1.0.5"
-const_format = "0.2.36"
-rusqlite = "0.40.2"
+const_format = "0.2.37"
+rusqlite = "0.41.0"
 semver = "1.0.28"
 
 [dev-dependencies]
@@ -28,7 +28,7 @@ criterion = { version = "0.8.2", default-features = false }
 hex = "0.4.3"
 primal = "0.3.3"
 rand_xoshiro = "0.8.1"
-random_word = { version = "0.5.2", features = ["de","en"] }
+random_word = { version = "0.5.3", features = ["de","en"] }
 tempfile = "3.27.0"
 xxhash-rust = { version = "0.8.19", features = ["xxh64"] }
 
