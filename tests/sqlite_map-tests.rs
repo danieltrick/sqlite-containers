@@ -4854,6 +4854,80 @@ fn test_sqlite_map_to_vec_string() {
 }
 
 // ---------------------------------------------------------------------------
+// SQLiteMap ToHash Test
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_sqlite_map_to_hash_i64() {
+    let mut map = SQLiteMap::<i64, String>::new().unwrap();
+    assert!(map.to_hash().unwrap().is_empty());
+
+    {
+        let mut tx = map.transaction().unwrap();
+        assert!(tx.insert(0i64, "ponmlkji".to_owned()).unwrap());
+        assert!(tx.insert(i64::MIN, "stuvwxyz".to_owned()).unwrap());
+        assert!(tx.insert(2147483647i64, "abcdefgh".to_owned()).unwrap());
+        assert!(tx.insert(i64::MAX, "zyxwvuts".to_owned()).unwrap());
+        assert!(tx.insert(42i64, "ijklmnop".to_owned()).unwrap());
+        assert!(tx.insert(524287i64, "deadbeef".to_owned()).unwrap());
+        assert!(tx.insert(-12i64, "cafebabe".to_owned()).unwrap());
+    }
+
+    let hash_map = map.to_hash().unwrap();
+
+    assert_eq!(hash_map.len(), 7);
+    for (key, value) in [
+        (i64::MIN, "stuvwxyz".to_owned()),
+        (-12i64, "cafebabe".to_owned()),
+        (0i64, "ponmlkji".to_owned()),
+        (42i64, "ijklmnop".to_owned()),
+        (524287i64, "deadbeef".to_owned()),
+        (2147483647i64, "abcdefgh".to_owned()),
+        (i64::MAX, "zyxwvuts".to_owned()),
+    ] {
+        assert_eq!(hash_map.get(&key), Some(&value));
+    }
+
+    assert!(!hash_map.contains_key(&7i64));
+    assert!(!hash_map.contains_key(&131071i64));
+
+    let new_map = SQLiteMap::try_from(hash_map).unwrap();
+    assert!(new_map.try_eq(&map).unwrap());
+}
+
+#[test]
+fn test_sqlite_map_to_hash_string() {
+    let mut map = SQLiteMap::<String, String>::new().unwrap();
+    assert!(map.to_hash().unwrap().is_empty());
+
+    {
+        let mut tx = map.transaction().unwrap();
+        tx.insert_ref("mmm", "12345678").unwrap();
+        tx.insert_ref("aaa", "87654321").unwrap();
+        tx.insert_ref("zzz", "abcdefgh").unwrap();
+        tx.insert_ref("bbb", "hgfedcba").unwrap();
+        tx.insert_ref("yyy", "deadbeef").unwrap();
+        tx.insert_ref("ccc", "cafebabe").unwrap();
+        tx.insert_ref("xxx", "zyxwvuts").unwrap();
+    }
+
+    let hash_map = map.to_hash().unwrap();
+
+    assert_eq!(hash_map.len(), 7);
+    for (key, value) in
+        [("mmm", "12345678"), ("aaa", "87654321"), ("zzz", "abcdefgh"), ("bbb", "hgfedcba"), ("yyy", "deadbeef"), ("ccc", "cafebabe"), ("xxx", "zyxwvuts")]
+    {
+        assert_eq!(hash_map.get(key), Some(&value.to_owned()));
+    }
+
+    assert!(!hash_map.contains_key("qux"));
+    assert!(!hash_map.contains_key("$?!"));
+
+    let new_map = SQLiteMap::try_from(hash_map).unwrap();
+    assert!(new_map.try_eq(&map).unwrap());
+}
+
+// ---------------------------------------------------------------------------
 // SQLiteMap ToSet Test
 // ---------------------------------------------------------------------------
 

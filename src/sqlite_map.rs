@@ -9,7 +9,15 @@ use crate::{
 };
 use cfg_if::cfg_if;
 use const_format::concatcp;
-use std::{borrow::Borrow, collections::BTreeMap, marker::PhantomData, path::Path, ptr::addr_eq, sync::LazyLock};
+use std::{
+    borrow::Borrow,
+    collections::{BTreeMap, HashMap},
+    hash::Hash,
+    marker::PhantomData,
+    path::Path,
+    ptr::addr_eq,
+    sync::LazyLock,
+};
 
 // ---------------------------------------------------------------------------
 // Action Type
@@ -790,6 +798,26 @@ where
             new_vec.push(entry?);
         }
         Ok(new_vec)
+    }
+
+    /// Returns a new [`HashMap`](std::collections::HashMap) containing *all* key-value pairs that are currently contained in the map.
+    ///
+    /// For a case-sensitive map, this function can be reverted with the [`try_from()`](Self::try_from) function.
+    #[inline]
+    pub fn to_hash(&self) -> Result<HashMap<K, V>, Error>
+    where
+        K: Eq + Hash,
+    {
+        let tx = self.transaction_readonly()?;
+        let mut statement_rows = tx.transaction.prepare_cached(SQL_COUNT_KEYS)?;
+        let mut statement_enum = tx.transaction.prepare_cached(SQL_ENUM_P_UND)?;
+        let count: i64 = statement_rows.query_one([], |row| row.get(0))?;
+        let mut new_map = count.try_into().map(HashMap::with_capacity).unwrap_or_else(|_| HashMap::new());
+        for entry in statement_enum.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))? {
+            let (key, value) = entry?;
+            new_map.insert(key, value);
+        }
+        Ok(new_map)
     }
 
     /// Creates a new [`SQLiteSet`] that contains *all* keys contained in this map.

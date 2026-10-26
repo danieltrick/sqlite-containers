@@ -2440,6 +2440,70 @@ fn test_sqlite_set_to_vec_string() {
 }
 
 // ---------------------------------------------------------------------------
+// SQLiteSet ToHash Test
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_sqlite_set_to_hash_i64() {
+    let mut set = SQLiteSet::<i64>::new().unwrap();
+    assert!(set.to_hash().unwrap().is_empty());
+
+    {
+        let mut tx = set.transaction().unwrap();
+        assert!(tx.insert(0i64).unwrap());
+        assert!(tx.insert(i64::MIN).unwrap());
+        assert!(tx.insert(2147483647i64).unwrap());
+        assert!(tx.insert(i64::MAX).unwrap());
+        assert!(tx.insert(42i64).unwrap());
+        assert!(tx.insert(524287i64).unwrap());
+        assert!(tx.insert(-12i64).unwrap());
+    }
+
+    let hash_set = set.to_hash().unwrap();
+
+    assert_eq!(hash_set.len(), 7);
+    for key in [i64::MIN, -12i64, 0i64, 42i64, 524287i64, 2147483647i64, i64::MAX] {
+        assert!(hash_set.contains(&key));
+    }
+
+    assert!(!hash_set.contains(&7i64));
+    assert!(!hash_set.contains(&131071i64));
+
+    let new_set = SQLiteSet::try_from(hash_set).unwrap();
+    assert!(new_set.try_eq(&set).unwrap());
+}
+
+#[test]
+fn test_sqlite_set_to_hash_string() {
+    let mut set = SQLiteSet::<String>::new().unwrap();
+    assert!(set.to_hash().unwrap().is_empty());
+
+    {
+        let mut tx = set.transaction().unwrap();
+        tx.insert_ref("mmm").unwrap();
+        tx.insert_ref("aaa").unwrap();
+        tx.insert_ref("zzz").unwrap();
+        tx.insert_ref("bbb").unwrap();
+        tx.insert_ref("yyy").unwrap();
+        tx.insert_ref("ccc").unwrap();
+        tx.insert_ref("xxx").unwrap();
+    }
+
+    let hash_set = set.to_hash().unwrap();
+
+    assert_eq!(hash_set.len(), 7);
+    for key in ["mmm", "aaa", "zzz", "bbb", "ccc", "yyy", "xxx"].map(str::to_owned) {
+        assert!(hash_set.contains(&key));
+    }
+
+    assert!(!hash_set.contains("qux"));
+    assert!(!hash_set.contains("$?!"));
+
+    let new_set = SQLiteSet::try_from(hash_set).unwrap();
+    assert!(new_set.try_eq(&set).unwrap());
+}
+
+// ---------------------------------------------------------------------------
 // SQLiteSet Clone Test
 // ---------------------------------------------------------------------------
 
