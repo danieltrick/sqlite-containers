@@ -736,25 +736,17 @@ where
     ///
     /// Two sets are considered equal if and only if they contain the same keys, i.e., every key in the first set also exists in the second set and vice versa. The keys are matched using the case-sensitivity of the underlying sets.
     fn try_eq(&self, other: &Self) -> Result<bool, Error> {
-        if addr_eq(self, other) {
-            return Ok(true);
-        }
-        let tx_1 = self.transaction_readonly()?;
-        let tx_2 = other.transaction_readonly()?;
-        let mut statement_query_1 = tx_1.transaction.prepare_cached(SQL_ENUM_K_UND)?;
-        let mut statement_find_1 = tx_1.transaction.prepare_cached(SQL_EXISTS_KEY)?;
-        let mut statement_query_2 = tx_2.transaction.prepare_cached(SQL_ENUM_K_UND)?;
-        let mut statement_find_2 = tx_2.transaction.prepare_cached(SQL_EXISTS_KEY)?;
-        for key in statement_query_1.query_map([], |row| row.get(0))? {
-            let key: T = key?;
-            if !statement_find_2.exists([key])? {
-                return Ok(false);
-            }
-        }
-        for key in statement_query_2.query_map([], |row| row.get(0))? {
-            let key: T = key?;
-            if !statement_find_1.exists([key])? {
-                return Ok(false);
+        if !addr_eq(self, other) {
+            let (tx_1, tx_2) = self.transaction_readonly().and_then(|tx_1| other.transaction_readonly().map(|tx_2| (tx_1, tx_2)))?;
+            for b in [true, false] {
+                let mut statement_enum = if b { tx_1.transaction.prepare_cached(SQL_ENUM_K_UND)? } else { tx_2.transaction.prepare_cached(SQL_ENUM_K_UND)? };
+                let mut statement_find = if b { tx_2.transaction.prepare_cached(SQL_EXISTS_KEY)? } else { tx_1.transaction.prepare_cached(SQL_EXISTS_KEY)? };
+                for key in statement_enum.query_map([], |row| row.get(0))? {
+                    let key: T = key?;
+                    if !statement_find.exists([key])? {
+                        return Ok(false);
+                    }
+                }
             }
         }
         Ok(true)

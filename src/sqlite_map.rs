@@ -575,9 +575,8 @@ where
         F: FnMut(K, V),
     {
         let mut statement = self.connection.prepare_cached(order.get(SQL_ENUM_P_ASC, SQL_ENUM_P_DSC, SQL_ENUM_P_UND))?;
-        let mut result = statement.query([])?;
-        while let Some(key_value) = result.next()? {
-            let (key, value): (K, V) = (key_value.get(0)?, key_value.get(1)?);
+        for entry in statement.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))? {
+            let (key, value): (K, V) = entry?;
             callback(key, value);
         }
         Ok(())
@@ -590,9 +589,8 @@ where
         F: FnMut(K, V) -> Result<(), E>,
     {
         let mut statement = self.connection.prepare_cached(order.get(SQL_ENUM_P_ASC, SQL_ENUM_P_DSC, SQL_ENUM_P_UND))?;
-        let mut result = statement.query([])?;
-        while let Some(key_value) = result.next()? {
-            let (key, value): (K, V) = (key_value.get(0)?, key_value.get(1)?);
+        for entry in statement.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))? {
+            let (key, value): (K, V) = entry?;
             if let Err(error) = callback(key, value) {
                 return Err(IterationError::CallbackError(error));
             }
@@ -635,9 +633,8 @@ where
         P: Fn(&K, &V) -> bool,
     {
         let mut statement = self.connection.prepare_cached(SQL_ENUM_P_UND)?;
-        let mut result = statement.query([])?;
-        while let Some(key_value) = result.next()? {
-            let (key, value): (K, V) = (key_value.get(0)?, key_value.get(1)?);
+        for entry in statement.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))? {
+            let (key, value): (K, V) = entry?;
             if predicate(&key, &value) {
                 return Ok(Some((key, value)));
             }
@@ -681,9 +678,8 @@ where
         Q: ?Sized + ToSql,
     {
         let mut statement = self.connection.prepare_cached(if invert { SQL_GLOBN_PAIR } else { SQL_GLOBA_PAIR })?;
-        let mut result = statement.query([pattern])?;
-        while let Some(key_value) = result.next()? {
-            let (key, value): (K, V) = (key_value.get(0)?, key_value.get(1)?);
+        for entry in statement.query_map([pattern], |row| Ok((row.get(0)?, row.get(1)?)))? {
+            let (key, value): (K, V) = entry?;
             callback(key, value);
         }
         Ok(())
@@ -819,27 +815,17 @@ where
     ///
     /// Two maps are considered equal if and only if they contain the same keys with the same associated values, i.e., every key in the first set also exists in the second set with the same associated value and vice versa.
     fn try_eq(&self, other: &Self) -> Result<bool, Error> {
-        if addr_eq(self, other) {
-            return Ok(true);
-        }
-        let tx_1 = self.transaction_readonly()?;
-        let tx_2 = other.transaction_readonly()?;
-        let mut statement_query_1 = tx_1.transaction.prepare_cached(SQL_ENUM_P_UND)?;
-        let mut statement_find_1 = tx_1.transaction.prepare_cached(SQL_LOOKUP_KEY)?;
-        let mut statement_query_2 = tx_2.transaction.prepare_cached(SQL_ENUM_P_UND)?;
-        let mut statement_find_2 = tx_2.transaction.prepare_cached(SQL_LOOKUP_KEY)?;
-        let mut result_1 = statement_query_1.query([])?;
-        while let Some(key_value) = result_1.next()? {
-            let (key, value_1): (K, V) = (key_value.get(0)?, key_value.get(1)?);
-            if !statement_find_2.query_one([key], |row| row.get::<_, V>(0)).optional()?.is_some_and(|value_2| value_2.eq(&value_1)) {
-                return Ok(false);
-            }
-        }
-        let mut result_2 = statement_query_2.query([])?;
-        while let Some(key_value) = result_2.next()? {
-            let (key, value_2): (K, V) = (key_value.get(0)?, key_value.get(1)?);
-            if !statement_find_1.query_one([key], |row| row.get::<_, V>(0)).optional()?.is_some_and(|value_1| value_1.eq(&value_2)) {
-                return Ok(false);
+        if !addr_eq(self, other) {
+            let (tx_1, tx_2) = self.transaction_readonly().and_then(|tx_1| other.transaction_readonly().map(|tx_2| (tx_1, tx_2)))?;
+            for b in [true, false] {
+                let mut statement_enum = if b { tx_1.transaction.prepare_cached(SQL_ENUM_P_UND)? } else { tx_2.transaction.prepare_cached(SQL_ENUM_P_UND)? };
+                let mut statement_find = if b { tx_2.transaction.prepare_cached(SQL_LOOKUP_KEY)? } else { tx_1.transaction.prepare_cached(SQL_LOOKUP_KEY)? };
+                for entry in statement_enum.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))? {
+                    let (key, value_1): (K, V) = entry?;
+                    if !statement_find.query_one([key], |row| row.get::<_, V>(0)).optional()?.is_some_and(|value_2| value_2.eq(&value_1)) {
+                        return Ok(false);
+                    }
+                }
             }
         }
         Ok(true)
@@ -1017,10 +1003,9 @@ where
     pub fn extend_map(&mut self, other: &SQLiteMap<K, V>, update: bool) -> Result<Option<(Size, Size)>, Error> {
         let mut statement_insert = self.transaction.prepare_cached(if update { SQL_UPSERT_KEY } else { SQL_INSERT_KEY })?;
         let mut statement_reader = other.connection.prepare_cached(SQL_ENUM_P_UND)?;
-        let mut result = statement_reader.query([])?;
         let mut counter = (Size::default(), Size::default());
-        while let Some(key_value) = result.next()? {
-            let (key, value): (K, V) = (key_value.get(0)?, key_value.get(1)?);
+        for entry in statement_reader.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))? {
+            let (key, value): (K, V) = entry?;
             if !update {
                 if check_constraint(statement_insert.execute(params![key, value]))? {
                     increment(&mut counter.0);
@@ -1181,9 +1166,8 @@ where
         F: FnMut(K, V),
     {
         let mut statement = self.transaction.prepare_cached(order.get(SQL_ENUM_P_ASC, SQL_ENUM_P_DSC, SQL_ENUM_P_UND))?;
-        let mut result = statement.query([])?;
-        while let Some(key_value) = result.next()? {
-            let (key, value): (K, V) = (key_value.get(0)?, key_value.get(1)?);
+        for entry in statement.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))? {
+            let (key, value): (K, V) = entry?;
             callback(key, value);
         }
         Ok(())
@@ -1196,9 +1180,8 @@ where
         F: FnMut(K, V) -> Result<(), E>,
     {
         let mut statement = self.transaction.prepare_cached(order.get(SQL_ENUM_P_ASC, SQL_ENUM_P_DSC, SQL_ENUM_P_UND))?;
-        let mut result = statement.query([])?;
-        while let Some(key_value) = result.next()? {
-            let (key, value): (K, V) = (key_value.get(0)?, key_value.get(1)?);
+        for entry in statement.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))? {
+            let (key, value): (K, V) = entry?;
             if let Err(error) = callback(key, value) {
                 return Err(IterationError::CallbackError(error));
             }
@@ -1229,9 +1212,8 @@ where
         P: Fn(&K, &V) -> bool,
     {
         let mut statement = self.transaction.prepare_cached(SQL_ENUM_P_UND)?;
-        let mut result = statement.query([])?;
-        while let Some(key_value) = result.next()? {
-            let (key, value): (K, V) = (key_value.get(0)?, key_value.get(1)?);
+        for entry in statement.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))? {
+            let (key, value): (K, V) = entry?;
             if predicate(&key, &value) {
                 return Ok(Some((key, value)));
             }
@@ -1263,9 +1245,8 @@ where
         Q: ?Sized + ToSql,
     {
         let mut statement = self.transaction.prepare_cached(if invert { SQL_GLOBN_PAIR } else { SQL_GLOBA_PAIR })?;
-        let mut result = statement.query([pattern])?;
-        while let Some(key_value) = result.next()? {
-            let (key, value): (K, V) = (key_value.get(0)?, key_value.get(1)?);
+        for entry in statement.query_map([pattern], |row| Ok((row.get(0)?, row.get(1)?)))? {
+            let (key, value): (K, V) = entry?;
             callback(key, value);
         }
         Ok(())

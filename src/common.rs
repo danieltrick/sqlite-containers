@@ -350,7 +350,7 @@ where
     connection.execute(sql_create_table, [])?;
 
     if path_option.is_some() {
-        let sql_schema_table: String = connection.query_one(sql_get_schema, [], |row| row.get(0))?;
+        let sql_schema_table: String = connection.prepare_cached(sql_get_schema)?.query_one([], |row| row.get(0))?;
         if !verify_schema(sql_create_table, &sql_schema_table) {
             return Err(Error::InvalidSchema);
         }
@@ -473,7 +473,7 @@ fn trim_schema_str(sql: &str) -> &str {
 }
 
 #[inline(always)]
-pub(crate) fn verify_schema(sql_create: &str, sql_schema: &str) -> bool {
+pub fn verify_schema(sql_create: &str, sql_schema: &str) -> bool {
     trim_schema_str(sql_create).eq(trim_schema_str(sql_schema))
 }
 
@@ -497,7 +497,7 @@ cfg_if! {
 }
 
 #[inline(always)]
-pub(crate) fn increment(value: &mut Size) {
+pub fn increment(value: &mut Size) {
     *value = value.saturating_add(1)
 }
 
