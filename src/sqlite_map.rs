@@ -760,6 +760,38 @@ where
         Ok(new_map)
     }
 
+    /// Returns a new [`Vec`](std::vec::Vec) containing *all* keys that are currently contained in the map.
+    ///
+    /// The keys are stored in the resulting `Vec` in the specified key [`order`](crate::Order).
+    #[inline]
+    pub fn to_key_vec(&self, order: Order) -> Result<Vec<K>, Error> {
+        let tx = self.transaction_readonly()?;
+        let mut statement_rows = tx.transaction.prepare_cached(SQL_COUNT_KEYS)?;
+        let mut statement_enum = tx.transaction.prepare_cached(order.get(SQL_ENUM_K_ASC, SQL_ENUM_K_DSC, SQL_ENUM_K_UND))?;
+        let count: i64 = statement_rows.query_one([], |row| row.get(0))?;
+        let mut new_vec = count.try_into().map(Vec::with_capacity).unwrap_or_else(|_| Vec::new());
+        for key in statement_enum.query_map([], |row| row.get(0))? {
+            new_vec.push(key?);
+        }
+        Ok(new_vec)
+    }
+
+    /// Returns a new [`Vec`](std::vec::Vec) containing *all* key-value pairs that are currently contained in the map.
+    ///
+    /// The key-value pairs are stored in the resulting `Vec` in the specified key [`order`](crate::Order).
+    #[inline]
+    pub fn to_entry_vec(&self, order: Order) -> Result<Vec<(K, V)>, Error> {
+        let tx = self.transaction_readonly()?;
+        let mut statement_rows = tx.transaction.prepare_cached(SQL_COUNT_KEYS)?;
+        let mut statement_enum = tx.transaction.prepare_cached(order.get(SQL_ENUM_P_ASC, SQL_ENUM_P_DSC, SQL_ENUM_P_UND))?;
+        let count: i64 = statement_rows.query_one([], |row| row.get(0))?;
+        let mut new_vec = count.try_into().map(Vec::with_capacity).unwrap_or_else(|_| Vec::new());
+        for entry in statement_enum.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))? {
+            new_vec.push(entry?);
+        }
+        Ok(new_vec)
+    }
+
     /// Creates a new [`SQLiteSet`] that contains *all* keys contained in this map.
     ///
     /// The created set is case-sensitive.

@@ -4710,6 +4710,150 @@ fn test_sqlite_map_updatehook_transacted() {
 }
 
 // ---------------------------------------------------------------------------
+// SQLiteMap ToVec Test
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_sqlite_map_to_vec_i64() {
+    let mut map = SQLiteMap::<i64, String>::new().unwrap();
+    assert!(map.to_entry_vec(Order::UND).unwrap().is_empty());
+
+    {
+        let mut tx = map.transaction().unwrap();
+        assert!(tx.insert(0i64, "ponmlkji".to_owned()).unwrap());
+        assert!(tx.insert(i64::MIN, "stuvwxyz".to_owned()).unwrap());
+        assert!(tx.insert(2147483647i64, "abcdefgh".to_owned()).unwrap());
+        assert!(tx.insert(i64::MAX, "zyxwvuts".to_owned()).unwrap());
+        assert!(tx.insert(42i64, "ijklmnop".to_owned()).unwrap());
+        assert!(tx.insert(524287i64, "deadbeef".to_owned()).unwrap());
+        assert!(tx.insert(-12i64, "cafebabe".to_owned()).unwrap());
+    }
+
+    let vec_keys_asc = map.to_key_vec(Order::ASC).unwrap();
+    let vec_keys_dsc = map.to_key_vec(Order::DSC).unwrap();
+    let vec_keys_und = map.to_key_vec(Order::UND).unwrap();
+
+    assert_eq!(vec_keys_asc, [i64::MIN, -12i64, 0i64, 42i64, 524287i64, 2147483647i64, i64::MAX,]);
+    assert_eq!(vec_keys_dsc, [i64::MAX, 2147483647i64, 524287i64, 42i64, 0i64, -12i64, i64::MIN,]);
+    assert_eq!(vec_keys_und.len(), 7);
+    for key in [i64::MIN, -12i64, 0i64, 42i64, 524287i64, 2147483647i64, i64::MAX] {
+        assert!(vec_keys_und.contains(&key));
+    }
+
+    let vec_entries_asc = map.to_entry_vec(Order::ASC).unwrap();
+    let vec_entries_dsc = map.to_entry_vec(Order::DSC).unwrap();
+    let vec_entries_und = map.to_entry_vec(Order::UND).unwrap();
+
+    assert_eq!(
+        vec_entries_asc,
+        [
+            (i64::MIN, "stuvwxyz".to_owned()),
+            (-12i64, "cafebabe".to_owned()),
+            (0i64, "ponmlkji".to_owned()),
+            (42i64, "ijklmnop".to_owned()),
+            (524287i64, "deadbeef".to_owned()),
+            (2147483647i64, "abcdefgh".to_owned()),
+            (i64::MAX, "zyxwvuts".to_owned()),
+        ]
+    );
+    assert_eq!(
+        vec_entries_dsc,
+        [
+            (i64::MAX, "zyxwvuts".to_owned()),
+            (2147483647i64, "abcdefgh".to_owned()),
+            (524287i64, "deadbeef".to_owned()),
+            (42i64, "ijklmnop".to_owned()),
+            (0i64, "ponmlkji".to_owned()),
+            (-12i64, "cafebabe".to_owned()),
+            (i64::MIN, "stuvwxyz".to_owned()),
+        ]
+    );
+
+    assert_eq!(vec_entries_und.len(), 7);
+    for entry in [
+        (i64::MIN, "stuvwxyz".to_owned()),
+        (-12i64, "cafebabe".to_owned()),
+        (0i64, "ponmlkji".to_owned()),
+        (42i64, "ijklmnop".to_owned()),
+        (524287i64, "deadbeef".to_owned()),
+        (2147483647i64, "abcdefgh".to_owned()),
+        (i64::MAX, "zyxwvuts".to_owned()),
+    ] {
+        assert!(vec_entries_und.contains(&entry));
+    }
+}
+
+#[test]
+fn test_sqlite_map_to_vec_string() {
+    let mut map = SQLiteMap::<String, String>::new().unwrap();
+    assert!(map.to_entry_vec(Order::UND).unwrap().is_empty());
+
+    {
+        let mut tx = map.transaction().unwrap();
+        assert!(tx.insert("mmm".to_owned(), "12345678".to_owned()).unwrap());
+        assert!(tx.insert("aaa".to_owned(), "87654321".to_owned()).unwrap());
+        assert!(tx.insert("zzz".to_owned(), "abcdefgh".to_owned()).unwrap());
+        assert!(tx.insert("bbb".to_owned(), "hgfedcba".to_owned()).unwrap());
+        assert!(tx.insert("yyy".to_owned(), "deadbeef".to_owned()).unwrap());
+        assert!(tx.insert("ccc".to_owned(), "cafebabe".to_owned()).unwrap());
+        assert!(tx.insert("xxx".to_owned(), "zyxwvuts".to_owned()).unwrap());
+    }
+
+    let vec_keys_asc = map.to_key_vec(Order::ASC).unwrap();
+    let vec_keys_dsc = map.to_key_vec(Order::DSC).unwrap();
+    let vec_keys_und = map.to_key_vec(Order::UND).unwrap();
+
+    assert_eq!(vec_keys_asc, ["aaa".to_owned(), "bbb".to_owned(), "ccc".to_owned(), "mmm".to_owned(), "xxx".to_owned(), "yyy".to_owned(), "zzz".to_owned(),]);
+    assert_eq!(vec_keys_dsc, ["zzz".to_owned(), "yyy".to_owned(), "xxx".to_owned(), "mmm".to_owned(), "ccc".to_owned(), "bbb".to_owned(), "aaa".to_owned(),]);
+    assert_eq!(vec_keys_und.len(), 7);
+    for key in ["aaa".to_owned(), "bbb".to_owned(), "ccc".to_owned(), "mmm".to_owned(), "xxx".to_owned(), "yyy".to_owned(), "zzz".to_owned()] {
+        assert!(vec_keys_und.contains(&key));
+    }
+
+    let vec_entries_asc = map.to_entry_vec(Order::ASC).unwrap();
+    let vec_entries_dsc = map.to_entry_vec(Order::DSC).unwrap();
+    let vec_entries_und = map.to_entry_vec(Order::UND).unwrap();
+
+    assert_eq!(
+        vec_entries_asc,
+        [
+            ("aaa".to_owned(), "87654321".to_owned()),
+            ("bbb".to_owned(), "hgfedcba".to_owned()),
+            ("ccc".to_owned(), "cafebabe".to_owned()),
+            ("mmm".to_owned(), "12345678".to_owned()),
+            ("xxx".to_owned(), "zyxwvuts".to_owned()),
+            ("yyy".to_owned(), "deadbeef".to_owned()),
+            ("zzz".to_owned(), "abcdefgh".to_owned()),
+        ]
+    );
+    assert_eq!(
+        vec_entries_dsc,
+        [
+            ("zzz".to_owned(), "abcdefgh".to_owned()),
+            ("yyy".to_owned(), "deadbeef".to_owned()),
+            ("xxx".to_owned(), "zyxwvuts".to_owned()),
+            ("mmm".to_owned(), "12345678".to_owned()),
+            ("ccc".to_owned(), "cafebabe".to_owned()),
+            ("bbb".to_owned(), "hgfedcba".to_owned()),
+            ("aaa".to_owned(), "87654321".to_owned()),
+        ]
+    );
+
+    assert_eq!(vec_entries_und.len(), 7);
+    for entry in [
+        ("aaa".to_owned(), "87654321".to_owned()),
+        ("bbb".to_owned(), "hgfedcba".to_owned()),
+        ("ccc".to_owned(), "cafebabe".to_owned()),
+        ("mmm".to_owned(), "12345678".to_owned()),
+        ("xxx".to_owned(), "zyxwvuts".to_owned()),
+        ("yyy".to_owned(), "deadbeef".to_owned()),
+        ("zzz".to_owned(), "abcdefgh".to_owned()),
+    ] {
+        assert!(vec_entries_und.contains(&entry));
+    }
+}
+
+// ---------------------------------------------------------------------------
 // SQLiteMap ToSet Test
 // ---------------------------------------------------------------------------
 

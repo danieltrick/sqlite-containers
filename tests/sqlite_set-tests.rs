@@ -2378,6 +2378,68 @@ fn test_sqlite_set_to_map_string() {
 }
 
 // ---------------------------------------------------------------------------
+// SQLiteSet ToVec Test
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_sqlite_set_to_vec_i64() {
+    let mut set = SQLiteSet::<i64>::new().unwrap();
+    assert!(set.to_vec(Order::UND).unwrap().is_empty());
+
+    {
+        let mut tx = set.transaction().unwrap();
+        assert!(tx.insert(0i64).unwrap());
+        assert!(tx.insert(i64::MIN).unwrap());
+        assert!(tx.insert(2147483647i64).unwrap());
+        assert!(tx.insert(i64::MAX).unwrap());
+        assert!(tx.insert(42i64).unwrap());
+        assert!(tx.insert(524287i64).unwrap());
+        assert!(tx.insert(-12i64).unwrap());
+    }
+
+    let vec_asc = set.to_vec(Order::ASC).unwrap();
+    let vec_dsc = set.to_vec(Order::DSC).unwrap();
+    let vec_und = set.to_vec(Order::UND).unwrap();
+
+    assert_eq!(vec_asc, [i64::MIN, -12i64, 0i64, 42i64, 524287i64, 2147483647i64, i64::MAX]);
+    assert_eq!(vec_dsc, [i64::MAX, 2147483647i64, 524287i64, 42i64, 0i64, -12i64, i64::MIN]);
+
+    assert_eq!(vec_und.len(), 7);
+    for key in [i64::MIN, -12i64, 0i64, 42i64, 524287i64, 2147483647i64, i64::MAX] {
+        assert!(vec_und.contains(&key));
+    }
+}
+
+#[test]
+fn test_sqlite_set_to_vec_string() {
+    let mut set = SQLiteSet::<String>::new().unwrap();
+    assert!(set.to_vec(Order::UND).unwrap().is_empty());
+
+    {
+        let mut tx = set.transaction().unwrap();
+        tx.insert_ref("mmm").unwrap();
+        tx.insert_ref("aaa").unwrap();
+        tx.insert_ref("zzz").unwrap();
+        tx.insert_ref("bbb").unwrap();
+        tx.insert_ref("yyy").unwrap();
+        tx.insert_ref("ccc").unwrap();
+        tx.insert_ref("xxx").unwrap();
+    }
+
+    let vec_asc = set.to_vec(Order::ASC).unwrap();
+    let vec_dsc = set.to_vec(Order::DSC).unwrap();
+    let vec_und = set.to_vec(Order::UND).unwrap();
+
+    assert_eq!(vec_asc, ["aaa", "bbb", "ccc", "mmm", "xxx", "yyy", "zzz"].map(str::to_owned));
+    assert_eq!(vec_dsc, ["zzz", "yyy", "xxx", "mmm", "ccc", "bbb", "aaa"].map(str::to_owned));
+
+    assert_eq!(vec_und.len(), 7);
+    for key in ["aaa", "bbb", "ccc", "mmm", "xxx", "yyy", "zzz"].map(str::to_owned) {
+        assert!(vec_und.contains(&key));
+    }
+}
+
+// ---------------------------------------------------------------------------
 // SQLiteSet Clone Test
 // ---------------------------------------------------------------------------
 
