@@ -4,6 +4,52 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/).
 
+## [2.4.0] - 2026-10-27
+
+### Added
+
+- Added new functions `SQLiteMap::take()` and `SQLiteMap::take_nocase()`.
+- Added new functions `SQLiteMap::replace()` and `SQLiteMap::replace_ref()`.
+- Added new functions `SQLiteMap::or()` and `SQLiteMap::or_nocase()`.
+- Added new functions `SQLiteMap::drain()` and `SQLiteMap::drain_glob()`.
+- Added new functions `SQLiteSet::remove_all()` and `SQLiteSet::remove_all_nocase()`.
+- Added new function `SQLiteSet::remove_set_nocase()`.
+- Added new functions `SQLiteSet::or()` and `SQLiteSet::or_nocase()`.
+- Added new functions `SQLiteSet::sub()` and `SQLiteSet::sub_nocase()`.
+- Added new functions `SQLiteSet::xor()` and `SQLiteSet::xor_nocase()`.
+- Added new functions `SQLiteSet::drain()` and `SQLiteSet::drain_glob()`.
+- Added new function `SQLiteSet::to_vec()`.
+- Added new functions `SQLiteMap::to_key_vec()` and `SQLiteMap::to_entry_vec()`.
+- Added new functions `SQLiteSet::to_hash()` and `SQLiteMap::to_hash()`.
+- Added new enum `Order`, which is used to specify the iteration order.
+- Added new parameter `order` to the `SQLiteSet::for_each()` function.
+- Added new parameter `order` to the `SQLiteSet::try_for_each()` function.
+- Added new parameter `order` to the `SQLiteMap::for_each_key()` function.
+- Added new parameter `order` to the `SQLiteMap::try_for_each_key()` function.
+- Added new parameter `order` to the `SQLiteMap::for_each_entry()` function.
+- Added new parameter `order` to the `SQLiteMap::try_for_each_entry()` function.
+- Added new trait `TryEq`, which is implemented by the `SQLiteMap` and `SQLiteSet` structs.
+- Added new wrapper structs `CloneWrapper` and `EqWrapper`.
+- Added new error variant `Error::InvalidPath`.
+
+### Changed
+
+- The `SQLiteMap::extend()` and `SQLiteMap::extend_ref()` functions now support the `update` parameter.
+- Function `SQLiteMap::union()` was renamed to `SQLiteMap::extend_map()`.
+- Function `SQLiteSet::union()` was renamed to `SQLiteSet::extend_set()`.
+- Function `SQLiteSet::difference()` was renamed to `SQLiteSet::remove_set()`.
+- Function `SQLiteSet::intersection()` was renamed to `SQLiteSet::and()`.
+- Function `SQLiteSet::intersection_nocase()` was renamed to `SQLiteSet::and_nocase()`.
+- Improved the `SQLiteMap::to_file()` and `SQLiteSet::to_file()` functions.
+- Error variant `Error::InitializationFailed` was renamed to `Error::InitDbConnFailed`.
+- Updated the `rusqlite` dependency to version 0.41.0 and bumped the MSRV to 1.89.0.
+- The `backup` feature is now enabled by default.
+- Improved test coverage for `SQLiteMap` and `SQLiteSet` operations.
+
+### Removed
+
+- Removed the now-unused error variant `Error::SourceAndDestSame`.
+
 ## [2.3.0] - 2026-10-22
 
 ### Added

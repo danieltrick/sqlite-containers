@@ -2,7 +2,7 @@
 name = "sqlite-containers"
 description = "SQLite-based containers for Rust"
 keywords = ["sqlite", "hashmap", "hashset", "database", "collections"]
-version = "2.4.0-dev"
+version = "2.4.0"
 edition = "2024"
 rust-version = "1.89.0"
 authors = ["Daniel Trick <daniel.trick@sit.fraunhofer.de>"]
