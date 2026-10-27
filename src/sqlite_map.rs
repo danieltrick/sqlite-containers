@@ -142,6 +142,9 @@ const SQL_DELETE_NOC: &str = concatcp!("DELETE FROM ", TABLE_NAME, " WHERE key C
 const SQL_DELETE_ALL: &str = concatcp!("DELETE FROM ", TABLE_NAME, ";");
 const SQL_RETURN_KEY: &str = concatcp!("DELETE FROM ", TABLE_NAME, " WHERE key = ?1 RETURNING value;");
 const SQL_RETURN_NOC: &str = concatcp!("DELETE FROM ", TABLE_NAME, " WHERE key COLLATE NOCASE = ?1 RETURNING value;");
+const SQL_DRAIN_PAIR: &str = concatcp!("DELETE FROM ", TABLE_NAME, " RETURNING key, value;");
+const SQL_DRAIN_GLOB: &str = concatcp!("DELETE FROM ", TABLE_NAME, " WHERE key GLOB ?1 RETURNING key, value;");
+const SQL_DRAIN_NGLB: &str = concatcp!("DELETE FROM ", TABLE_NAME, " WHERE key NOT GLOB ?1 RETURNING key, value;");
 const SQL_STORE_INTO: &str = concatcp!("VACUUM INTO ?1;");
 
 // ---------------------------------------------------------------------------
@@ -712,6 +715,42 @@ where
         Q: ?Sized + ToSql,
     {
         let mut statement = self.connection.prepare_cached(if invert { SQL_GLOBN_PAIR } else { SQL_GLOBA_PAIR })?;
+        for entry in statement.query_map([pattern], |row| Ok((row.get(0)?, row.get(1)?)))? {
+            let (key, value): (K, V) = entry?;
+            callback(key, value);
+        }
+        Ok(())
+    }
+
+    /// Removes all key-value pairs from the map and invokes the `callback` function for each removed pair.
+    #[inline]
+    pub fn drain<F>(&self, mut callback: F) -> Result<(), Error>
+    where
+        F: FnMut(K, V),
+    {
+        let mut statement = self.connection.prepare_cached(SQL_DRAIN_PAIR)?;
+        for entry in statement.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))? {
+            let (key, value): (K, V) = entry?;
+            callback(key, value);
+        }
+        Ok(())
+    }
+
+    /// Removes all key-value pairs matching the given pattern and invokes the `callback` function for each removed pair.
+    ///
+    /// The pattern string is interpreted according to the [UNIX *globbing*](https://man7.org/linux/man-pages/man7/glob.7.html) rules. Specifically, a `?` character (not between brackets) matches any single character, and a `*` character (not between brackets) matches any string, including the empty string. Additionally, an expression `[…]` where the first character after the leading `[` is *not* an `!` matches a single character that can be any of the characters enclosed by the brackets; and an expression `[!…]` matches a single character that is *not* matched by the expression.
+    ///
+    /// This function is case-sensitive and does **not** guarantee a specific iteration order.
+    ///
+    /// If `invert` is `true`, removes all key-value pairs that do **not** match the pattern; otherwise the matching pairs are removed.
+    #[inline]
+    pub fn drain_glob<F, Q>(&self, invert: bool, pattern: &Q, mut callback: F) -> Result<(), Error>
+    where
+        F: FnMut(K, V),
+        K: Borrow<Q> + CharType,
+        Q: ?Sized + ToSql,
+    {
+        let mut statement = self.connection.prepare_cached(if invert { SQL_DRAIN_NGLB } else { SQL_DRAIN_GLOB })?;
         for entry in statement.query_map([pattern], |row| Ok((row.get(0)?, row.get(1)?)))? {
             let (key, value): (K, V) = entry?;
             callback(key, value);
@@ -1357,6 +1396,36 @@ where
         Q: ?Sized + ToSql,
     {
         let mut statement = self.transaction.prepare_cached(if invert { SQL_GLOBN_PAIR } else { SQL_GLOBA_PAIR })?;
+        for entry in statement.query_map([pattern], |row| Ok((row.get(0)?, row.get(1)?)))? {
+            let (key, value): (K, V) = entry?;
+            callback(key, value);
+        }
+        Ok(())
+    }
+
+    /// This function is equivalent to [`SQLiteMap::drain()`].
+    #[inline]
+    pub fn drain<F>(&self, mut callback: F) -> Result<(), Error>
+    where
+        F: FnMut(K, V),
+    {
+        let mut statement = self.transaction.prepare_cached(SQL_DRAIN_PAIR)?;
+        for entry in statement.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))? {
+            let (key, value): (K, V) = entry?;
+            callback(key, value);
+        }
+        Ok(())
+    }
+
+    /// This function is equivalent to [`SQLiteMap::drain_glob()`].
+    #[inline]
+    pub fn drain_glob<F, Q>(&self, invert: bool, pattern: &Q, mut callback: F) -> Result<(), Error>
+    where
+        F: FnMut(K, V),
+        K: Borrow<Q>,
+        Q: ?Sized + ToSql,
+    {
+        let mut statement = self.transaction.prepare_cached(if invert { SQL_DRAIN_NGLB } else { SQL_DRAIN_GLOB })?;
         for entry in statement.query_map([pattern], |row| Ok((row.get(0)?, row.get(1)?)))? {
             let (key, value): (K, V) = entry?;
             callback(key, value);

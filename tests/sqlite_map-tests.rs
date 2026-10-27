@@ -808,6 +808,49 @@ fn test_sqlite_map_i64_string_words() {
     }
 }
 
+#[test]
+fn test_sqlite_map_i64_string_drain() {
+    for transacted in [false, true] {
+        let mut map = SQLiteMap::<i64, String>::new().unwrap();
+
+        {
+            let mut tx = map.transaction().unwrap();
+            assert!(tx.insert(0i64, "12345678".to_owned()).unwrap());
+            assert!(tx.insert(42i64, "87654321".to_owned()).unwrap());
+            assert!(tx.insert(2147483647i64, "abcdefgh".to_owned()).unwrap());
+            assert!(tx.insert(i64::MIN, "hgfedcba".to_owned()).unwrap());
+        }
+
+        let mut hash = HashMap::new();
+
+        if !transacted {
+            map.drain(|key, value| {
+                hash.insert(key, value);
+            })
+            .unwrap();
+        } else {
+            let tx = map.transaction().unwrap();
+            tx.drain(|key, value| {
+                hash.insert(key, value);
+            })
+            .unwrap();
+        }
+
+        assert_eq!(map.len().unwrap(), 0);
+        assert_eq!(hash.len(), 4);
+
+        assert!(hash.get(&42i64).is_some_and(|value| value.eq("87654321")));
+        assert!(hash.get(&2147483647i64).is_some_and(|value| value.eq("abcdefgh")));
+        assert!(hash.get(&0i64).is_some_and(|value| value.eq("12345678")));
+        assert!(hash.get(&i64::MIN).is_some_and(|value| value.eq("hgfedcba")));
+
+        assert!(!map.contains_key(&42i64).unwrap());
+        assert!(!map.contains_key(&2147483647i64).unwrap());
+        assert!(!map.contains_key(&0i64).unwrap());
+        assert!(!map.contains_key(&i64::MIN).unwrap());
+    }
+}
+
 // ---------------------------------------------------------------------------
 // SQLiteMap<Blob, String> Tests
 // ---------------------------------------------------------------------------
@@ -1563,6 +1606,49 @@ fn test_sqlite_map_blob_string_or() {
     assert!(map_3.get(&b"xyz"[..]).unwrap().is_some_and(|value| value.eq("hgfedcba")));
     assert!(map_3.get(&b"cor"[..]).unwrap().is_some_and(|value| value.eq("cafebabe")));
     assert!(map_3.get(&b"$?!"[..]).unwrap().is_none());
+}
+
+#[test]
+fn test_sqlite_map_blob_string_drain() {
+    for transacted in [false, true] {
+        let mut map = SQLiteMap::<Blob, String>::new().unwrap();
+
+        {
+            let mut tx = map.transaction().unwrap();
+            assert!(tx.insert(b"foo".to_vec(), "12345678".to_owned()).unwrap());
+            assert!(tx.insert(b"bar".to_vec(), "87654321".to_owned()).unwrap());
+            assert!(tx.insert(b"baz".to_vec(), "abcdefgh".to_owned()).unwrap());
+            assert!(tx.insert(b"xyz".to_vec(), "hgfedcba".to_owned()).unwrap());
+        }
+
+        let mut hash = HashMap::new();
+
+        if !transacted {
+            map.drain(|key, value| {
+                hash.insert(key, value);
+            })
+            .unwrap();
+        } else {
+            let tx = map.transaction().unwrap();
+            tx.drain(|key, value| {
+                hash.insert(key, value);
+            })
+            .unwrap();
+        }
+
+        assert_eq!(map.len().unwrap(), 0);
+        assert_eq!(hash.len(), 4);
+
+        assert!(hash.get(&b"bar"[..]).is_some_and(|value| value.eq("87654321")));
+        assert!(hash.get(&b"baz"[..]).is_some_and(|value| value.eq("abcdefgh")));
+        assert!(hash.get(&b"foo"[..]).is_some_and(|value| value.eq("12345678")));
+        assert!(hash.get(&b"xyz"[..]).is_some_and(|value| value.eq("hgfedcba")));
+
+        assert!(!map.contains_key(&b"bar"[..]).unwrap());
+        assert!(!map.contains_key(&b"baz"[..]).unwrap());
+        assert!(!map.contains_key(&b"foo"[..]).unwrap());
+        assert!(!map.contains_key(&b"xyz"[..]).unwrap());
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -2544,6 +2630,100 @@ fn test_sqlite_map_string_string_or_nocase() {
     assert!(map_3.get("$?!").unwrap().is_none());
 }
 
+#[test]
+fn test_sqlite_map_string_string_drain() {
+    for transacted in [false, true] {
+        let mut map = SQLiteMap::<String, String>::new().unwrap();
+
+        {
+            let mut tx = map.transaction().unwrap();
+            assert!(tx.insert("foo".to_owned(), "12345678".to_owned()).unwrap());
+            assert!(tx.insert("bar".to_owned(), "87654321".to_owned()).unwrap());
+            assert!(tx.insert("baz".to_owned(), "abcdefgh".to_owned()).unwrap());
+            assert!(tx.insert("xyz".to_owned(), "hgfedcba".to_owned()).unwrap());
+        }
+
+        let mut hash = HashMap::new();
+
+        if !transacted {
+            map.drain(|key, value| {
+                hash.insert(key, value);
+            })
+            .unwrap();
+        } else {
+            let tx = map.transaction().unwrap();
+            tx.drain(|key, value| {
+                hash.insert(key, value);
+            })
+            .unwrap();
+        }
+
+        assert_eq!(map.len().unwrap(), 0);
+        assert_eq!(hash.len(), 4);
+
+        assert!(hash.get("bar").is_some_and(|value| value.eq("87654321")));
+        assert!(hash.get("baz").is_some_and(|value| value.eq("abcdefgh")));
+        assert!(hash.get("foo").is_some_and(|value| value.eq("12345678")));
+        assert!(hash.get("xyz").is_some_and(|value| value.eq("hgfedcba")));
+
+        assert!(!map.contains_key("bar").unwrap());
+        assert!(!map.contains_key("baz").unwrap());
+        assert!(!map.contains_key("foo").unwrap());
+        assert!(!map.contains_key("xyz").unwrap());
+    }
+}
+
+#[test]
+fn test_sqlite_map_string_string_drain_glob() {
+    for transacted in [false, true] {
+        for invert in [false, true] {
+            let mut map = SQLiteMap::<String, String>::new().unwrap();
+
+            {
+                let mut tx = map.transaction().unwrap();
+                assert!(tx.insert("foo".to_owned(), "12345678".to_owned()).unwrap());
+                assert!(tx.insert("bar".to_owned(), "87654321".to_owned()).unwrap());
+                assert!(tx.insert("baz".to_owned(), "abcdefgh".to_owned()).unwrap());
+                assert!(tx.insert("xyz".to_owned(), "hgfedcba".to_owned()).unwrap());
+            }
+
+            let mut hash = HashMap::new();
+
+            if !transacted {
+                map.drain_glob(invert, "ba?", |key, value| {
+                    hash.insert(key, value);
+                })
+                .unwrap();
+            } else {
+                let tx = map.transaction().unwrap();
+                tx.drain_glob(invert, "ba?", |key, value| {
+                    hash.insert(key, value);
+                })
+                .unwrap();
+            }
+
+            assert_eq!(map.len().unwrap(), 2);
+            assert_eq!(hash.len(), 2);
+
+            if !invert {
+                assert!(map.contains_key("foo").unwrap());
+                assert!(map.contains_key("xyz").unwrap());
+                assert!(!map.contains_key("bar").unwrap());
+                assert!(!map.contains_key("baz").unwrap());
+                assert!(hash.get("bar").is_some_and(|value| value.eq("87654321")));
+                assert!(hash.get("baz").is_some_and(|value| value.eq("abcdefgh")));
+            } else {
+                assert!(map.contains_key("bar").unwrap());
+                assert!(map.contains_key("baz").unwrap());
+                assert!(!map.contains_key("foo").unwrap());
+                assert!(!map.contains_key("xyz").unwrap());
+                assert!(hash.get("foo").is_some_and(|value| value.eq("12345678")));
+                assert!(hash.get("xyz").is_some_and(|value| value.eq("hgfedcba")));
+            }
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // SQLiteMap<String, Blob> Tests
 // ---------------------------------------------------------------------------
@@ -3488,6 +3668,100 @@ fn test_sqlite_map_string_blob_or() {
     assert!(map_3.get("$?!").unwrap().is_none());
 }
 
+#[test]
+fn test_sqlite_map_string_blob_drain() {
+    for transacted in [false, true] {
+        let mut map = SQLiteMap::<String, Blob>::new().unwrap();
+
+        {
+            let mut tx = map.transaction().unwrap();
+            assert!(tx.insert("foo".to_owned(), b"12345678".to_vec()).unwrap());
+            assert!(tx.insert("bar".to_owned(), b"87654321".to_vec()).unwrap());
+            assert!(tx.insert("baz".to_owned(), b"abcdefgh".to_vec()).unwrap());
+            assert!(tx.insert("xyz".to_owned(), b"hgfedcba".to_vec()).unwrap());
+        }
+
+        let mut hash = HashMap::new();
+
+        if !transacted {
+            map.drain(|key, value| {
+                hash.insert(key, value);
+            })
+            .unwrap();
+        } else {
+            let tx = map.transaction().unwrap();
+            tx.drain(|key, value| {
+                hash.insert(key, value);
+            })
+            .unwrap();
+        }
+
+        assert_eq!(map.len().unwrap(), 0);
+        assert_eq!(hash.len(), 4);
+
+        assert!(hash.get("bar").is_some_and(|value| value.eq(b"87654321")));
+        assert!(hash.get("baz").is_some_and(|value| value.eq(b"abcdefgh")));
+        assert!(hash.get("foo").is_some_and(|value| value.eq(b"12345678")));
+        assert!(hash.get("xyz").is_some_and(|value| value.eq(b"hgfedcba")));
+
+        assert!(!map.contains_key("bar").unwrap());
+        assert!(!map.contains_key("baz").unwrap());
+        assert!(!map.contains_key("foo").unwrap());
+        assert!(!map.contains_key("xyz").unwrap());
+    }
+}
+
+#[test]
+fn test_sqlite_map_string_blob_drain_glob() {
+    for transacted in [false, true] {
+        for invert in [false, true] {
+            let mut map = SQLiteMap::<String, Blob>::new().unwrap();
+
+            {
+                let mut tx = map.transaction().unwrap();
+                assert!(tx.insert("foo".to_owned(), b"12345678".to_vec()).unwrap());
+                assert!(tx.insert("bar".to_owned(), b"87654321".to_vec()).unwrap());
+                assert!(tx.insert("baz".to_owned(), b"abcdefgh".to_vec()).unwrap());
+                assert!(tx.insert("xyz".to_owned(), b"hgfedcba".to_vec()).unwrap());
+            }
+
+            let mut hash = HashMap::new();
+
+            if !transacted {
+                map.drain_glob(invert, "ba?", |key, value| {
+                    hash.insert(key, value);
+                })
+                .unwrap();
+            } else {
+                let tx = map.transaction().unwrap();
+                tx.drain_glob(invert, "ba?", |key, value| {
+                    hash.insert(key, value);
+                })
+                .unwrap();
+            }
+
+            assert_eq!(map.len().unwrap(), 2);
+            assert_eq!(hash.len(), 2);
+
+            if !invert {
+                assert!(map.contains_key("foo").unwrap());
+                assert!(map.contains_key("xyz").unwrap());
+                assert!(!map.contains_key("bar").unwrap());
+                assert!(!map.contains_key("baz").unwrap());
+                assert!(hash.get("bar").is_some_and(|value| value.eq(b"87654321")));
+                assert!(hash.get("baz").is_some_and(|value| value.eq(b"abcdefgh")));
+            } else {
+                assert!(map.contains_key("bar").unwrap());
+                assert!(map.contains_key("baz").unwrap());
+                assert!(!map.contains_key("foo").unwrap());
+                assert!(!map.contains_key("xyz").unwrap());
+                assert!(hash.get("foo").is_some_and(|value| value.eq(b"12345678")));
+                assert!(hash.get("xyz").is_some_and(|value| value.eq(b"hgfedcba")));
+            }
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // SQLiteMap<String, i64> Tests
 // ---------------------------------------------------------------------------
@@ -4418,6 +4692,100 @@ fn test_sqlite_map_string_i64_or() {
     assert!(map_3.get("xyz").unwrap().is_some_and(|value| value.eq(&0xFEDCBA09i64)));
     assert!(map_3.get("cor").unwrap().is_some_and(|value| value.eq(&0xCAFEBABEi64)));
     assert!(map_3.get("$?!").unwrap().is_none());
+}
+
+#[test]
+fn test_sqlite_map_string_i64_drain() {
+    for transacted in [false, true] {
+        let mut map = SQLiteMap::<String, i64>::new().unwrap();
+
+        {
+            let mut tx = map.transaction().unwrap();
+            assert!(tx.insert("foo".to_owned(), 0x12345678i64).unwrap());
+            assert!(tx.insert("bar".to_owned(), 0x87654321i64).unwrap());
+            assert!(tx.insert("baz".to_owned(), 0x9ABCDEF0i64).unwrap());
+            assert!(tx.insert("xyz".to_owned(), 0xCAFEBABEi64).unwrap());
+        }
+
+        let mut hash = HashMap::new();
+
+        if !transacted {
+            map.drain(|key, value| {
+                hash.insert(key, value);
+            })
+            .unwrap();
+        } else {
+            let tx = map.transaction().unwrap();
+            tx.drain(|key, value| {
+                hash.insert(key, value);
+            })
+            .unwrap();
+        }
+
+        assert_eq!(map.len().unwrap(), 0);
+        assert_eq!(hash.len(), 4);
+
+        assert!(hash.get("bar").is_some_and(|value| value.eq(&0x87654321i64)));
+        assert!(hash.get("baz").is_some_and(|value| value.eq(&0x9ABCDEF0i64)));
+        assert!(hash.get("foo").is_some_and(|value| value.eq(&0x12345678i64)));
+        assert!(hash.get("xyz").is_some_and(|value| value.eq(&0xCAFEBABEi64)));
+
+        assert!(!map.contains_key("bar").unwrap());
+        assert!(!map.contains_key("baz").unwrap());
+        assert!(!map.contains_key("foo").unwrap());
+        assert!(!map.contains_key("xyz").unwrap());
+    }
+}
+
+#[test]
+fn test_sqlite_map_string_i64_drain_glob() {
+    for transacted in [false, true] {
+        for invert in [false, true] {
+            let mut map = SQLiteMap::<String, i64>::new().unwrap();
+
+            {
+                let mut tx = map.transaction().unwrap();
+                assert!(tx.insert("foo".to_owned(), 0x12345678i64).unwrap());
+                assert!(tx.insert("bar".to_owned(), 0x87654321i64).unwrap());
+                assert!(tx.insert("baz".to_owned(), 0x9ABCDEF0i64).unwrap());
+                assert!(tx.insert("xyz".to_owned(), 0xCAFEBABEi64).unwrap());
+            }
+
+            let mut hash = HashMap::new();
+
+            if !transacted {
+                map.drain_glob(invert, "ba?", |key, value| {
+                    hash.insert(key, value);
+                })
+                .unwrap();
+            } else {
+                let tx = map.transaction().unwrap();
+                tx.drain_glob(invert, "ba?", |key, value| {
+                    hash.insert(key, value);
+                })
+                .unwrap();
+            }
+
+            assert_eq!(map.len().unwrap(), 2);
+            assert_eq!(hash.len(), 2);
+
+            if !invert {
+                assert!(map.contains_key("foo").unwrap());
+                assert!(map.contains_key("xyz").unwrap());
+                assert!(!map.contains_key("bar").unwrap());
+                assert!(!map.contains_key("baz").unwrap());
+                assert!(hash.get("bar").is_some_and(|value| value.eq(&0x87654321i64)));
+                assert!(hash.get("baz").is_some_and(|value| value.eq(&0x9ABCDEF0i64)));
+            } else {
+                assert!(map.contains_key("bar").unwrap());
+                assert!(map.contains_key("baz").unwrap());
+                assert!(!map.contains_key("foo").unwrap());
+                assert!(!map.contains_key("xyz").unwrap());
+                assert!(hash.get("foo").is_some_and(|value| value.eq(&0x12345678i64)));
+                assert!(hash.get("xyz").is_some_and(|value| value.eq(&0xCAFEBABEi64)));
+            }
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------

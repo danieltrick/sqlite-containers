@@ -612,6 +612,49 @@ fn test_sqlite_set_i64_string_words() {
     }
 }
 
+#[test]
+fn test_sqlite_set_i64_drain() {
+    for transacted in [false, true] {
+        let mut set = SQLiteSet::<i64>::new().unwrap();
+
+        {
+            let mut tx = set.transaction().unwrap();
+            assert!(tx.insert(0i64).unwrap());
+            assert!(tx.insert(42i64).unwrap());
+            assert!(tx.insert(2147483647i64).unwrap());
+            assert!(tx.insert(i64::MIN).unwrap());
+        }
+
+        let mut hash = HashSet::new();
+
+        if !transacted {
+            set.drain(|key| {
+                hash.insert(key);
+            })
+            .unwrap();
+        } else {
+            let tx = set.transaction().unwrap();
+            tx.drain(|key| {
+                hash.insert(key);
+            })
+            .unwrap();
+        }
+
+        assert_eq!(set.len().unwrap(), 0);
+        assert_eq!(hash.len(), 4);
+
+        assert!(hash.contains(&42i64));
+        assert!(hash.contains(&2147483647i64));
+        assert!(hash.contains(&0i64));
+        assert!(hash.contains(&i64::MIN));
+
+        assert!(!set.contains(&42i64).unwrap());
+        assert!(!set.contains(&2147483647i64).unwrap());
+        assert!(!set.contains(&0i64).unwrap());
+        assert!(!set.contains(&i64::MIN).unwrap());
+    }
+}
+
 // ---------------------------------------------------------------------------
 // SQLiteSet<String> Tests
 // ---------------------------------------------------------------------------
@@ -1475,6 +1518,100 @@ fn test_sqlite_set_string_xor_nocase() {
     assert!(!set_3.contains("$?!").unwrap());
 }
 
+#[test]
+fn test_sqlite_set_string_drain() {
+    for transacted in [false, true] {
+        let mut set = SQLiteSet::<String>::new().unwrap();
+
+        {
+            let mut tx = set.transaction().unwrap();
+            assert!(tx.insert("foo".to_owned()).unwrap());
+            assert!(tx.insert("bar".to_owned()).unwrap());
+            assert!(tx.insert("baz".to_owned()).unwrap());
+            assert!(tx.insert("xyz".to_owned()).unwrap());
+        }
+
+        let mut hash = HashSet::new();
+
+        if !transacted {
+            set.drain(|key| {
+                hash.insert(key);
+            })
+            .unwrap();
+        } else {
+            let tx = set.transaction().unwrap();
+            tx.drain(|key| {
+                hash.insert(key);
+            })
+            .unwrap();
+        }
+
+        assert_eq!(set.len().unwrap(), 0);
+        assert_eq!(hash.len(), 4);
+
+        assert!(hash.contains("bar"));
+        assert!(hash.contains("baz"));
+        assert!(hash.contains("foo"));
+        assert!(hash.contains("xyz"));
+
+        assert!(!set.contains("bar").unwrap());
+        assert!(!set.contains("baz").unwrap());
+        assert!(!set.contains("foo").unwrap());
+        assert!(!set.contains("xyz").unwrap());
+    }
+}
+
+#[test]
+fn test_sqlite_set_string_drain_glob() {
+    for transacted in [false, true] {
+        for invert in [false, true] {
+            let mut set = SQLiteSet::<String>::new().unwrap();
+
+            {
+                let mut tx = set.transaction().unwrap();
+                assert!(tx.insert("foo".to_owned()).unwrap());
+                assert!(tx.insert("bar".to_owned()).unwrap());
+                assert!(tx.insert("baz".to_owned()).unwrap());
+                assert!(tx.insert("xyz".to_owned()).unwrap());
+            }
+
+            let mut hash = HashSet::new();
+
+            if !transacted {
+                set.drain_glob(invert, "ba?", |key| {
+                    hash.insert(key);
+                })
+                .unwrap();
+            } else {
+                let tx = set.transaction().unwrap();
+                tx.drain_glob(invert, "ba?", |key| {
+                    hash.insert(key);
+                })
+                .unwrap();
+            }
+
+            assert_eq!(set.len().unwrap(), 2);
+            assert_eq!(hash.len(), 2);
+
+            if !invert {
+                assert!(set.contains("foo").unwrap());
+                assert!(set.contains("xyz").unwrap());
+                assert!(!set.contains("bar").unwrap());
+                assert!(!set.contains("baz").unwrap());
+                assert!(hash.contains("bar"));
+                assert!(hash.contains("baz"));
+            } else {
+                assert!(set.contains("bar").unwrap());
+                assert!(set.contains("baz").unwrap());
+                assert!(!set.contains("foo").unwrap());
+                assert!(!set.contains("xyz").unwrap());
+                assert!(hash.contains("foo"));
+                assert!(hash.contains("xyz"));
+            }
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // SQLiteSet<Blob> Tests
 // ---------------------------------------------------------------------------
@@ -2033,6 +2170,49 @@ fn test_sqlite_set_blob_xor() {
     assert!(!set_3.contains(&b"xyz"[..]).unwrap());
     assert!(set_3.contains(&b"cor"[..]).unwrap());
     assert!(!set_3.contains(&b"$?!"[..]).unwrap());
+}
+
+#[test]
+fn test_sqlite_set_blob_drain() {
+    for transacted in [false, true] {
+        let mut set = SQLiteSet::<Blob>::new().unwrap();
+
+        {
+            let mut tx = set.transaction().unwrap();
+            assert!(tx.insert(b"foo".to_vec()).unwrap());
+            assert!(tx.insert(b"bar".to_vec()).unwrap());
+            assert!(tx.insert(b"baz".to_vec()).unwrap());
+            assert!(tx.insert(b"xyz".to_vec()).unwrap());
+        }
+
+        let mut hash = HashSet::new();
+
+        if !transacted {
+            set.drain(|key| {
+                hash.insert(key);
+            })
+            .unwrap();
+        } else {
+            let tx = set.transaction().unwrap();
+            tx.drain(|key| {
+                hash.insert(key);
+            })
+            .unwrap();
+        }
+
+        assert_eq!(set.len().unwrap(), 0);
+        assert_eq!(hash.len(), 4);
+
+        assert!(hash.contains(&b"bar"[..]));
+        assert!(hash.contains(&b"baz"[..]));
+        assert!(hash.contains(&b"foo"[..]));
+        assert!(hash.contains(&b"xyz"[..]));
+
+        assert!(!set.contains(&b"bar"[..]).unwrap());
+        assert!(!set.contains(&b"baz"[..]).unwrap());
+        assert!(!set.contains(&b"foo"[..]).unwrap());
+        assert!(!set.contains(&b"xyz"[..]).unwrap());
+    }
 }
 
 // ---------------------------------------------------------------------------
