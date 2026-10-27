@@ -160,9 +160,9 @@ fn test_sqlite_map_i64_string() {
     assert_eq!(map.find_entry(|key, _| key.eq(&i64::MAX)).unwrap().unwrap().1, "deadbeef");
     assert_eq!(map.find_entry(|key, _| key.eq(&i64::MIN)).unwrap().unwrap().1, "cafebabe");
 
-    map.update(0i64, "abcdefgh".to_owned()).unwrap();
-    map.update(42i64, "hgfedcba".to_owned()).unwrap();
-    map.update(i64::MAX, "stuvwxyz".to_owned()).unwrap();
+    assert!(matches!(map.update(0i64, "abcdefgh".to_owned()).unwrap(), Action::Update | Action::Unknown));
+    assert!(matches!(map.update(42i64, "hgfedcba".to_owned()).unwrap(), Action::Insert | Action::Unknown));
+    assert!(matches!(map.update(i64::MAX, "stuvwxyz".to_owned()).unwrap(), Action::Update | Action::Unknown));
 
     assert_eq!(map.get(&0i64).unwrap().unwrap(), "abcdefgh");
     assert_eq!(map.get(&42i64).unwrap().unwrap(), "hgfedcba");
@@ -406,9 +406,9 @@ fn test_sqlite_map_i64_string_transacted() {
     assert_eq!(tx.find_entry(|key, _| key.eq(&i64::MAX)).unwrap().unwrap().1, "deadbeef");
     assert_eq!(tx.find_entry(|key, _| key.eq(&i64::MIN)).unwrap().unwrap().1, "cafebabe");
 
-    tx.update(0i64, "abcdefgh".to_owned()).unwrap();
-    tx.update(42i64, "hgfedcba".to_owned()).unwrap();
-    tx.update(i64::MAX, "stuvwxyz".to_owned()).unwrap();
+    assert!(matches!(tx.update(0i64, "abcdefgh".to_owned()).unwrap(), Action::Update | Action::Unknown));
+    assert!(matches!(tx.update(42i64, "hgfedcba".to_owned()).unwrap(), Action::Insert | Action::Unknown));
+    assert!(matches!(tx.update(i64::MAX, "stuvwxyz".to_owned()).unwrap(), Action::Update | Action::Unknown));
 
     assert_eq!(tx.get(&0i64).unwrap().unwrap(), "abcdefgh");
     assert_eq!(tx.get(&42i64).unwrap().unwrap(), "hgfedcba");
@@ -630,7 +630,7 @@ fn test_sqlite_map_i64_string_randomized() {
 }
 
 #[test]
-fn test_sqlite_map_i64_string_extend() {
+fn test_sqlite_map_i64_string_extend_map() {
     let mut map_1 = SQLiteMap::<i64, String>::new().unwrap();
     let mut map_2 = SQLiteMap::<i64, String>::new().unwrap();
     let mut map_3 = SQLiteMap::<i64, String>::new().unwrap();
@@ -701,7 +701,7 @@ fn test_sqlite_map_i64_string_extend() {
 }
 
 #[test]
-fn test_sqlite_map_i64_string_update() {
+fn test_sqlite_map_i64_string_extend() {
     let mut map = SQLiteMap::<i64, String>::new().unwrap();
 
     {
@@ -993,9 +993,9 @@ fn test_sqlite_map_blob_string() {
     assert_eq!(map.find_entry(|key, _| key.eq_ignore_ascii_case(b"FOO")).unwrap().unwrap().1, "12345678");
     assert!(map.find_entry(|key, _| key.eq(b"bar")).unwrap().is_none());
 
-    map.update(b"foo".to_vec(), "abcdefgh".to_owned()).unwrap();
-    map.update(b"bar".to_vec(), "hgfedcba".to_owned()).unwrap();
-    map.update(b"baz".to_vec(), "stuvwxyz".to_owned()).unwrap();
+    assert!(matches!(map.update(b"foo".to_vec(), "abcdefgh".to_owned()).unwrap(), Action::Update | Action::Unknown));
+    assert!(matches!(map.update(b"bar".to_vec(), "hgfedcba".to_owned()).unwrap(), Action::Insert | Action::Unknown));
+    assert!(matches!(map.update(b"baz".to_vec(), "stuvwxyz".to_owned()).unwrap(), Action::Update | Action::Unknown));
 
     assert_eq!(map.get(&b"foo"[..]).unwrap().unwrap(), "abcdefgh");
     assert_eq!(map.get(&b"bar"[..]).unwrap().unwrap(), "hgfedcba");
@@ -1246,9 +1246,9 @@ fn test_sqlite_map_blob_string_transacted() {
     assert_eq!(tx.find_entry(|key, _| key.eq_ignore_ascii_case(b"FOO")).unwrap().unwrap().1, "12345678");
     assert!(tx.find_entry(|key, _| key.eq(b"bar")).unwrap().is_none());
 
-    tx.update(b"foo".to_vec(), "abcdefgh".to_owned()).unwrap();
-    tx.update(b"bar".to_vec(), "hgfedcba".to_owned()).unwrap();
-    tx.update(b"baz".to_vec(), "stuvwxyz".to_owned()).unwrap();
+    assert!(matches!(tx.update(b"foo".to_vec(), "abcdefgh".to_owned()).unwrap(), Action::Update | Action::Unknown));
+    assert!(matches!(tx.update(b"bar".to_vec(), "hgfedcba".to_owned()).unwrap(), Action::Insert | Action::Unknown));
+    assert!(matches!(tx.update(b"baz".to_vec(), "stuvwxyz".to_owned()).unwrap(), Action::Update | Action::Unknown));
 
     assert_eq!(tx.get(&b"foo"[..]).unwrap().unwrap(), "abcdefgh");
     assert_eq!(tx.get(&b"bar"[..]).unwrap().unwrap(), "hgfedcba");
@@ -1461,7 +1461,7 @@ fn test_sqlite_map_blob_string_randomized() {
 }
 
 #[test]
-fn test_sqlite_map_blob_string_extend() {
+fn test_sqlite_map_blob_string_extend_map() {
     let mut map_1 = SQLiteMap::<Blob, String>::new().unwrap();
     let mut map_2 = SQLiteMap::<Blob, String>::new().unwrap();
     let mut map_3 = SQLiteMap::<Blob, String>::new().unwrap();
@@ -1532,7 +1532,7 @@ fn test_sqlite_map_blob_string_extend() {
 }
 
 #[test]
-fn test_sqlite_map_blob_string_update() {
+fn test_sqlite_map_blob_string_extend() {
     let mut map = SQLiteMap::<Blob, String>::new().unwrap();
 
     {
@@ -1807,9 +1807,9 @@ fn test_sqlite_map_string_string() {
     assert_eq!(map.find_entry(|key, _| key.eq_ignore_ascii_case("FOO")).unwrap().unwrap().1, "12345678");
     assert!(map.find_entry(|key, _| key.eq("bar")).unwrap().is_none());
 
-    map.update("foo".to_owned(), "abcdefgh".to_owned()).unwrap();
-    map.update("bar".to_owned(), "hgfedcba".to_owned()).unwrap();
-    map.update("baz".to_owned(), "stuvwxyz".to_owned()).unwrap();
+    assert!(matches!(map.update("foo".to_owned(), "abcdefgh".to_owned()).unwrap(), Action::Update | Action::Unknown));
+    assert!(matches!(map.update("bar".to_owned(), "hgfedcba".to_owned()).unwrap(), Action::Insert | Action::Unknown));
+    assert!(matches!(map.update("baz".to_owned(), "stuvwxyz".to_owned()).unwrap(), Action::Update | Action::Unknown));
 
     assert_eq!(map.get("foo").unwrap().unwrap(), "abcdefgh");
     assert_eq!(map.get("bar").unwrap().unwrap(), "hgfedcba");
@@ -2120,9 +2120,9 @@ fn test_sqlite_map_string_string_transacted() {
     assert_eq!(tx.find_entry(|key, _| key.eq_ignore_ascii_case("FOO")).unwrap().unwrap().1, "12345678");
     assert!(tx.find_entry(|key, _| key.eq("bar")).unwrap().is_none());
 
-    tx.update("foo".to_owned(), "abcdefgh".to_owned()).unwrap();
-    tx.update("bar".to_owned(), "hgfedcba".to_owned()).unwrap();
-    tx.update("baz".to_owned(), "stuvwxyz".to_owned()).unwrap();
+    assert!(matches!(tx.update("foo".to_owned(), "abcdefgh".to_owned()).unwrap(), Action::Update | Action::Unknown));
+    assert!(matches!(tx.update("bar".to_owned(), "hgfedcba".to_owned()).unwrap(), Action::Insert | Action::Unknown));
+    assert!(matches!(tx.update("baz".to_owned(), "stuvwxyz".to_owned()).unwrap(), Action::Update | Action::Unknown));
 
     assert_eq!(tx.get("foo").unwrap().unwrap(), "abcdefgh");
     assert_eq!(tx.get("bar").unwrap().unwrap(), "hgfedcba");
@@ -2442,7 +2442,7 @@ fn test_sqlite_map_string_string_randomized() {
 }
 
 #[test]
-fn test_sqlite_map_string_string_extend() {
+fn test_sqlite_map_string_string_extend_map() {
     let mut map_1 = SQLiteMap::<String, String>::new().unwrap();
     let mut map_2 = SQLiteMap::<String, String>::new().unwrap();
     let mut map_3 = SQLiteMap::<String, String>::new().unwrap();
@@ -2513,7 +2513,7 @@ fn test_sqlite_map_string_string_extend() {
 }
 
 #[test]
-fn test_sqlite_map_string_string_update() {
+fn test_sqlite_map_string_string_extend() {
     let mut map = SQLiteMap::<String, String>::new().unwrap();
 
     {
@@ -2880,9 +2880,9 @@ fn test_sqlite_map_string_blob() {
     assert_eq!(map.find_entry(|key, _| key.eq_ignore_ascii_case("FOO")).unwrap().unwrap().1, &b"12345678"[..]);
     assert!(map.find_entry(|key, _| key.eq("bar")).unwrap().is_none());
 
-    map.update("foo".to_owned(), b"abcdefgh".to_vec()).unwrap();
-    map.update("bar".to_owned(), b"hgfedcba".to_vec()).unwrap();
-    map.update("baz".to_owned(), b"stuvwxyz".to_vec()).unwrap();
+    assert!(matches!(map.update("foo".to_owned(), b"abcdefgh".to_vec()).unwrap(), Action::Update | Action::Unknown));
+    assert!(matches!(map.update("bar".to_owned(), b"hgfedcba".to_vec()).unwrap(), Action::Insert | Action::Unknown));
+    assert!(matches!(map.update("baz".to_owned(), b"stuvwxyz".to_vec()).unwrap(), Action::Update | Action::Unknown));
 
     assert_eq!(map.get("foo").unwrap().unwrap(), &b"abcdefgh"[..]);
     assert_eq!(map.get("bar").unwrap().unwrap(), &b"hgfedcba"[..]);
@@ -3195,9 +3195,9 @@ fn test_sqlite_map_string_blob_transacted() {
     assert_eq!(tx.find_entry(|key, _| key.eq_ignore_ascii_case("FOO")).unwrap().unwrap().1, &b"12345678"[..]);
     assert!(tx.find_entry(|key, _| key.eq("bar")).unwrap().is_none());
 
-    tx.update("foo".to_owned(), b"abcdefgh".to_vec()).unwrap();
-    tx.update("bar".to_owned(), b"hgfedcba".to_vec()).unwrap();
-    tx.update("baz".to_owned(), b"stuvwxyz".to_vec()).unwrap();
+    assert!(matches!(tx.update("foo".to_owned(), b"abcdefgh".to_vec()).unwrap(), Action::Update | Action::Unknown));
+    assert!(matches!(tx.update("bar".to_owned(), b"hgfedcba".to_vec()).unwrap(), Action::Insert | Action::Unknown));
+    assert!(matches!(tx.update("baz".to_owned(), b"stuvwxyz".to_vec()).unwrap(), Action::Update | Action::Unknown));
 
     assert_eq!(tx.get("foo").unwrap().unwrap(), &b"abcdefgh"[..]);
     assert_eq!(tx.get("bar").unwrap().unwrap(), &b"hgfedcba"[..]);
@@ -3521,7 +3521,7 @@ fn test_sqlite_map_string_blob_randomized() {
 }
 
 #[test]
-fn test_sqlite_map_string_blob_extend() {
+fn test_sqlite_map_string_blob_extend_map() {
     let mut map_1 = SQLiteMap::<String, Blob>::new().unwrap();
     let mut map_2 = SQLiteMap::<String, Blob>::new().unwrap();
     let mut map_3 = SQLiteMap::<String, Blob>::new().unwrap();
@@ -3592,7 +3592,7 @@ fn test_sqlite_map_string_blob_extend() {
 }
 
 #[test]
-fn test_sqlite_map_string_blob_update() {
+fn test_sqlite_map_string_blob_extend() {
     let mut map = SQLiteMap::<String, Blob>::new().unwrap();
 
     {
@@ -3918,9 +3918,9 @@ fn test_sqlite_map_string_i64() {
     assert_eq!(map.find_entry(|key, _| key.eq_ignore_ascii_case("FOO")).unwrap().unwrap().1, 0x12345678);
     assert!(map.find_entry(|key, _| key.eq("bar")).unwrap().is_none());
 
-    map.update("foo".to_owned(), 0x9ABCDEF0).unwrap();
-    map.update("bar".to_owned(), 0x0FEDCBA9).unwrap();
-    map.update("baz".to_owned(), 0x8BADF00D).unwrap();
+    assert!(matches!(map.update("foo".to_owned(), 0x9ABCDEF0).unwrap(), Action::Update | Action::Unknown));
+    assert!(matches!(map.update("bar".to_owned(), 0x0FEDCBA9).unwrap(), Action::Insert | Action::Unknown));
+    assert!(matches!(map.update("baz".to_owned(), 0x8BADF00D).unwrap(), Action::Update | Action::Unknown));
 
     assert_eq!(map.get("foo").unwrap().unwrap(), 0x9ABCDEF0);
     assert_eq!(map.get("bar").unwrap().unwrap(), 0x0FEDCBA9);
@@ -4230,9 +4230,9 @@ fn test_sqlite_map_string_i64_transacted() {
     assert_eq!(tx.find_entry(|key, _| key.eq_ignore_ascii_case("FOO")).unwrap().unwrap().1, 0x12345678);
     assert!(tx.find_entry(|key, _| key.eq("bar")).unwrap().is_none());
 
-    tx.update("foo".to_owned(), 0x9ABCDEF0).unwrap();
-    tx.update("bar".to_owned(), 0x0FEDCBA9).unwrap();
-    tx.update("baz".to_owned(), 0x8BADF00D).unwrap();
+    assert!(matches!(tx.update("foo".to_owned(), 0x9ABCDEF0).unwrap(), Action::Update | Action::Unknown));
+    assert!(matches!(tx.update("bar".to_owned(), 0x0FEDCBA9).unwrap(), Action::Insert | Action::Unknown));
+    assert!(matches!(tx.update("baz".to_owned(), 0x8BADF00D).unwrap(), Action::Update | Action::Unknown));
 
     assert_eq!(tx.get("foo").unwrap().unwrap(), 0x9ABCDEF0);
     assert_eq!(tx.get("bar").unwrap().unwrap(), 0x0FEDCBA9);
@@ -4549,7 +4549,7 @@ fn test_sqlite_map_string_i64_randomized() {
 }
 
 #[test]
-fn test_sqlite_map_string_i64_extend() {
+fn test_sqlite_map_string_i64_extend_map() {
     let mut map_1 = SQLiteMap::<String, i64>::new().unwrap();
     let mut map_2 = SQLiteMap::<String, i64>::new().unwrap();
     let mut map_3 = SQLiteMap::<String, i64>::new().unwrap();
@@ -4620,7 +4620,7 @@ fn test_sqlite_map_string_i64_extend() {
 }
 
 #[test]
-fn test_sqlite_map_string_i64_update() {
+fn test_sqlite_map_string_i64_extend() {
     let mut map = SQLiteMap::<String, i64>::new().unwrap();
 
     {
@@ -4795,81 +4795,99 @@ fn test_sqlite_map_string_i64_drain_glob() {
 #[allow(clippy::get_first)]
 #[test]
 fn test_sqlite_map_iteration_order() {
-    let mut map = SQLiteMap::<String, String>::new().unwrap();
+    for b in [false, true] {
+        let mut map = SQLiteMap::<String, String>::new().unwrap();
 
-    {
-        let mut tx = map.transaction().unwrap();
-        tx.insert_ref("mmm", "11111111").unwrap();
-        tx.insert_ref("aaa", "22222222").unwrap();
-        tx.insert_ref("zzz", "33333333").unwrap();
-        tx.insert_ref("bbb", "44444444").unwrap();
-        tx.insert_ref("yyy", "55555555").unwrap();
-        tx.insert_ref("ccc", "66666666").unwrap();
-        tx.insert_ref("xxx", "77777777").unwrap();
-    }
+        {
+            let mut tx = map.transaction().unwrap();
+            tx.insert_ref("mmm", "11111111").unwrap();
+            tx.insert_ref("aaa", "22222222").unwrap();
+            tx.insert_ref("zzz", "33333333").unwrap();
+            tx.insert_ref("bbb", "44444444").unwrap();
+            tx.insert_ref("yyy", "55555555").unwrap();
+            tx.insert_ref("ccc", "66666666").unwrap();
+            tx.insert_ref("xxx", "77777777").unwrap();
+        }
 
-    {
-        let mut list_asc = Vec::new();
-        map.try_for_each_key(Order::ASC, |key| {
-            list_asc.push(key);
-            Ok::<_, ()>(())
-        })
-        .unwrap();
-        assert!(list_asc.get(0).is_some_and(|item| item.eq("aaa")));
-        assert!(list_asc.get(1).is_some_and(|item| item.eq("bbb")));
-        assert!(list_asc.get(2).is_some_and(|item| item.eq("ccc")));
-        assert!(list_asc.get(3).is_some_and(|item| item.eq("mmm")));
-        assert!(list_asc.get(4).is_some_and(|item| item.eq("xxx")));
-        assert!(list_asc.get(5).is_some_and(|item| item.eq("yyy")));
-        assert!(list_asc.get(6).is_some_and(|item| item.eq("zzz")));
-    }
+        {
+            let mut list_asc = Vec::new();
+            if !b {
+                map.for_each_key(Order::ASC, |key| list_asc.push(key)).unwrap();
+            } else {
+                map.try_for_each_key(Order::ASC, |key| {
+                    list_asc.push(key);
+                    Ok::<_, ()>(())
+                })
+                .unwrap();
+            }
+            assert!(list_asc.get(0).is_some_and(|item| item.eq("aaa")));
+            assert!(list_asc.get(1).is_some_and(|item| item.eq("bbb")));
+            assert!(list_asc.get(2).is_some_and(|item| item.eq("ccc")));
+            assert!(list_asc.get(3).is_some_and(|item| item.eq("mmm")));
+            assert!(list_asc.get(4).is_some_and(|item| item.eq("xxx")));
+            assert!(list_asc.get(5).is_some_and(|item| item.eq("yyy")));
+            assert!(list_asc.get(6).is_some_and(|item| item.eq("zzz")));
+        }
 
-    {
-        let mut list_dsc = Vec::new();
-        map.try_for_each_key(Order::DSC, |key| {
-            list_dsc.push(key);
-            Ok::<_, ()>(())
-        })
-        .unwrap();
-        assert!(list_dsc.get(0).is_some_and(|item| item.eq("zzz")));
-        assert!(list_dsc.get(1).is_some_and(|item| item.eq("yyy")));
-        assert!(list_dsc.get(2).is_some_and(|item| item.eq("xxx")));
-        assert!(list_dsc.get(3).is_some_and(|item| item.eq("mmm")));
-        assert!(list_dsc.get(4).is_some_and(|item| item.eq("ccc")));
-        assert!(list_dsc.get(5).is_some_and(|item| item.eq("bbb")));
-        assert!(list_dsc.get(6).is_some_and(|item| item.eq("aaa")));
-    }
+        {
+            let mut list_dsc = Vec::new();
+            if !b {
+                map.for_each_key(Order::DSC, |key| list_dsc.push(key)).unwrap();
+            } else {
+                map.try_for_each_key(Order::DSC, |key| {
+                    list_dsc.push(key);
+                    Ok::<_, ()>(())
+                })
+                .unwrap();
+            }
+            assert!(list_dsc.get(0).is_some_and(|item| item.eq("zzz")));
+            assert!(list_dsc.get(1).is_some_and(|item| item.eq("yyy")));
+            assert!(list_dsc.get(2).is_some_and(|item| item.eq("xxx")));
+            assert!(list_dsc.get(3).is_some_and(|item| item.eq("mmm")));
+            assert!(list_dsc.get(4).is_some_and(|item| item.eq("ccc")));
+            assert!(list_dsc.get(5).is_some_and(|item| item.eq("bbb")));
+            assert!(list_dsc.get(6).is_some_and(|item| item.eq("aaa")));
+        }
 
-    {
-        let mut list_asc = Vec::new();
-        map.try_for_each_entry(Order::ASC, |key, value| {
-            list_asc.push((key, value));
-            Ok::<_, ()>(())
-        })
-        .unwrap();
-        assert!(list_asc.get(0).is_some_and(|item| item.eq(&("aaa".to_owned(), "22222222".to_owned()))));
-        assert!(list_asc.get(1).is_some_and(|item| item.eq(&("bbb".to_owned(), "44444444".to_owned()))));
-        assert!(list_asc.get(2).is_some_and(|item| item.eq(&("ccc".to_owned(), "66666666".to_owned()))));
-        assert!(list_asc.get(3).is_some_and(|item| item.eq(&("mmm".to_owned(), "11111111".to_owned()))));
-        assert!(list_asc.get(4).is_some_and(|item| item.eq(&("xxx".to_owned(), "77777777".to_owned()))));
-        assert!(list_asc.get(5).is_some_and(|item| item.eq(&("yyy".to_owned(), "55555555".to_owned()))));
-        assert!(list_asc.get(6).is_some_and(|item| item.eq(&("zzz".to_owned(), "33333333".to_owned()))));
-    }
+        {
+            let mut list_asc = Vec::new();
+            if !b {
+                map.for_each_entry(Order::ASC, |key, value| list_asc.push((key, value))).unwrap();
+            } else {
+                map.try_for_each_entry(Order::ASC, |key, value| {
+                    list_asc.push((key, value));
+                    Ok::<_, ()>(())
+                })
+                .unwrap();
+            }
+            assert!(list_asc.get(0).is_some_and(|item| item.eq(&("aaa".to_owned(), "22222222".to_owned()))));
+            assert!(list_asc.get(1).is_some_and(|item| item.eq(&("bbb".to_owned(), "44444444".to_owned()))));
+            assert!(list_asc.get(2).is_some_and(|item| item.eq(&("ccc".to_owned(), "66666666".to_owned()))));
+            assert!(list_asc.get(3).is_some_and(|item| item.eq(&("mmm".to_owned(), "11111111".to_owned()))));
+            assert!(list_asc.get(4).is_some_and(|item| item.eq(&("xxx".to_owned(), "77777777".to_owned()))));
+            assert!(list_asc.get(5).is_some_and(|item| item.eq(&("yyy".to_owned(), "55555555".to_owned()))));
+            assert!(list_asc.get(6).is_some_and(|item| item.eq(&("zzz".to_owned(), "33333333".to_owned()))));
+        }
 
-    {
-        let mut list_dsc = Vec::new();
-        map.try_for_each_entry(Order::DSC, |key, value| {
-            list_dsc.push((key, value));
-            Ok::<_, ()>(())
-        })
-        .unwrap();
-        assert!(list_dsc.get(0).is_some_and(|item| item.eq(&("zzz".to_owned(), "33333333".to_owned()))));
-        assert!(list_dsc.get(1).is_some_and(|item| item.eq(&("yyy".to_owned(), "55555555".to_owned()))));
-        assert!(list_dsc.get(2).is_some_and(|item| item.eq(&("xxx".to_owned(), "77777777".to_owned()))));
-        assert!(list_dsc.get(3).is_some_and(|item| item.eq(&("mmm".to_owned(), "11111111".to_owned()))));
-        assert!(list_dsc.get(4).is_some_and(|item| item.eq(&("ccc".to_owned(), "66666666".to_owned()))));
-        assert!(list_dsc.get(5).is_some_and(|item| item.eq(&("bbb".to_owned(), "44444444".to_owned()))));
-        assert!(list_dsc.get(6).is_some_and(|item| item.eq(&("aaa".to_owned(), "22222222".to_owned()))));
+        {
+            let mut list_dsc = Vec::new();
+            if !b {
+                map.for_each_entry(Order::DSC, |key, value| list_dsc.push((key, value))).unwrap();
+            } else {
+                map.try_for_each_entry(Order::DSC, |key, value| {
+                    list_dsc.push((key, value));
+                    Ok::<_, ()>(())
+                })
+                .unwrap();
+            }
+            assert!(list_dsc.get(0).is_some_and(|item| item.eq(&("zzz".to_owned(), "33333333".to_owned()))));
+            assert!(list_dsc.get(1).is_some_and(|item| item.eq(&("yyy".to_owned(), "55555555".to_owned()))));
+            assert!(list_dsc.get(2).is_some_and(|item| item.eq(&("xxx".to_owned(), "77777777".to_owned()))));
+            assert!(list_dsc.get(3).is_some_and(|item| item.eq(&("mmm".to_owned(), "11111111".to_owned()))));
+            assert!(list_dsc.get(4).is_some_and(|item| item.eq(&("ccc".to_owned(), "66666666".to_owned()))));
+            assert!(list_dsc.get(5).is_some_and(|item| item.eq(&("bbb".to_owned(), "44444444".to_owned()))));
+            assert!(list_dsc.get(6).is_some_and(|item| item.eq(&("aaa".to_owned(), "22222222".to_owned()))));
+        }
     }
 }
 
@@ -5008,9 +5026,18 @@ fn test_sqlite_map_filebased_integrity() {
     assert!(matches!(SQLiteMap::<String, String>::try_from_file(&file_path, false, false), Err(Error::IntegrityCheck)));
 }
 
-#[cfg(feature = "backup")]
 #[test]
 fn test_sqlite_map_filebased_tofile() {
+    cfg_if! {
+        if #[cfg(target_family = "windows")] {
+            use std::{ffi::OsString, os::windows::ffi::OsStringExt, path::Path, sync::LazyLock};
+            static INVALID_PATH: LazyLock<OsString> = LazyLock::new(|| OsString::from_wide(&[b'C' as u16, b':' as u16, b'\\' as u16, b'x' as u16, 0xD800, b'y' as u16]));
+        } else {
+            use std::{ffi::OsString, os::unix::ffi::OsStringExt, path::Path, sync::LazyLock};
+            static INVALID_PATH: LazyLock<OsString> = LazyLock::new(|| OsString::from_vec(b"/tmp/foo\xFFbar".to_vec()));
+        }
+    }
+
     let temp_dir = tempdir_in(env!["CARGO_TARGET_TMPDIR"]).unwrap();
     let file_path_1 = temp_dir.path().join("sqlite_map-1.db");
     let file_path_2 = temp_dir.path().join("sqlite_map-2.db");
@@ -5029,6 +5056,7 @@ fn test_sqlite_map_filebased_tofile() {
             assert!(tx.insert("baz".to_owned(), "stuvwxyz".to_owned()).unwrap());
             assert!(tx.insert("BAZ".to_owned(), "zyxwvuts".to_owned()).unwrap());
         }
+        assert!(matches!(map.to_file(Path::new(INVALID_PATH.as_os_str())), Err(Error::InvalidPath)));
         map.to_file(&file_path_1).unwrap();
     }
 

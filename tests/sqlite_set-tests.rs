@@ -2222,49 +2222,59 @@ fn test_sqlite_set_blob_drain() {
 #[allow(clippy::get_first)]
 #[test]
 fn test_sqlite_set_iteration_order() {
-    let mut set = SQLiteSet::<String>::new().unwrap();
+    for b in [false, true] {
+        let mut set = SQLiteSet::<String>::new().unwrap();
 
-    {
-        let mut tx = set.transaction().unwrap();
-        tx.insert_ref("mmm").unwrap();
-        tx.insert_ref("aaa").unwrap();
-        tx.insert_ref("zzz").unwrap();
-        tx.insert_ref("bbb").unwrap();
-        tx.insert_ref("yyy").unwrap();
-        tx.insert_ref("ccc").unwrap();
-        tx.insert_ref("xxx").unwrap();
-    }
+        {
+            let mut tx = set.transaction().unwrap();
+            tx.insert_ref("mmm").unwrap();
+            tx.insert_ref("aaa").unwrap();
+            tx.insert_ref("zzz").unwrap();
+            tx.insert_ref("bbb").unwrap();
+            tx.insert_ref("yyy").unwrap();
+            tx.insert_ref("ccc").unwrap();
+            tx.insert_ref("xxx").unwrap();
+        }
 
-    {
-        let mut list_asc = Vec::new();
-        set.try_for_each(Order::ASC, |key| {
-            list_asc.push(key);
-            Ok::<_, ()>(())
-        })
-        .unwrap();
-        assert!(list_asc.get(0).is_some_and(|item| item.eq("aaa")));
-        assert!(list_asc.get(1).is_some_and(|item| item.eq("bbb")));
-        assert!(list_asc.get(2).is_some_and(|item| item.eq("ccc")));
-        assert!(list_asc.get(3).is_some_and(|item| item.eq("mmm")));
-        assert!(list_asc.get(4).is_some_and(|item| item.eq("xxx")));
-        assert!(list_asc.get(5).is_some_and(|item| item.eq("yyy")));
-        assert!(list_asc.get(6).is_some_and(|item| item.eq("zzz")));
-    }
+        {
+            let mut list_asc = Vec::new();
+            if !b {
+                set.for_each(Order::ASC, |key| list_asc.push(key)).unwrap();
+            } else {
+                set.try_for_each(Order::ASC, |key| {
+                    list_asc.push(key);
+                    Ok::<_, ()>(())
+                })
+                .unwrap();
+            }
+            assert!(list_asc.get(0).is_some_and(|item| item.eq("aaa")));
+            assert!(list_asc.get(1).is_some_and(|item| item.eq("bbb")));
+            assert!(list_asc.get(2).is_some_and(|item| item.eq("ccc")));
+            assert!(list_asc.get(3).is_some_and(|item| item.eq("mmm")));
+            assert!(list_asc.get(4).is_some_and(|item| item.eq("xxx")));
+            assert!(list_asc.get(5).is_some_and(|item| item.eq("yyy")));
+            assert!(list_asc.get(6).is_some_and(|item| item.eq("zzz")));
+        }
 
-    {
-        let mut list_dsc = Vec::new();
-        set.try_for_each(Order::DSC, |key| {
-            list_dsc.push(key);
-            Ok::<_, ()>(())
-        })
-        .unwrap();
-        assert!(list_dsc.get(0).is_some_and(|item| item.eq("zzz")));
-        assert!(list_dsc.get(1).is_some_and(|item| item.eq("yyy")));
-        assert!(list_dsc.get(2).is_some_and(|item| item.eq("xxx")));
-        assert!(list_dsc.get(3).is_some_and(|item| item.eq("mmm")));
-        assert!(list_dsc.get(4).is_some_and(|item| item.eq("ccc")));
-        assert!(list_dsc.get(5).is_some_and(|item| item.eq("bbb")));
-        assert!(list_dsc.get(6).is_some_and(|item| item.eq("aaa")));
+        {
+            let mut list_dsc = Vec::new();
+            if !b {
+                set.for_each(Order::DSC, |key| list_dsc.push(key)).unwrap();
+            } else {
+                set.try_for_each(Order::DSC, |key| {
+                    list_dsc.push(key);
+                    Ok::<_, ()>(())
+                })
+                .unwrap();
+            }
+            assert!(list_dsc.get(0).is_some_and(|item| item.eq("zzz")));
+            assert!(list_dsc.get(1).is_some_and(|item| item.eq("yyy")));
+            assert!(list_dsc.get(2).is_some_and(|item| item.eq("xxx")));
+            assert!(list_dsc.get(3).is_some_and(|item| item.eq("mmm")));
+            assert!(list_dsc.get(4).is_some_and(|item| item.eq("ccc")));
+            assert!(list_dsc.get(5).is_some_and(|item| item.eq("bbb")));
+            assert!(list_dsc.get(6).is_some_and(|item| item.eq("aaa")));
+        }
     }
 }
 
@@ -2400,9 +2410,18 @@ fn test_sqlite_set_filebased_integrity() {
     assert!(matches!(SQLiteSet::<String>::try_from_file(&file_path, false, false), Err(Error::IntegrityCheck)));
 }
 
-#[cfg(feature = "backup")]
 #[test]
 fn test_sqlite_set_filebased_tofile() {
+    cfg_if! {
+        if #[cfg(target_family = "windows")] {
+            use std::{ffi::OsString, os::windows::ffi::OsStringExt, path::Path, sync::LazyLock};
+            static INVALID_PATH: LazyLock<OsString> = LazyLock::new(|| OsString::from_wide(&[b'C' as u16, b':' as u16, b'\\' as u16, b'x' as u16, 0xD800, b'y' as u16]));
+        } else {
+            use std::{ffi::OsString, os::unix::ffi::OsStringExt, path::Path, sync::LazyLock};
+            static INVALID_PATH: LazyLock<OsString> = LazyLock::new(|| OsString::from_vec(b"/tmp/foo\xFFbar".to_vec()));
+        }
+    }
+
     let temp_dir = tempdir_in(env!["CARGO_TARGET_TMPDIR"]).unwrap();
     let file_path_1 = temp_dir.path().join("sqlite_set-1.db");
     let file_path_2 = temp_dir.path().join("sqlite_set-2.db");
@@ -2421,6 +2440,7 @@ fn test_sqlite_set_filebased_tofile() {
             assert!(tx.insert("baz".to_owned()).unwrap());
             assert!(tx.insert("BAZ".to_owned()).unwrap());
         }
+        assert!(matches!(set.to_file(Path::new(INVALID_PATH.as_os_str())), Err(Error::InvalidPath)));
         set.to_file(&file_path_1).unwrap();
     }
 
