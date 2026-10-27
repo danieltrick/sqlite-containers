@@ -218,7 +218,7 @@ where
         Ok(new_map)
     }
 
-    /// Creates a map set with case-insensitive keys containing all key-value pairs yielded by the given [iterable](std::iter::IntoIterator).
+    /// Creates a new map with case-insensitive keys containing all key-value pairs yielded by the given [iterable](std::iter::IntoIterator).
     ///
     /// The new hash map is backed by an *in-memory* SQLite database.
     ///
@@ -253,7 +253,7 @@ where
     ///
     /// If `readonly` is `true`, the database file is opened in “read-only” mode.
     ///
-    /// If `can_create` is `true` (and if `readonly` is `false`), a new empty database file is created if the file does *not* exist yet.
+    /// If `can_create` is `true` (and if `readonly` is `false`), a new empty database file is created, if the file does *not* exist yet.
     ///
     /// Returns [`Error::InvalidSchema`], if the database file already exists but its schema does **not** match the schema expected by this type of map. This means that you **must** re-open a database file with the *same* type of map that was used to create it.
     ///
@@ -351,7 +351,7 @@ where
     ///
     /// If the map does *not* already contain the specified key, then the key is inserted automatically.
     ///
-    /// Provided that the [`hooks`](crate#optional-features) feature is enabled, the function returns either [`Action::Insert`] or [`Action::Update`], depending on whether a new key-value pair was inserted or the associated value of an existing key was updated
+    /// Provided that the [`hooks`](crate#optional-features) feature is enabled, the function returns either [`Action::Insert`] or [`Action::Update`], depending on whether a new key-value pair was inserted or the associated value of an existing key was updated.
     ///
     /// If `hooks` is **not** enabled, the function *always* returns [`Action::Unknown`], but, apart from that, it works identically &#128522;
     #[inline]
@@ -365,7 +365,7 @@ where
     ///
     /// If the map does *not* already contain the specified key, then the key is inserted automatically.
     ///
-    /// Provided that the [`hooks`](crate#optional-features) feature is enabled, the function returns either [`Action::Insert`] or [`Action::Update`], depending on whether a new key-value pair was inserted or the associated value of an existing key was updated
+    /// Provided that the [`hooks`](crate#optional-features) feature is enabled, the function returns either [`Action::Insert`] or [`Action::Update`], depending on whether a new key-value pair was inserted or the associated value of an existing key was updated.
     ///
     /// If `hooks` is **not** enabled, the function *always* returns [`Action::Unknown`], but, apart from that, it works identically &#128522;
     #[inline]
@@ -468,7 +468,7 @@ where
         Ok(statement.exists([key])?)
     }
 
-    /// This is the "case-insensitive" version of the [`contains()`](Self::contains_key) function.
+    /// This is the "case-insensitive" version of the [`contains_key()`](Self::contains_key) function.
     ///
     /// The check is *always* performed case-insensitive.
     ///
@@ -487,7 +487,7 @@ where
     ///
     /// For case-sensitive maps, the key is treated as case-sensitive; for case-insensitive maps, it is treated as case-insensitive.
     ///
-    /// Returns the `Some(value)`, if the map contains the key; otherwise returns `None`.
+    /// Returns `Some(value)`, if the map contains the key; otherwise returns `None`.
     #[inline]
     pub fn get<Q>(&self, key: &Q) -> Result<Option<V>, Error>
     where
@@ -502,7 +502,7 @@ where
     ///
     /// The key is *always* treated as case-insensitive.
     ///
-    /// Returns the `Some(value)`, if the map contains the key; otherwise returns `None`.
+    /// Returns `Some(value)`, if the map contains the key; otherwise returns `None`.
     #[inline]
     pub fn get_nocase<Q>(&self, key: &Q) -> Result<Option<V>, Error>
     where
@@ -1176,7 +1176,7 @@ where
         }
     }
 
-    /// Insert all keys from the given [`SQLiteSet`] into this set.
+    /// Inserts all keys from the given [`SQLiteSet`] into this map.
     #[inline]
     pub(crate) fn extend_set<F>(&mut self, set: &mut SQLiteSet<K>, mapping: F) -> Result<(), Error>
     where
@@ -1459,7 +1459,7 @@ where
 }
 
 // ---------------------------------------------------------------------------
-// Auxilary Functions
+// Auxiliary Functions
 // ---------------------------------------------------------------------------
 
 #[cfg(feature = "hooks")]

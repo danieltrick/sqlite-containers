@@ -351,7 +351,7 @@ where
         self.transaction()?.remove_all_nocase(keys)
     }
 
-    /// Removes *all* keys that exist in another set from this sets, ignoring non-existing keys.
+    /// Removes *all* keys that exist in another set from this set, ignoring non-existing keys.
     ///
     /// For case-sensitive sets, the keys are treated as case-sensitive; for case-insensitive sets, they are treated as case-insensitive.
     ///
@@ -361,7 +361,7 @@ where
         self.transaction()?.remove_set(other)
     }
 
-    /// Removes *all* keys that exist in another set from this sets, ignoring non-existing keys.
+    /// Removes *all* keys that exist in another set from this set, ignoring non-existing keys.
     ///
     /// The keys are treated as case-insensitive.
     ///
@@ -803,7 +803,7 @@ where
 }
 
 // ---------------------------------------------------------------------------
-// SQLiteMap Traits
+// SQLiteSet Traits
 // ---------------------------------------------------------------------------
 
 impl<T> TryEq for SQLiteSet<T>
@@ -959,7 +959,7 @@ where
         Ok(counter)
     }
 
-    /// Insert all keys from the given [`SQLiteMap`] into this set.
+    /// Inserts all keys from the given [`SQLiteMap`] into this set.
     #[inline]
     pub(crate) fn extend_map<V>(&mut self, map: &SQLiteMap<T, V>) -> Result<(), Error>
     where

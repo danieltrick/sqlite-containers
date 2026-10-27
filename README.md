@@ -33,7 +33,7 @@ let mut tx = sqlite_set.transaction().expect("Failed to start transaction!");
 println!("Inserting elements, please wait...");
 
 for n in 0..1_000_000u64 {
-    tx.insert(&format!("{:016X}", n)).expect("Insertion failed!");
+    tx.insert(format!("{:016X}", n)).expect("Insertion failed!");
 }
 
 tx.commit();

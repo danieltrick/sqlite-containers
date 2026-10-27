@@ -172,10 +172,10 @@ impl_chartype!(String);
 
 cfg_if! {
     if #[cfg(target_pointer_width = "64")] {
-        /// The "size" type used by [`len()`](crate::SQLiteSet::len), equal to `usize` on this platform.
+        /// The "size" type used by the [`len()`](crate::SQLiteSet::len) and [`len()`](crate::SQLiteMap::len) functions, equal to `usize` on this platform.
         pub type Size = usize;
     } else {
-        /// The "size" type used by [`len()`](crate::SQLiteSet::len), equal to `u64` on this platform.
+        /// The "size" type used by the [`len()`](crate::SQLiteSet::len) and [`len()`](crate::SQLiteMap::len) functions, equal to `u64` on this platform.
         pub type Size = u64;
     }
 }
@@ -267,11 +267,11 @@ impl From<RusqliteError> for Error {
 // ---------------------------------------------------------------------------
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-/// The iteration order to be used by the [`for_each`](crate::SQLiteSet::for_each) function.
+/// The iteration order to be used by the [`for_each()`](crate::SQLiteSet::for_each) and [`for_each_key()`](crate::SQLiteMap::for_each_key) functions.
 pub enum Order {
     /// Ascending iteration order. For strings, this means lexicographic order.
     ASC,
-    /// Descending iteration order. For strings this means reverse lexicographic order.
+    /// Descending iteration order. For strings, this means reverse lexicographic order.
     DSC,
     /// Undefined iteration order. May be faster than the other ones &#128640;
     ///
@@ -293,7 +293,7 @@ impl Order {
 // IterationError
 // ---------------------------------------------------------------------------
 
-/// The error type used by the [`try_for_each`](crate::SQLiteSet::try_for_each) function.
+/// The error type used by the [`try_for_each()`](crate::SQLiteSet::try_for_each) and [`try_for_each_key()`](crate::SQLiteMap::try_for_each_key) functions.
 #[derive(Debug, PartialEq)]
 pub enum IterationError<C> {
     /// Indicates that the iteration was aborted because the callback function returned an error.

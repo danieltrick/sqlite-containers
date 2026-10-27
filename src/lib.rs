@@ -30,7 +30,7 @@
 //! println!("Inserting elements, please wait...");
 //!
 //! for n in 0..1_000_000u64 {
-//!     tx.insert(&format!("{:016X}", n)).expect("Insertion failed!");
+//!     tx.insert(format!("{:016X}", n)).expect("Insertion failed!");
 //! }
 //!
 //! tx.commit();
@@ -57,7 +57,7 @@
 //! ---------------- | -------- | -----------
 //! **`bundled`**    | &#x2705; | If this feature is enabled (the default), `sqlite-containers` automatically compiles and links in an up to date version of the SQLite library for you. This avoids many common build issues, and avoids depending on the version of SQLite on the users system. Use `default-features = false`, if you want to disable this default behavior and instead use the "system" SQLite library.
 //! **`backup`**     | &#x2705; | If this feature is enabled (the default), the [`try_clone()`](TryClone::try_clone) function can be used to create a **copy** of an existing container instance, which otherwise fails with [`Error::Unsupported`]. Please note that this feature implies the `rusqlite` feature of the same name; requires SQLite 3.6.11+.
-//! **`checked`**    | &#x2705; | If this feature is enabled (the default), an additional [integrity check](https://www.sqlite.org/pragma.html#pragma_integrity_check) check is performed when opening a container (database) from a file. This may slightly slow down the opening process for *file-based* containers, but disabling the feature may allow some corruption to go undetected.
+//! **`checked`**    | &#x2705; | If this feature is enabled (the default), an additional [integrity check](https://www.sqlite.org/pragma.html#pragma_integrity_check) is performed when opening a container (database) from a file. This may slightly slow down the opening process for *file-based* containers, but disabling the feature may allow some corruption to go undetected.
 //! **`with_rowid`** | &#x274C; | This feature prevents `sqlite-containers` from using the [`WITHOUT ROWID`](https://www.sqlite.org/withoutrowid.html) optimization, allowing SQLite to implicitly create the special "rowid" column. By default, i.e., if the `with_rowid` feature is **not** explicitly enabled, `WITHOUT ROWID` *will* be used and thus the creation of a "rowid" column is suppressed. Please note that, in most cases, using the `WITHOUT ROWID` optimization (the default) should improve the performance. This means that enabling the `with_rowid` feature is **not** normally recommended! Nonetheless, in some situations `with_rowid` can be beneficial.
 //! **`hooks`**      | &#x274C; | If this feature is enabled, the [`update()`](SQLiteMap::update) function returns additional information that would otherwise be unavailable. Please note that this feature implies the `with_rowid` feature. Enabling this feature may slightly degrade performance, so it should *only* be used if it is actually needed.
 //!

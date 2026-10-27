@@ -21,7 +21,7 @@ let mut tx = sqlite_set.transaction().unwrap();
 println!("Inserting elements, please wait...");
 
 for n in 0..1_000_000u64 {
-    tx.insert(&format!("{:016X}", n)).unwrap();
+    tx.insert(format!("{:016X}", n)).unwrap();
 }
 
 tx.commit();
