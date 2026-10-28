@@ -4,7 +4,7 @@
 
 use crate::{
     rusqlite::{
-        Connection, Error as RusqliteError, OpenFlags, TransactionBehavior,
+        CachedStatement, Connection, Error as RusqliteError, OpenFlags, TransactionBehavior,
         ffi::{Error as FfiError, ErrorCode as FfiErrorCode},
         types::{FromSql, ToSql, Type as RusqliteType},
         version_number,
@@ -513,6 +513,14 @@ pub fn duplicate_db(source_db: &Connection) -> Result<Connection, Error> {
     }
 
     Ok(connection)
+}
+
+#[inline(always)]
+pub fn lazy_init<'a, 'b>(conn: &'a Connection, cache: &'b mut Option<CachedStatement<'a>>, sql: &'static str) -> Result<&'b mut CachedStatement<'a>, Error> {
+    if cache.is_none() {
+        *cache = Some(conn.prepare_cached(sql)?);
+    }
+    unsafe { Ok(cache.as_mut().unwrap_unchecked()) }
 }
 
 // ---------------------------------------------------------------------------

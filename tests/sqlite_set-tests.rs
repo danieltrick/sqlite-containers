@@ -2876,6 +2876,67 @@ fn test_sqlite_set_eq() {
 }
 
 // ---------------------------------------------------------------------------
+// SQLiteSet Reader/Writer Tests
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_sqlite_set_reader_writer() {
+    let mut hex = HexEncoder::default();
+
+    for b in [false, true] {
+        let mut set = SQLiteSet::<Blob>::new().unwrap();
+
+        {
+            let mut tx = set.transaction().unwrap();
+            let mut writer = tx.new_writer().unwrap();
+            if !b {
+                for i in 0u64..MAX_ITEMS {
+                    assert!(writer.insert(hex.encode_raw(mix64(i)).to_vec()).unwrap());
+                }
+            } else {
+                for i in 0u64..MAX_ITEMS {
+                    assert!(writer.insert_ref(hex.encode_raw(mix64(i))).unwrap());
+                }
+            }
+        }
+
+        assert!(!set.is_empty().unwrap());
+        assert_eq!(set.len().unwrap().to_u64(), MAX_ITEMS);
+
+        {
+            let mut reader = set.new_reader().unwrap();
+            for i in 0u64..MAX_ITEMS {
+                assert!(reader.contains(hex.encode_raw(mix64(i))).unwrap());
+            }
+        }
+    }
+}
+
+#[test]
+fn test_sqlite_set_reader_nocase() {
+    let mut set = SQLiteSet::<String>::new().unwrap();
+
+    {
+        let mut tx = set.transaction().unwrap();
+        assert!(tx.insert_ref("foo").unwrap());
+        assert!(tx.insert_ref("bar").unwrap());
+        assert!(tx.insert_ref("BAZ").unwrap());
+    }
+
+    {
+        let mut reader = set.new_reader().unwrap();
+        assert!(reader.contains_nocase("foo").unwrap());
+        assert!(reader.contains_nocase("FOO").unwrap());
+        assert!(reader.contains_nocase("bar").unwrap());
+        assert!(reader.contains_nocase("BAR").unwrap());
+        assert!(reader.contains_nocase("baz").unwrap());
+        assert!(reader.contains_nocase("BAZ").unwrap());
+        assert!(!reader.contains_nocase("qux").unwrap());
+        assert!(!reader.contains_nocase("QUX").unwrap());
+    }
+}
+
+// ---------------------------------------------------------------------------
 // SQLiteSet Test to Destruction
 // ---------------------------------------------------------------------------
 

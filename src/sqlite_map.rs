@@ -4,8 +4,8 @@
 
 use crate::{
     CharType, Error, IterationError, Order, SQLiteSet, Size, SizeExt, TryClone, TryEq, Type,
-    common::{SQL_TYPE_TEXT, SQL_TYPES, SqlType, check_constraint, create_new_connection, increment},
-    rusqlite::{Connection, DropBehavior, OptionalExtension, ToSql, Transaction, params},
+    common::{SQL_TYPE_TEXT, SQL_TYPES, SqlType, check_constraint, create_new_connection, increment, lazy_init},
+    rusqlite::{CachedStatement, Connection, DropBehavior, OptionalExtension, ToSql, Transaction, params},
 };
 use cfg_if::cfg_if;
 use const_format::concatcp;
@@ -313,6 +313,13 @@ where
     #[inline]
     pub(crate) fn transaction_readonly(&self) -> Result<SQLiteMapTransaction<'_, K, V>, Error> {
         SQLiteMapTransaction::from_immutable(&self.connection, &self.last_action)
+    }
+
+    /// Creates a new [`SQLiteMapReader`] instance.
+    ///
+    /// Please note that using an `SQLiteMapReader` allows for much more efficient bulk queries &#x1F680;
+    pub fn new_reader(&self) -> Result<SQLiteMapReader<'_, K, V>, Error> {
+        SQLiteMapReader::from(&self.connection)
     }
 
     /// Inserts the given key-value pair into the map, if the specified key does *not* exist yet.
@@ -1017,6 +1024,11 @@ where
         Ok(Self { _types: (PhantomData, PhantomData), transaction, last_action })
     }
 
+    /// Creates a new [`SQLiteMapWriter`] instance.
+    pub fn new_writer(&mut self) -> Result<SQLiteMapWriter<'_, K, V>, Error> {
+        SQLiteMapWriter::from(&mut self.transaction, self.last_action)
+    }
+
     /// Drops the `SQLiteMapTransaction`, thereby committing the SQLite transaction.
     #[inline]
     pub fn commit(self) {}
@@ -1459,6 +1471,160 @@ where
 }
 
 // ---------------------------------------------------------------------------
+// SQLiteMap Reader
+// ---------------------------------------------------------------------------
+
+/// A high-performance reader bound to an active [SQLiteMapTransaction].
+///
+/// Enables even faster bulk lookups &#x1F680;&#x1F680;
+pub struct SQLiteMapReader<'a, K, V>
+where
+    K: Type,
+    V: Type,
+{
+    _types: (PhantomData<K>, PhantomData<V>),
+    connection: &'a Connection,
+    statement_contains: Option<CachedStatement<'a>>,
+    statement_contains_nocase: Option<CachedStatement<'a>>,
+    statement_get: Option<CachedStatement<'a>>,
+    statement_get_nocase: Option<CachedStatement<'a>>,
+}
+
+impl<'a, K, V> SQLiteMapReader<'a, K, V>
+where
+    K: Type,
+    V: Type,
+{
+    #[inline]
+    fn from(connection: &'a Connection) -> Result<Self, Error> {
+        Ok(Self {
+            _types: (PhantomData, PhantomData),
+            connection,
+            statement_contains: None,
+            statement_contains_nocase: None,
+            statement_get: None,
+            statement_get_nocase: None,
+        })
+    }
+
+    /// This function is equivalent to [`SQLiteMap::contains_key()`].
+    #[inline]
+    pub fn contains_key<Q>(&mut self, key: &Q) -> Result<bool, Error>
+    where
+        K: Borrow<Q>,
+        Q: ?Sized + ToSql,
+    {
+        let statement = lazy_init(self.connection, &mut self.statement_contains, SQL_EXISTS_KEY)?;
+        Ok(statement.exists([key])?)
+    }
+
+    /// This function is equivalent to [`SQLiteMap::contains_key_nocase()`].
+    #[inline]
+    pub fn contains_key_nocase<Q>(&mut self, key: &Q) -> Result<bool, Error>
+    where
+        K: Borrow<Q> + CharType,
+        Q: ?Sized + ToSql,
+    {
+        let statement = lazy_init(self.connection, &mut self.statement_contains_nocase, SQL_EXISTS_NOC)?;
+        Ok(statement.exists([key])?)
+    }
+
+    /// This function is equivalent to [`SQLiteMap::get()`].
+    #[inline]
+    pub fn get<Q>(&mut self, key: &Q) -> Result<Option<V>, Error>
+    where
+        K: Borrow<Q>,
+        Q: ?Sized + ToSql,
+    {
+        let statement = lazy_init(self.connection, &mut self.statement_get, SQL_LOOKUP_KEY)?;
+        Ok(statement.query_one([key], |row| row.get(0)).optional()?)
+    }
+
+    /// This function is equivalent to [`SQLiteMap::get_nocase()`].
+    #[inline]
+    pub fn get_nocase<Q>(&mut self, key: &Q) -> Result<Option<V>, Error>
+    where
+        K: Borrow<Q> + CharType,
+        Q: ?Sized + ToSql,
+    {
+        let statement = lazy_init(self.connection, &mut self.statement_get_nocase, SQL_LOOKUP_NOC)?;
+        Ok(statement.query_one([key], |row| row.get(0)).optional()?)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// SQLiteMap Writer
+// ---------------------------------------------------------------------------
+
+/// A high-performance writer bound to an active [SQLiteMapTransaction].
+///
+/// Enables even faster bulk inserts and updates &#x1F680;&#x1F680;
+pub struct SQLiteMapWriter<'a, K, V>
+where
+    K: Type,
+    V: Type,
+{
+    _types: (PhantomData<K>, PhantomData<V>),
+    transaction: &'a Transaction<'a>,
+    last_action: &'a LastActionHolder,
+    statement_insert: Option<CachedStatement<'a>>,
+    statement_update: Option<CachedStatement<'a>>,
+}
+
+impl<'a, K, V> SQLiteMapWriter<'a, K, V>
+where
+    K: Type,
+    V: Type,
+{
+    #[inline]
+    fn from(transaction: &'a mut Transaction, last_action: &'a LastActionHolder) -> Result<Self, Error> {
+        Ok(Self { _types: (PhantomData, PhantomData), transaction, last_action, statement_insert: None, statement_update: None })
+    }
+
+    /// This function is equivalent to [`SQLiteMap::insert()`].
+    #[inline]
+    pub fn insert(&mut self, key: K, value: V) -> Result<bool, Error> {
+        let statement = lazy_init(self.transaction, &mut self.statement_insert, SQL_INSERT_KEY)?;
+        Ok(check_constraint(statement.execute(params![key, value]))?)
+    }
+
+    /// This function is equivalent to [`SQLiteMap::insert_ref()`].
+    #[inline]
+    pub fn insert_ref<Q, R>(&mut self, key: &Q, value: &R) -> Result<bool, Error>
+    where
+        K: Borrow<Q>,
+        Q: ?Sized + ToSql,
+        V: Borrow<R>,
+        R: ?Sized + ToSql,
+    {
+        let statement = lazy_init(self.transaction, &mut self.statement_insert, SQL_INSERT_KEY)?;
+        Ok(check_constraint(statement.execute(params![key, value]))?)
+    }
+
+    /// This function is equivalent to [`SQLiteMap::update()`].
+    #[inline]
+    pub fn update(&mut self, key: K, value: V) -> Result<Action, Error> {
+        let statement = lazy_init(self.transaction, &mut self.statement_update, SQL_UPSERT_KEY)?;
+        statement.execute(params![key, value])?;
+        Ok(Action::from(self.last_action))
+    }
+
+    /// This function is equivalent to [`SQLiteMap::update_ref()`].
+    #[inline]
+    pub fn update_ref<Q, R>(&mut self, key: &Q, value: &R) -> Result<Action, Error>
+    where
+        K: Borrow<Q>,
+        Q: ?Sized + ToSql,
+        V: Borrow<R>,
+        R: ?Sized + ToSql,
+    {
+        let statement = lazy_init(self.transaction, &mut self.statement_update, SQL_UPSERT_KEY)?;
+        statement.execute(params![key, value])?;
+        Ok(Action::from(self.last_action))
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Auxiliary Functions
 // ---------------------------------------------------------------------------
 
@@ -1468,7 +1634,7 @@ fn update_counter(counter: &mut (Size, Size), action: Action) {
     match action {
         Action::Insert => increment(&mut counter.0),
         Action::Update => increment(&mut counter.1),
-        Action::Unknown => (), /*hint::cold_path()*/
+        Action::Unknown => (),
     }
 }
 

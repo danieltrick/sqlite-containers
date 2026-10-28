@@ -5715,6 +5715,111 @@ fn test_sqlite_map_eq() {
 }
 
 // ---------------------------------------------------------------------------
+// SQLiteMap Reader/Writer Tests
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_sqlite_map_reader_writer() {
+    let (mut hex_1, mut hex_2) = (HexEncoder::default(), HexEncoder::default());
+
+    for b in [false, true] {
+        let mut map = SQLiteMap::<Blob, String>::new().unwrap();
+
+        {
+            let mut tx = map.transaction().unwrap();
+            let mut writer = tx.new_writer().unwrap();
+            if !b {
+                for i in (0u64..MAX_ITEMS).step_by(2) {
+                    let (key, value) = (hex_1.encode_raw(mix64(i)), hex_2.encode(mix64(!i)));
+                    assert!(writer.insert(key.to_vec(), value.to_owned()).unwrap());
+                }
+            } else {
+                for i in (0u64..MAX_ITEMS).step_by(2) {
+                    let (key, value) = (hex_1.encode_raw(mix64(i)), hex_2.encode(mix64(!i)));
+                    assert!(writer.insert_ref(key, value).unwrap());
+                }
+            }
+        }
+
+        {
+            let mut tx = map.transaction().unwrap();
+            let mut writer = tx.new_writer().unwrap();
+            if !b {
+                for i in 0u64..MAX_ITEMS {
+                    let (key, value) = (hex_1.encode_raw(mix64(i)), hex_2.encode(!mix64(!i)));
+                    let action = writer.update(key.to_vec(), value.to_owned()).unwrap();
+                    match i % 2u64 {
+                        0 => assert!(matches!(action, Action::Unknown | Action::Update)),
+                        _ => assert!(matches!(action, Action::Unknown | Action::Insert)),
+                    }
+                }
+            } else {
+                for i in 0u64..MAX_ITEMS {
+                    let (key, value) = (hex_1.encode_raw(mix64(i)), hex_2.encode(!mix64(!i)));
+                    let action = writer.update_ref(key, value).unwrap();
+                    match i % 2u64 {
+                        0 => assert!(matches!(action, Action::Unknown | Action::Update)),
+                        _ => assert!(matches!(action, Action::Unknown | Action::Insert)),
+                    }
+                }
+            }
+        }
+
+        assert!(!map.is_empty().unwrap());
+        assert_eq!(map.len().unwrap().to_u64(), MAX_ITEMS);
+
+        {
+            let mut reader = map.new_reader().unwrap();
+            for i in 0u64..MAX_ITEMS {
+                assert!(reader.contains_key(hex_1.encode_raw(mix64(i))).unwrap());
+            }
+        }
+
+        {
+            let mut reader = map.new_reader().unwrap();
+            for i in 0u64..MAX_ITEMS {
+                let (key, expected) = (hex_1.encode_raw(mix64(i)), hex_2.encode(!mix64(!i)));
+                assert!(reader.get(key).unwrap().is_some_and(|value| value.eq_ignore_ascii_case(expected)));
+            }
+        }
+    }
+}
+
+#[test]
+fn test_sqlite_map_reader_nocase() {
+    let mut map = SQLiteMap::<String, String>::new().unwrap();
+
+    {
+        let mut tx = map.transaction().unwrap();
+        assert!(tx.insert_ref("foo", "11111111").unwrap());
+        assert!(tx.insert_ref("bar", "22222222").unwrap());
+        assert!(tx.insert_ref("BAZ", "33333333").unwrap());
+    }
+
+    {
+        let mut reader = map.new_reader().unwrap();
+
+        assert!(reader.contains_key_nocase("foo").unwrap());
+        assert!(reader.contains_key_nocase("FOO").unwrap());
+        assert!(reader.contains_key_nocase("bar").unwrap());
+        assert!(reader.contains_key_nocase("BAR").unwrap());
+        assert!(reader.contains_key_nocase("baz").unwrap());
+        assert!(reader.contains_key_nocase("BAZ").unwrap());
+        assert!(!reader.contains_key_nocase("qux").unwrap());
+        assert!(!reader.contains_key_nocase("QUX").unwrap());
+
+        assert!(reader.get_nocase("foo").unwrap().is_some_and(|value| value.eq("11111111")));
+        assert!(reader.get_nocase("FOO").unwrap().is_some_and(|value| value.eq("11111111")));
+        assert!(reader.get_nocase("bar").unwrap().is_some_and(|value| value.eq("22222222")));
+        assert!(reader.get_nocase("BAR").unwrap().is_some_and(|value| value.eq("22222222")));
+        assert!(reader.get_nocase("baz").unwrap().is_some_and(|value| value.eq("33333333")));
+        assert!(reader.get_nocase("BAZ").unwrap().is_some_and(|value| value.eq("33333333")));
+        assert!(reader.get_nocase("qux").unwrap().is_none());
+        assert!(reader.get_nocase("QUX").unwrap().is_none());
+    }
+}
+
+// ---------------------------------------------------------------------------
 // SQLiteMap Test to Destruction
 // ---------------------------------------------------------------------------
 

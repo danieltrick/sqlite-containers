@@ -4,8 +4,8 @@
 
 use crate::{
     CharType, Error, IterationError, Order, SQLiteMap, Size, SizeExt, TryClone, TryEq, Type,
-    common::{SQL_TYPE_TEXT, SQL_TYPES, SqlType, check_constraint, create_new_connection, increment},
-    rusqlite::{Connection, DropBehavior, ToSql, Transaction},
+    common::{SQL_TYPE_TEXT, SQL_TYPES, SqlType, check_constraint, create_new_connection, increment, lazy_init},
+    rusqlite::{CachedStatement, Connection, DropBehavior, ToSql, Transaction},
 };
 use cfg_if::cfg_if;
 use const_format::concatcp;
@@ -208,6 +208,13 @@ where
     #[inline]
     pub(crate) fn transaction_readonly(&self) -> Result<SQLiteSetTransaction<'_, T>, Error> {
         SQLiteSetTransaction::from_immutable(&self.connection)
+    }
+
+    /// Creates a new [`SQLiteSetReader`] instance.
+    ///
+    /// Please note that using an `SQLiteSetReader` allows for much more efficient bulk queries &#x1F680;
+    pub fn new_reader(&self) -> Result<SQLiteSetReader<'_, T>, Error> {
+        SQLiteSetReader::from(&self.connection)
     }
 
     /// Inserts the given key into the set.
@@ -889,6 +896,11 @@ where
         Ok(Self { _type: PhantomData, transaction })
     }
 
+    /// Creates a new [`SQLiteSetWriter`] instance.
+    pub fn new_writer(&mut self) -> Result<SQLiteSetWriter<'_, T>, Error> {
+        SQLiteSetWriter::from(&mut self.transaction)
+    }
+
     /// Drops the `SQLiteSetTransaction`, thereby committing the SQLite transaction.
     #[inline]
     pub fn commit(self) {}
@@ -1193,5 +1205,97 @@ where
         let mut statement = self.transaction.prepare_cached(SQL_DELETE_ALL)?;
         statement.execute([])?;
         Ok(())
+    }
+}
+
+// ---------------------------------------------------------------------------
+// SQLiteSet Reader
+// ---------------------------------------------------------------------------
+
+/// A high-performance reader bound to an active [SQLiteSetTransaction].
+///
+/// Enables even faster bulk lookups 🚀🚀
+pub struct SQLiteSetReader<'a, T>
+where
+    T: Type,
+{
+    _type: PhantomData<T>,
+    connection: &'a Connection,
+    statement: Option<CachedStatement<'a>>,
+    statement_nocase: Option<CachedStatement<'a>>,
+}
+
+impl<'a, T> SQLiteSetReader<'a, T>
+where
+    T: Type,
+{
+    #[inline]
+    fn from(connection: &'a Connection) -> Result<Self, Error> {
+        Ok(Self { _type: PhantomData, connection, statement: None, statement_nocase: None })
+    }
+
+    //transaction.prepare_cached()?, statement_nocase: transaction.prepare_cached()?
+
+    /// This function is equivalent to [`SQLiteSet::contains()`].
+    #[inline]
+    pub fn contains<Q>(&mut self, key: &Q) -> Result<bool, Error>
+    where
+        T: Borrow<Q>,
+        Q: ?Sized + ToSql,
+    {
+        let statement = lazy_init(self.connection, &mut self.statement, SQL_EXISTS_KEY)?;
+        Ok(statement.exists([key])?)
+    }
+
+    /// This function is equivalent to [`SQLiteSet::contains_nocase()`].
+    #[inline]
+    pub fn contains_nocase<Q>(&mut self, key: &Q) -> Result<bool, Error>
+    where
+        T: Borrow<Q> + CharType,
+        Q: ?Sized + ToSql,
+    {
+        let statement = lazy_init(self.connection, &mut self.statement_nocase, SQL_EXISTS_NOC)?;
+        Ok(statement.exists([key])?)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// SQLiteSet Writer
+// ---------------------------------------------------------------------------
+
+/// A high-performance writer bound to an active [SQLiteSetTransaction].
+///
+/// Enables even faster bulk inserts 🚀🚀
+pub struct SQLiteSetWriter<'a, T>
+where
+    T: Type,
+{
+    _type: PhantomData<T>,
+    statement: CachedStatement<'a>,
+}
+
+impl<'a, T> SQLiteSetWriter<'a, T>
+where
+    T: Type,
+{
+    #[inline]
+    fn from(transaction: &'a mut Transaction) -> Result<Self, Error> {
+        Ok(Self { _type: PhantomData, statement: transaction.prepare_cached(SQL_INSERT_KEY)? })
+    }
+
+    /// This function is equivalent to [`SQLiteSet::insert()`].
+    #[inline]
+    pub fn insert(&mut self, key: T) -> Result<bool, Error> {
+        Ok(check_constraint(self.statement.execute([key]))?)
+    }
+
+    /// This function is equivalent to [`SQLiteSet::insert_ref()`].
+    #[inline]
+    pub fn insert_ref<Q>(&mut self, key: &Q) -> Result<bool, Error>
+    where
+        T: Borrow<Q>,
+        Q: ?Sized + ToSql,
+    {
+        Ok(check_constraint(self.statement.execute([key]))?)
     }
 }
