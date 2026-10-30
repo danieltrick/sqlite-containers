@@ -72,7 +72,7 @@ const SQL_STORE_INTO: &str = concatcp!("VACUUM INTO ?1;");
 
 /// A [set](https://en.wikipedia.org/wiki/Set_(abstract_data_type)) that stores keys of type [`T`](crate::Type), backed by an SQLite in-memory database.
 ///
-/// It serves as a drop-in replacement for [`HashSet`](std::collections::HashSet).
+/// It serves as a drop-in replacement for [`HashSet`].
 ///
 /// By default, `SQLiteSet<String>` treats its keys as case-sensitive, but a case-insensitive variant is available. Even when using the case-sensitive set variant, for some operations a dedicated "case-insensitive" version is provided.
 ///
@@ -456,7 +456,9 @@ where
         Ok(())
     }
 
-    /// Removes all keys from the set and invokes the `callback` function for each removed key.
+    /// Removes *all* keys from the set and invokes the `callback` function for each removed key.
+    ///
+    /// The keys are passed to the callback in an unspecified order.
     #[inline]
     pub fn drain<F>(&self, mut callback: F) -> Result<(), Error>
     where
@@ -724,7 +726,7 @@ where
         Ok(new_map)
     }
 
-    /// Returns a new [`Vec`](std::vec::Vec) containing all keys that are currently contained in the set.
+    /// Returns a new [`Vec`] containing all keys that are currently contained in the set.
     ///
     /// The keys are stored in the resulting `Vec` in the specified [`order`](crate::Order).
     #[inline]
@@ -740,7 +742,7 @@ where
         Ok(new_vec)
     }
 
-    /// Returns a new [`HashSet`](std::collections::HashSet) containing *all* keys that are currently contained in the set.
+    /// Returns a new [`HashSet`] containing *all* keys that are currently contained in the set.
     ///
     /// For a case-sensitive set, this function can be reverted with the [`try_from()`](Self::try_from) function.
     #[inline]
@@ -848,7 +850,7 @@ where
 
     /// Creates an exact, independent *copy* of the given set instance.
     ///
-    /// This function fails with [`Error::Unsupported`](crate::Error::Unsupported), if the optional [`backup`](crate#optional-features) feature is **not** enabled &#128549;
+    /// This function fails with [`Error::Unsupported`], if the optional [`backup`](crate#optional-features) feature is **not** enabled &#128549;
     #[inline]
     fn try_clone(&self) -> Result<Self, Self::Error> {
         cfg_if! {
@@ -906,7 +908,9 @@ where
         SQLiteSetWriter::from(&mut self.transaction)
     }
 
-    /// Drops the `SQLiteSetTransaction`, thereby committing the SQLite transaction.
+    /// Commits the active SQLite transaction.
+    ///
+    /// Calling this function is optional; the transaction is automatically committed when the `SQLiteSetTransaction` is dropped.
     #[inline]
     pub fn commit(self) {}
 
@@ -1217,9 +1221,9 @@ where
 // SQLiteSet Reader
 // ---------------------------------------------------------------------------
 
-/// A high-performance reader bound to an active [SQLiteSetTransaction].
+/// A high-performance reader bound to an active [`SQLiteSetTransaction`].
 ///
-/// Enables even faster bulk lookups 🚀🚀
+/// Enables even faster bulk lookups &#x1F680;&#x1F680;
 pub struct SQLiteSetReader<'a, T>
 where
     T: Type,
@@ -1268,9 +1272,9 @@ where
 // SQLiteSet Writer
 // ---------------------------------------------------------------------------
 
-/// A high-performance writer bound to an active [SQLiteSetTransaction].
+/// A high-performance writer bound to an active [`SQLiteSetTransaction`].
 ///
-/// Enables even faster bulk inserts 🚀🚀
+/// Enables even faster bulk inserts &#x1F680;&#x1F680;
 pub struct SQLiteSetWriter<'a, T>
 where
     T: Type,

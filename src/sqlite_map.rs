@@ -153,7 +153,7 @@ const SQL_STORE_INTO: &str = concatcp!("VACUUM INTO ?1;");
 
 /// A [map](https://en.wikipedia.org/wiki/Associative_array) that stores key-value pairs with keys of type [`K`](crate::Type) and values of type [`V`](crate::Type), backed by an SQLite in-memory database.
 ///
-/// It serves as a drop-in replacement for [`HashMap`](std::collections::HashMap).
+/// It serves as a drop-in replacement for [`HashMap`].
 ///
 /// By default, `SQLiteMap<String>` treats its keys as case-sensitive, but a case-insensitive variant is available. Even when using the case-sensitive map variant, for some operations a dedicated "case-insensitive" version is provided.
 ///
@@ -730,6 +730,8 @@ where
     }
 
     /// Removes all key-value pairs from the map and invokes the `callback` function for each removed pair.
+    ///
+    /// The key-value pairs are passed to the callback in an unspecified order.
     #[inline]
     pub fn drain<F>(&self, mut callback: F) -> Result<(), Error>
     where
@@ -840,7 +842,7 @@ where
         Ok(new_map)
     }
 
-    /// Returns a new [`Vec`](std::vec::Vec) containing *all* keys that are currently contained in the map.
+    /// Returns a new [`Vec`] containing *all* keys that are currently contained in the map.
     ///
     /// The keys are stored in the resulting `Vec` in the specified key [`order`](crate::Order).
     #[inline]
@@ -856,7 +858,7 @@ where
         Ok(new_vec)
     }
 
-    /// Returns a new [`Vec`](std::vec::Vec) containing *all* key-value pairs that are currently contained in the map.
+    /// Returns a new [`Vec`] containing *all* key-value pairs that are currently contained in the map.
     ///
     /// The key-value pairs are stored in the resulting `Vec` in the specified key [`order`](crate::Order).
     #[inline]
@@ -872,7 +874,7 @@ where
         Ok(new_vec)
     }
 
-    /// Returns a new [`HashMap`](std::collections::HashMap) containing *all* key-value pairs that are currently contained in the map.
+    /// Returns a new [`HashMap`] containing *all* key-value pairs that are currently contained in the map.
     ///
     /// For a case-sensitive map, this function can be reverted with the [`try_from()`](Self::try_from) function.
     #[inline]
@@ -973,7 +975,7 @@ where
 
     /// Creates an exact, independent *copy* of the given map instance.
     ///
-    /// This function fails with [`Error::Unsupported`](crate::Error::Unsupported), if the optional [`backup`](crate#optional-features) feature is **not** enabled &#128549;
+    /// This function fails with [`Error::Unsupported`], if the optional [`backup`](crate#optional-features) feature is **not** enabled &#128549;
     #[inline]
     fn try_clone(&self) -> Result<Self, Self::Error> {
         cfg_if! {
@@ -1034,7 +1036,9 @@ where
         SQLiteMapWriter::from(&mut self.transaction, self.last_action)
     }
 
-    /// Drops the `SQLiteMapTransaction`, thereby committing the SQLite transaction.
+    /// Commits the active SQLite transaction.
+    ///
+    /// Calling this function is optional; the transaction is automatically committed when the `SQLiteMapTransaction` is dropped.
     #[inline]
     pub fn commit(self) {}
 
@@ -1439,7 +1443,7 @@ where
     pub fn drain_glob<F, Q>(&self, invert: bool, pattern: &Q, mut callback: F) -> Result<(), Error>
     where
         F: FnMut(K, V),
-        K: Borrow<Q>,
+        K: Borrow<Q> + CharType,
         Q: ?Sized + ToSql,
     {
         let mut statement = self.transaction.prepare_cached(if invert { SQL_DRAIN_NGLB } else { SQL_DRAIN_GLOB })?;

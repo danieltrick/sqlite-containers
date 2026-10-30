@@ -86,7 +86,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/).
 ### Added
 
 - Added new optional features `backup`, `checked` and `hooks`.
-- Added new trait `TryClone`, which is currently implemented by the `SQLiteMap` and `SQLiteMap` structs.
+- Added new trait `TryClone`, which is currently implemented by the `SQLiteSet` and `SQLiteMap` structs.
 - Added new functions `SQLiteMap::to_file()` and `SQLiteSet::to_file()`.
 - Added new functions `SQLiteMap::union()` and `SQLiteSet::union()`.
 - Added new functions `SQLiteMap::to_set()` and `SQLiteMap::to_set_nocase()`.
@@ -115,8 +115,8 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/).
 ### Changed
 
 - Function `SQLiteSet::filter()` has been replaced with `SQLiteSet::glob()`.
-- Function `SQLiteMap::filter_keys()` has been replaced with `SQLiteSet::glob_keys()`.
-- Function `SQLiteMap::filter_entries()` has been replaced with `SQLiteSet::glob_entries()`.
+- Function `SQLiteMap::filter_keys()` has been replaced with `SQLiteMap::glob_keys()`.
+- Function `SQLiteMap::filter_entries()` has been replaced with `SQLiteMap::glob_entries()`.
 - Functions `SQLiteSet::is_empty()` and `SQLiteMap::is_empty()` have been improved.
 - Integration tests have been significantly improved.
 

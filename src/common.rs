@@ -70,6 +70,7 @@ impl_sealed!(i32, u32, i64, String, Blob);
 // SQL Type Holder
 // ---------------------------------------------------------------------------
 
+/// A wrapper around a [`rusqlite::types::Type`] that provides a total ordering.
 #[derive(Eq, PartialEq, Copy, Clone, Debug)]
 pub struct SqlType(pub RusqliteType);
 
@@ -112,13 +113,13 @@ pub static SQL_TYPES: [SqlType; 3usize] = [SqlType::new(RusqliteType::Integer), 
 ///
 /// Currently, the following types are supported:
 ///
-/// Type                              | SQLite storage datatype
-/// --------------------------------- | -----------------------
-/// **`i32`**                         | `INTEGER`
-/// **`u32`**                         | `INTEGER`
-/// **`i64`**                         | `INTEGER`
-/// **`Vec<u8>`**, alias **[`Blob`]** | `BLOB`
-/// **[`String`]**                    | `TEXT`
+/// | Type                              | SQLite storage datatype |
+/// | --------------------------------- | ----------------------- |
+/// | **`i32`**                         | `INTEGER`               |
+/// | **`u32`**                         | `INTEGER`               |
+/// | **`i64`**                         | `INTEGER`               |
+/// | **`Vec<u8>`**, alias **[`Blob`]** | `BLOB`                  |
+/// | **[`String`]**                    | `TEXT`                  |
 ///
 /// &nbsp;
 ///
@@ -151,9 +152,9 @@ impl_type!(String, Text);
 // Character-based Types
 // ---------------------------------------------------------------------------
 
-/// Represents a character-based type, e.g., [`String`].
+/// A marker trait for character-based types, such as [`String`].
 ///
-/// Keys of these types can be treated case-sensitive (default) or case-insensitive.
+/// Keys of these types can be treated either case-sensitively (the default) or case-insensitively.
 pub trait CharType {}
 
 macro_rules! impl_chartype {
@@ -180,7 +181,7 @@ cfg_if! {
     }
 }
 
-/// Provides useful helper functions for the [`Size`](crate::Size) type.
+/// Provides useful helper functions for the [`Size`] type.
 pub trait SizeExt {
     /// Create a new [`Size`] instance from an `i64` value.
     fn from_i64(value: i64) -> Self;
@@ -266,16 +267,16 @@ impl From<RusqliteError> for Error {
 // IterationOrder
 // ---------------------------------------------------------------------------
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 /// The iteration order to be used by the [`for_each()`](crate::SQLiteSet::for_each) and [`for_each_key()`](crate::SQLiteMap::for_each_key) functions.
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Order {
     /// Ascending iteration order. For strings, this means lexicographic order.
     ASC,
     /// Descending iteration order. For strings, this means reverse lexicographic order.
     DSC,
-    /// Undefined iteration order. May be faster than the other ones &#128640;
+    /// Undefined iteration order. May be faster than the other variants.
     ///
-    /// Note: The “undefined” iteration order may happen to be equal to the “ascending” or the “descending” order, but it may also be entirely different. In any case, a specific iteration order **must not** be assumed when “undefined” is selected.
+    /// Note: The "undefined" iteration order may happen to coincide with the "ascending" or the "descending" order, but it may also be entirely different. In any case, a specific iteration order **must not** be assumed when "undefined" is selected.
     UND,
 }
 
@@ -390,7 +391,7 @@ fn initialize_connection(mut connection: Connection, file_based: bool) -> Result
 // Traits
 // ---------------------------------------------------------------------------
 
-/// This is the *failable* version of the standard [`Clone`](std::clone::Clone) trait.
+/// This is the *failable* version of the standard [`Clone`] trait.
 pub trait TryClone: Sized {
     /// The error type to be returned by [`try_clone()`](Self::try_clone).
     type Error: Debug;
@@ -398,7 +399,7 @@ pub trait TryClone: Sized {
     fn try_clone(&self) -> Result<Self, Self::Error>;
 }
 
-/// This is the *failable* version of the standard [`PartialEq`](std::cmp::PartialEq) trait.
+/// This is the *failable* version of the standard [`PartialEq`] trait.
 pub trait TryEq {
     /// The error type to be returned by [`try_eq()`](Self::try_eq).
     type Error: Debug;
@@ -410,7 +411,7 @@ pub trait TryEq {
 // Blanket Implementations
 // ---------------------------------------------------------------------------
 
-/// Wrapper to implement the standard [`Clone`](std::clone::Clone) trait for all [`TryClone`] types.
+/// Wrapper to implement the standard [`Clone`] trait for all [`TryClone`] types.
 pub struct CloneWrapper<T>(pub T)
 where
     T: TryClone;
@@ -429,7 +430,7 @@ where
     }
 }
 
-/// Wrapper to implement the standard [`PartialEq`](std::cmp::PartialEq) and [`Eq`](std::cmp::Eq) traits for all [`TryEq`] types.
+/// Wrapper to implement the standard [`PartialEq`] and [`Eq`] traits for all [`TryEq`] types.
 pub struct EqWrapper<T>(pub T)
 where
     T: TryEq;
