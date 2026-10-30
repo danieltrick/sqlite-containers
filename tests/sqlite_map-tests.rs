@@ -5771,14 +5771,18 @@ fn test_sqlite_map_reader_writer() {
         {
             let mut reader = map.new_reader().unwrap();
             for i in 0u64..MAX_ITEMS {
-                assert!(reader.contains_key(hex_1.encode_raw(mix64(i))).unwrap());
+                let (key, expected) = (hex_1.encode_raw(mix64(i)), hex_2.encode(!mix64(!i)));
+                assert!(reader.contains_key(key).unwrap());
+                assert!(reader.get(key).unwrap().is_some_and(|value| value.eq_ignore_ascii_case(expected)));
             }
         }
 
         {
-            let mut reader = map.new_reader().unwrap();
+            let tx = map.transaction().unwrap();
+            let mut reader = tx.new_reader().unwrap();
             for i in 0u64..MAX_ITEMS {
                 let (key, expected) = (hex_1.encode_raw(mix64(i)), hex_2.encode(!mix64(!i)));
+                assert!(reader.contains_key(key).unwrap());
                 assert!(reader.get(key).unwrap().is_some_and(|value| value.eq_ignore_ascii_case(expected)));
             }
         }

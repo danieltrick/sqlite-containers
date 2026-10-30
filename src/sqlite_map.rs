@@ -1024,6 +1024,11 @@ where
         Ok(Self { _types: (PhantomData, PhantomData), transaction, last_action })
     }
 
+    /// Creates a new [`SQLiteMapReader`] instance.
+    pub fn new_reader(&self) -> Result<SQLiteMapReader<'_, K, V>, Error> {
+        SQLiteMapReader::from(&self.transaction)
+    }
+
     /// Creates a new [`SQLiteMapWriter`] instance.
     pub fn new_writer(&mut self) -> Result<SQLiteMapWriter<'_, K, V>, Error> {
         SQLiteMapWriter::from(&mut self.transaction, self.last_action)

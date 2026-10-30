@@ -21,7 +21,7 @@ with_rowid = []
 [dependencies]
 cfg-if = "1.0.5"
 const_format = "0.2.37"
-rusqlite = "0.41.0"
+rusqlite = "0.41.1"
 semver = "1.0.28"
 
 [dev-dependencies]

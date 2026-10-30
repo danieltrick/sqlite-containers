@@ -2909,6 +2909,14 @@ fn test_sqlite_set_reader_writer() {
                 assert!(reader.contains(hex.encode_raw(mix64(i))).unwrap());
             }
         }
+
+        {
+            let tx = set.transaction().unwrap();
+            let mut reader = tx.new_reader().unwrap();
+            for i in 0u64..MAX_ITEMS {
+                assert!(reader.contains(hex.encode_raw(mix64(i))).unwrap());
+            }
+        }
     }
 }
 

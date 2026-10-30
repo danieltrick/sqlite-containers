@@ -896,6 +896,11 @@ where
         Ok(Self { _type: PhantomData, transaction })
     }
 
+    /// Creates a new [`SQLiteSetReader`] instance.
+    pub fn new_reader(&self) -> Result<SQLiteSetReader<'_, T>, Error> {
+        SQLiteSetReader::from(&self.transaction)
+    }
+
     /// Creates a new [`SQLiteSetWriter`] instance.
     pub fn new_writer(&mut self) -> Result<SQLiteSetWriter<'_, T>, Error> {
         SQLiteSetWriter::from(&mut self.transaction)
