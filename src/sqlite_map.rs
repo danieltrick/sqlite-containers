@@ -122,6 +122,7 @@ const SQL_GET_SCHEMA: &str = concatcp!("SELECT sql FROM sqlite_schema WHERE type
 const SQL_COUNT_KEYS: &str = concatcp!("SELECT COUNT(*) FROM ", TABLE_NAME, ";");
 const SQL_TEST_EMPTY: &str = concatcp!("SELECT EXISTS (SELECT 1 FROM ", TABLE_NAME, ");");
 const SQL_INSERT_KEY: &str = concatcp!("INSERT INTO ", TABLE_NAME, " (key, value) VALUES (?1, ?2);");
+const SQL_INSERT_IGN: &str = concatcp!("INSERT INTO ", TABLE_NAME, " (key, value) VALUES (?1, ?2) ON CONFLICT(key) DO NOTHING;");
 const SQL_UPSERT_KEY: &str = concatcp!("INSERT INTO ", TABLE_NAME, " (key, value) VALUES (?1, ?2) ON CONFLICT(key) DO UPDATE SET value = excluded.value;");
 const SQL_EXISTS_KEY: &str = concatcp!("SELECT 1 FROM ", TABLE_NAME, " WHERE key = ? LIMIT 1;");
 const SQL_EXISTS_NOC: &str = concatcp!("SELECT 1 FROM ", TABLE_NAME, " WHERE key COLLATE NOCASE = ? LIMIT 1;");
@@ -805,10 +806,10 @@ where
         let iter_2 = statement_query_2.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?;
         {
             let tx = new_map.transaction()?;
-            let mut statement_insert = tx.transaction.prepare_cached(SQL_INSERT_KEY)?;
+            let mut statement_insert = tx.transaction.prepare_cached(SQL_INSERT_IGN)?;
             for key_value in iter_1.chain(iter_2) {
                 let (key, value): (K, V) = key_value?;
-                check_constraint(statement_insert.execute(params![key, value]))?;
+                statement_insert.execute(params![key, value])?;
             }
         }
         Ok(new_map)
@@ -833,10 +834,10 @@ where
         let iter_2 = statement_query_2.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?;
         {
             let tx = new_map.transaction()?;
-            let mut statement_insert = tx.transaction.prepare_cached(SQL_INSERT_KEY)?;
+            let mut statement_insert = tx.transaction.prepare_cached(SQL_INSERT_IGN)?;
             for key_value in iter_1.chain(iter_2) {
                 let (key, value): (K, V) = key_value?;
-                check_constraint(statement_insert.execute(params![key, value]))?;
+                statement_insert.execute(params![key, value])?;
             }
         }
         Ok(new_map)

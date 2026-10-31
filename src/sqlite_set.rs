@@ -51,6 +51,7 @@ const SQL_GET_SCHEMA: &str = concatcp!("SELECT sql FROM sqlite_schema WHERE type
 const SQL_COUNT_KEYS: &str = concatcp!("SELECT COUNT(*) FROM ", TABLE_NAME, ";");
 const SQL_TEST_EMPTY: &str = concatcp!("SELECT EXISTS (SELECT 1 FROM ", TABLE_NAME, ");");
 const SQL_INSERT_KEY: &str = concatcp!("INSERT INTO ", TABLE_NAME, " (key) VALUES (?1);");
+const SQL_INSERT_IGN: &str = concatcp!("INSERT INTO ", TABLE_NAME, " (key) VALUES (?1) ON CONFLICT(key) DO NOTHING;");
 const SQL_EXISTS_KEY: &str = concatcp!("SELECT 1 FROM ", TABLE_NAME, " WHERE key = ?1 LIMIT 1;");
 const SQL_EXISTS_NOC: &str = concatcp!("SELECT 1 FROM ", TABLE_NAME, " WHERE key COLLATE NOCASE = ? LIMIT 1;");
 const SQL_ENUM_K_UND: &str = concatcp!("SELECT key FROM ", TABLE_NAME, ";");
@@ -527,11 +528,11 @@ where
         let mut new_map = SQLiteSet::new()?;
         {
             let tx_2 = new_map.transaction()?;
-            let mut statement_insert = tx_2.transaction.prepare_cached(SQL_INSERT_KEY)?;
+            let mut statement_insert = tx_2.transaction.prepare_cached(SQL_INSERT_IGN)?;
             for key in statement_query.query_map([], |row| row.get::<_, T>(0))? {
                 let key = key?;
                 if statement_find.exists([&key])? {
-                    check_constraint(statement_insert.execute([key]))?;
+                    statement_insert.execute([key])?;
                 }
             }
         }
@@ -554,11 +555,11 @@ where
         let mut new_map = SQLiteSet::with_nocase()?;
         {
             let tx_2 = new_map.transaction()?;
-            let mut statement_insert = tx_2.transaction.prepare_cached(SQL_INSERT_KEY)?;
+            let mut statement_insert = tx_2.transaction.prepare_cached(SQL_INSERT_IGN)?;
             for key in statement_query.query_map([], |row| row.get::<_, T>(0))? {
                 let key = key?;
                 if statement_find.exists([&key])? {
-                    check_constraint(statement_insert.execute([key]))?;
+                    statement_insert.execute([key])?;
                 }
             }
         }
@@ -577,9 +578,9 @@ where
         let iter_2 = statement_query_2.query_map([], |row| row.get::<_, T>(0))?;
         {
             let tx = new_map.transaction()?;
-            let mut statement_insert = tx.transaction.prepare_cached(SQL_INSERT_KEY)?;
+            let mut statement_insert = tx.transaction.prepare_cached(SQL_INSERT_IGN)?;
             for key in iter_1.chain(iter_2) {
-                check_constraint(statement_insert.execute([key?]))?;
+                statement_insert.execute([key?])?;
             }
         }
         Ok(new_map)
@@ -602,9 +603,9 @@ where
         let iter_2 = statement_query_2.query_map([], |row| row.get::<_, T>(0))?;
         {
             let tx = new_map.transaction()?;
-            let mut statement_insert = tx.transaction.prepare_cached(SQL_INSERT_KEY)?;
+            let mut statement_insert = tx.transaction.prepare_cached(SQL_INSERT_IGN)?;
             for key in iter_1.chain(iter_2) {
-                check_constraint(statement_insert.execute([key?]))?;
+                statement_insert.execute([key?])?;
             }
         }
         Ok(new_map)
@@ -621,11 +622,11 @@ where
         let mut new_map = SQLiteSet::new()?;
         {
             let tx_2 = new_map.transaction()?;
-            let mut statement_insert = tx_2.transaction.prepare_cached(SQL_INSERT_KEY)?;
+            let mut statement_insert = tx_2.transaction.prepare_cached(SQL_INSERT_IGN)?;
             for key in statement_query.query_map([], |row| row.get::<_, T>(0))? {
                 let key = key?;
                 if !statement_find.exists([&key])? {
-                    check_constraint(statement_insert.execute([key]))?;
+                    statement_insert.execute([key])?;
                 }
             }
         }
@@ -648,11 +649,11 @@ where
         let mut new_map = SQLiteSet::with_nocase()?;
         {
             let tx_2 = new_map.transaction()?;
-            let mut statement_insert = tx_2.transaction.prepare_cached(SQL_INSERT_KEY)?;
+            let mut statement_insert = tx_2.transaction.prepare_cached(SQL_INSERT_IGN)?;
             for key in statement_query.query_map([], |row| row.get::<_, T>(0))? {
                 let key = key?;
                 if !statement_find.exists([&key])? {
-                    check_constraint(statement_insert.execute([key]))?;
+                    statement_insert.execute([key])?;
                 }
             }
         }
@@ -673,17 +674,17 @@ where
         let mut new_map = SQLiteSet::new()?;
         {
             let tx_3 = new_map.transaction()?;
-            let mut statement_insert = tx_3.transaction.prepare_cached(SQL_INSERT_KEY)?;
+            let mut statement_insert = tx_3.transaction.prepare_cached(SQL_INSERT_IGN)?;
             for key in statement_query_1.query_map([], |row| row.get::<_, T>(0))? {
                 let key = key?;
                 if !statement_find_2.exists([&key])? {
-                    check_constraint(statement_insert.execute([key]))?;
+                    statement_insert.execute([key])?;
                 }
             }
             for key in statement_query_2.query_map([], |row| row.get::<_, T>(0))? {
                 let key = key?;
                 if !statement_find_1.exists([&key])? {
-                    check_constraint(statement_insert.execute([key]))?;
+                    statement_insert.execute([key])?;
                 }
             }
         }
@@ -709,17 +710,17 @@ where
         let mut new_map = SQLiteSet::with_nocase()?;
         {
             let tx_3 = new_map.transaction()?;
-            let mut statement_insert = tx_3.transaction.prepare_cached(SQL_INSERT_KEY)?;
+            let mut statement_insert = tx_3.transaction.prepare_cached(SQL_INSERT_IGN)?;
             for key in statement_query_1.query_map([], |row| row.get::<_, T>(0))? {
                 let key = key?;
                 if !statement_find_2.exists([&key])? {
-                    check_constraint(statement_insert.execute([key]))?;
+                    statement_insert.execute([key])?;
                 }
             }
             for key in statement_query_2.query_map([], |row| row.get::<_, T>(0))? {
                 let key = key?;
                 if !statement_find_1.exists([&key])? {
-                    check_constraint(statement_insert.execute([key]))?;
+                    statement_insert.execute([key])?;
                 }
             }
         }
@@ -986,10 +987,10 @@ where
     where
         V: Type,
     {
-        let mut statement = self.transaction.prepare_cached(SQL_INSERT_KEY)?;
+        let mut statement = self.transaction.prepare_cached(SQL_INSERT_IGN)?;
         let trx = map.transaction_readonly()?;
         trx.try_for_each_key(Order::UND, |key| {
-            check_constraint(statement.execute([key]))?;
+            statement.execute([key])?;
             Ok(())
         })
         .map_err(|err| err.into())
