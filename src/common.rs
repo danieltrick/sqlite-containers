@@ -379,9 +379,12 @@ fn initialize_connection(mut connection: Connection, file_based: bool) -> Result
     if !file_based {
         set_pragma_checked(&mut connection, None, "journal_mode", "OFF")?;
         connection.pragma_update(None, "synchronous", "OFF")?;
+        connection.pragma_update(None, "temp_store", "MEMORY")?;
     } else {
         set_pragma_checked(&mut connection, None, "journal_mode", "WAL")?;
         connection.pragma_update(None, "synchronous", "NORMAL")?;
+        connection.pragma_update(None, "cache_size", "-64000")?;
+        connection.pragma_update(None, "mmap_size", "268435456")?;
     }
 
     Ok(connection)

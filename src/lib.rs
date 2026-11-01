@@ -16,6 +16,8 @@
 //!
 //! Leveraging the power of the SQLite engine, [`SQLiteMap`] and [`SQLiteSet`] efficiently store billions of elements!
 //!
+//! File-backed containers are also supported, allowing data to be preserved across program restarts.
+//!
 //! Quick Start
 //! -----------
 //!
