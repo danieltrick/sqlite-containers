@@ -829,7 +829,7 @@ fn test_sqlite_map_i64_string_drain() {
             })
             .unwrap();
         } else {
-            let tx = map.transaction().unwrap();
+            let mut tx = map.transaction().unwrap();
             tx.drain(|key, value| {
                 hash.insert(key, value);
             })
@@ -1629,7 +1629,7 @@ fn test_sqlite_map_blob_string_drain() {
             })
             .unwrap();
         } else {
-            let tx = map.transaction().unwrap();
+            let mut tx = map.transaction().unwrap();
             tx.drain(|key, value| {
                 hash.insert(key, value);
             })
@@ -2651,7 +2651,7 @@ fn test_sqlite_map_string_string_drain() {
             })
             .unwrap();
         } else {
-            let tx = map.transaction().unwrap();
+            let mut tx = map.transaction().unwrap();
             tx.drain(|key, value| {
                 hash.insert(key, value);
             })
@@ -2695,7 +2695,7 @@ fn test_sqlite_map_string_string_drain_glob() {
                 })
                 .unwrap();
             } else {
-                let tx = map.transaction().unwrap();
+                let mut tx = map.transaction().unwrap();
                 tx.drain_glob(invert, "ba?", |key, value| {
                     hash.insert(key, value);
                 })
@@ -3689,7 +3689,7 @@ fn test_sqlite_map_string_blob_drain() {
             })
             .unwrap();
         } else {
-            let tx = map.transaction().unwrap();
+            let mut tx = map.transaction().unwrap();
             tx.drain(|key, value| {
                 hash.insert(key, value);
             })
@@ -3733,7 +3733,7 @@ fn test_sqlite_map_string_blob_drain_glob() {
                 })
                 .unwrap();
             } else {
-                let tx = map.transaction().unwrap();
+                let mut tx = map.transaction().unwrap();
                 tx.drain_glob(invert, "ba?", |key, value| {
                     hash.insert(key, value);
                 })
@@ -4715,7 +4715,7 @@ fn test_sqlite_map_string_i64_drain() {
             })
             .unwrap();
         } else {
-            let tx = map.transaction().unwrap();
+            let mut tx = map.transaction().unwrap();
             tx.drain(|key, value| {
                 hash.insert(key, value);
             })
@@ -4759,7 +4759,7 @@ fn test_sqlite_map_string_i64_drain_glob() {
                 })
                 .unwrap();
             } else {
-                let tx = map.transaction().unwrap();
+                let mut tx = map.transaction().unwrap();
                 tx.drain_glob(invert, "ba?", |key, value| {
                     hash.insert(key, value);
                 })
@@ -5821,6 +5821,97 @@ fn test_sqlite_map_reader_nocase() {
         assert!(reader.get_nocase("qux").unwrap().is_none());
         assert!(reader.get_nocase("QUX").unwrap().is_none());
     }
+}
+
+// ---------------------------------------------------------------------------
+// SQLiteMap i128 test
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_sqlite_map_type_i128() {
+    let mut map = SQLiteMap::<i128, String>::new().unwrap();
+    let (mut n, mut m) = (0usize, 0usize);
+
+    {
+        let mut tx = map.transaction().unwrap();
+        tx.insert(0i128, "11111111".to_owned()).unwrap();
+        tx.insert(1i128, "22222222".to_owned()).unwrap();
+        tx.insert(-1i128, "33333333".to_owned()).unwrap();
+        tx.insert(i128::MIN, "44444444".to_owned()).unwrap();
+        tx.insert(i128::MAX, "55555555".to_owned()).unwrap();
+        tx.insert(42i128, "66666666".to_owned()).unwrap();
+    }
+
+    assert!(map.get(&0i128).unwrap().is_some_and(|value| value.eq("11111111")));
+    assert!(map.get(&1i128).unwrap().is_some_and(|value| value.eq("22222222")));
+    assert!(map.get(&-1i128).unwrap().is_some_and(|value| value.eq("33333333")));
+    assert!(map.get(&42i128).unwrap().is_some_and(|value| value.eq("66666666")));
+    assert!(map.get(&7i128).unwrap().is_none());
+    assert!(map.get(&-5i128).unwrap().is_none());
+
+    map.for_each_entry(Order::ASC, |key, value| {
+        match n {
+            0 => {
+                assert_eq!(key, i128::MIN);
+                assert_eq!(value, "44444444");
+            }
+            1 => {
+                assert_eq!(key, -1i128);
+                assert_eq!(value, "33333333");
+            }
+            2 => {
+                assert_eq!(key, 0i128);
+                assert_eq!(value, "11111111");
+            }
+            3 => {
+                assert_eq!(key, 1i128);
+                assert_eq!(value, "22222222");
+            }
+            4 => {
+                assert_eq!(key, 42i128);
+                assert_eq!(value, "66666666");
+            }
+            5 => {
+                assert_eq!(key, i128::MAX);
+                assert_eq!(value, "55555555");
+            }
+            _ => unreachable!(),
+        }
+        n = n.checked_add(1usize).unwrap();
+    })
+    .unwrap();
+
+    map.for_each_entry(Order::DSC, |key, value| {
+        match m {
+            0 => {
+                assert_eq!(key, i128::MAX);
+                assert_eq!(value, "55555555");
+            }
+            1 => {
+                assert_eq!(key, 42i128);
+                assert_eq!(value, "66666666");
+            }
+            2 => {
+                assert_eq!(key, 1i128);
+                assert_eq!(value, "22222222");
+            }
+            3 => {
+                assert_eq!(key, 0i128);
+                assert_eq!(value, "11111111");
+            }
+            4 => {
+                assert_eq!(key, -1i128);
+                assert_eq!(value, "33333333");
+            }
+            5 => {
+                assert_eq!(key, i128::MIN);
+                assert_eq!(value, "44444444");
+            }
+            _ => unreachable!(),
+        }
+        m = m.checked_add(1usize).unwrap();
+    })
+    .unwrap();
 }
 
 // ---------------------------------------------------------------------------

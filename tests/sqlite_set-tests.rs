@@ -633,7 +633,7 @@ fn test_sqlite_set_i64_drain() {
             })
             .unwrap();
         } else {
-            let tx = set.transaction().unwrap();
+            let mut tx = set.transaction().unwrap();
             tx.drain(|key| {
                 hash.insert(key);
             })
@@ -1539,7 +1539,7 @@ fn test_sqlite_set_string_drain() {
             })
             .unwrap();
         } else {
-            let tx = set.transaction().unwrap();
+            let mut tx = set.transaction().unwrap();
             tx.drain(|key| {
                 hash.insert(key);
             })
@@ -1583,7 +1583,7 @@ fn test_sqlite_set_string_drain_glob() {
                 })
                 .unwrap();
             } else {
-                let tx = set.transaction().unwrap();
+                let mut tx = set.transaction().unwrap();
                 tx.drain_glob(invert, "ba?", |key| {
                     hash.insert(key);
                 })
@@ -2193,7 +2193,7 @@ fn test_sqlite_set_blob_drain() {
             })
             .unwrap();
         } else {
-            let tx = set.transaction().unwrap();
+            let mut tx = set.transaction().unwrap();
             tx.drain(|key| {
                 hash.insert(key);
             })
@@ -2942,6 +2942,61 @@ fn test_sqlite_set_reader_nocase() {
         assert!(!reader.contains_nocase("qux").unwrap());
         assert!(!reader.contains_nocase("QUX").unwrap());
     }
+}
+
+// ---------------------------------------------------------------------------
+// SQLiteSet i128 test
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_sqlite_set_type_i128() {
+    let mut set = SQLiteSet::<i128>::new().unwrap();
+    let (mut n, mut m) = (0usize, 0usize);
+
+    {
+        let mut tx = set.transaction().unwrap();
+        tx.insert(0i128).unwrap();
+        tx.insert(1i128).unwrap();
+        tx.insert(-1i128).unwrap();
+        tx.insert(i128::MIN).unwrap();
+        tx.insert(i128::MAX).unwrap();
+        tx.insert(42i128).unwrap();
+    }
+
+    assert!(set.contains(&0i128).unwrap());
+    assert!(set.contains(&1i128).unwrap());
+    assert!(set.contains(&-1i128).unwrap());
+    assert!(set.contains(&42i128).unwrap());
+    assert!(!set.contains(&7i128).unwrap());
+    assert!(!set.contains(&-5i128).unwrap());
+
+    set.for_each(Order::ASC, |value| {
+        match n {
+            0 => assert_eq!(value, i128::MIN),
+            1 => assert_eq!(value, -1i128),
+            2 => assert_eq!(value, 0i128),
+            3 => assert_eq!(value, 1i128),
+            4 => assert_eq!(value, 42i128),
+            5 => assert_eq!(value, i128::MAX),
+            _ => unreachable!(),
+        }
+        n = n.checked_add(1usize).unwrap();
+    })
+    .unwrap();
+
+    set.for_each(Order::DSC, |value| {
+        match m {
+            0 => assert_eq!(value, i128::MAX),
+            1 => assert_eq!(value, 42i128),
+            2 => assert_eq!(value, 1i128),
+            3 => assert_eq!(value, 0i128),
+            4 => assert_eq!(value, -1i128),
+            5 => assert_eq!(value, i128::MIN),
+            _ => unreachable!(),
+        }
+        m = m.checked_add(1usize).unwrap();
+    })
+    .unwrap();
 }
 
 // ---------------------------------------------------------------------------

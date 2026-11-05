@@ -461,7 +461,7 @@ where
     ///
     /// The keys are passed to the callback in an unspecified order.
     #[inline]
-    pub fn drain<F>(&self, mut callback: F) -> Result<(), Error>
+    pub fn drain<F>(&mut self, mut callback: F) -> Result<(), Error>
     where
         F: FnMut(T),
     {
@@ -480,7 +480,7 @@ where
     ///
     /// If `invert` is `true`, removes all keys that do **not** match the pattern; otherwise the matching keys are removed.
     #[inline]
-    pub fn drain_glob<F, Q>(&self, invert: bool, pattern: &Q, mut callback: F) -> Result<(), Error>
+    pub fn drain_glob<F, Q>(&mut self, invert: bool, pattern: &Q, mut callback: F) -> Result<(), Error>
     where
         F: FnMut(T),
         T: Borrow<Q> + CharType,
@@ -1167,7 +1167,7 @@ where
 
     /// This function is equivalent to [`SQLiteSet::drain()`].
     #[inline]
-    pub fn drain<F>(&self, mut callback: F) -> Result<(), Error>
+    pub fn drain<F>(&mut self, mut callback: F) -> Result<(), Error>
     where
         F: FnMut(T),
     {
@@ -1180,7 +1180,7 @@ where
 
     /// This function is equivalent to [`SQLiteSet::drain_glob()`].
     #[inline]
-    pub fn drain_glob<F, Q>(&self, invert: bool, pattern: &Q, mut callback: F) -> Result<(), Error>
+    pub fn drain_glob<F, Q>(&mut self, invert: bool, pattern: &Q, mut callback: F) -> Result<(), Error>
     where
         F: FnMut(T),
         T: Borrow<Q> + CharType,

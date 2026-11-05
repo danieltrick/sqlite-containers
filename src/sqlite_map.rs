@@ -734,7 +734,7 @@ where
     ///
     /// The key-value pairs are passed to the callback in an unspecified order.
     #[inline]
-    pub fn drain<F>(&self, mut callback: F) -> Result<(), Error>
+    pub fn drain<F>(&mut self, mut callback: F) -> Result<(), Error>
     where
         F: FnMut(K, V),
     {
@@ -754,7 +754,7 @@ where
     ///
     /// If `invert` is `true`, removes all key-value pairs that do **not** match the pattern; otherwise the matching pairs are removed.
     #[inline]
-    pub fn drain_glob<F, Q>(&self, invert: bool, pattern: &Q, mut callback: F) -> Result<(), Error>
+    pub fn drain_glob<F, Q>(&mut self, invert: bool, pattern: &Q, mut callback: F) -> Result<(), Error>
     where
         F: FnMut(K, V),
         K: Borrow<Q> + CharType,
@@ -1427,7 +1427,7 @@ where
 
     /// This function is equivalent to [`SQLiteMap::drain()`].
     #[inline]
-    pub fn drain<F>(&self, mut callback: F) -> Result<(), Error>
+    pub fn drain<F>(&mut self, mut callback: F) -> Result<(), Error>
     where
         F: FnMut(K, V),
     {
@@ -1441,7 +1441,7 @@ where
 
     /// This function is equivalent to [`SQLiteMap::drain_glob()`].
     #[inline]
-    pub fn drain_glob<F, Q>(&self, invert: bool, pattern: &Q, mut callback: F) -> Result<(), Error>
+    pub fn drain_glob<F, Q>(&mut self, invert: bool, pattern: &Q, mut callback: F) -> Result<(), Error>
     where
         F: FnMut(K, V),
         K: Borrow<Q> + CharType,

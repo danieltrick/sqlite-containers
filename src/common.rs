@@ -64,7 +64,7 @@ macro_rules! impl_sealed {
     };
 }
 
-impl_sealed!(i32, u32, i64, String, Blob);
+impl_sealed!(i32, u32, i64, i128, String, Blob);
 
 // ---------------------------------------------------------------------------
 // SQL Type Holder
@@ -145,6 +145,7 @@ macro_rules! impl_type {
 impl_type!(i32, Integer);
 impl_type!(u32, Integer);
 impl_type!(i64, Integer);
+impl_type!(i128, Blob);
 impl_type!(Blob, Blob);
 impl_type!(String, Text);
 
