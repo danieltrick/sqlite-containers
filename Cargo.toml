@@ -2,7 +2,7 @@
 name = "sqlite-containers"
 description = "SQLite-based containers (hash set + hash map) for Rust"
 keywords = ["sqlite", "hashmap", "hashset", "database", "collections"]
-version = "2.5.0-dev"
+version = "2.5.0"
 edition = "2024"
 rust-version = "1.89.0"
 authors = ["Daniel Trick <daniel.trick@sit.fraunhofer.de>"]
@@ -29,7 +29,7 @@ criterion = { version = "0.8.2", default-features = false }
 hex = "0.4.3"
 primal = "0.3.3"
 rand_xoshiro = "0.8.1"
-random_word = { version = "0.5.3", features = ["de","en"] }
+random_word = { version = "1.0.0", features = ["de","en"] }
 tempfile = "3.27.0"
 xxhash-rust = { version = "0.8.19", features = ["xxh64"] }
 

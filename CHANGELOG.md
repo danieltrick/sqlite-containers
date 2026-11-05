@@ -4,6 +4,28 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/).
 
+## [2.5.0] - 2026-11-05
+
+### Added
+
+- Added new struct `SQLiteSetReader`, along with the new function `SQLiteSet::new_reader()`.
+- Added new struct `SQLiteSetWriter`, along with the new function `SQLiteSet::new_writer()`.
+- Added new struct `SQLiteMapReader`, along with the new function `SQLiteMap::new_reader()`.
+- Added new struct `SQLiteMapWriter`, along with the new function `SQLiteMap::new_writer()`.
+- Added new function `SQLiteSetTransaction::new_reader()`.
+- Added new function `SQLiteMapTransaction::new_reader()`.
+- Added support for the `i128` data type, which is stored as a 16-byte `BLOB`.
+- The `application_id` and `user_version` fields in the SQLite file header are now set.
+- Added some additional integration tests to improve test coverage.
+
+### Changed
+
+- The `SQLiteMap::drain()` and `SQLiteMap::drain_glob()` functions now use a mutable reference.
+- The `SQLiteSet::drain()` and `SQLiteSet::drain_glob()` functions now use a mutable reference.
+- Use `ON CONFLICT DO NOTHING` where applicable.
+- Small performance optimization for file-backed containers.
+- Updated the `rusqlite` dependency to version 0.41.1.
+
 ## [2.4.0] - 2026-10-27
 
 ### Added
