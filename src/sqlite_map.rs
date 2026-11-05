@@ -90,19 +90,19 @@ const TABLE_NAME: &str = "rusqlite_map_v2";
 const SCHEMA_VERSION: i32 = make_version(true, 0x2);
 
 static SQL_CREATE_TBL: LazyLock<BTreeMap<(SqlType, SqlType), String>> = LazyLock::new(|| {
-    let mut map = BTreeMap::<(SqlType, SqlType), String>::new();
+    let mut builder = BTreeMap::<(SqlType, SqlType), String>::new();
     for key_type in SQL_TYPES {
         for value_type in SQL_TYPES {
             cfg_if! {
                 if #[cfg(feature = "with_rowid")] {
-                    map.insert((key_type, value_type), format!("CREATE TABLE IF NOT EXISTS {TABLE_NAME} (key {key_type} PRIMARY KEY NOT NULL, value {value_type} NOT NULL);"));
+                    builder.insert((key_type, value_type), format!("CREATE TABLE IF NOT EXISTS {TABLE_NAME} (key {key_type} PRIMARY KEY NOT NULL, value {value_type} NOT NULL);"));
                 } else {
-                    map.insert((key_type, value_type), format!("CREATE TABLE IF NOT EXISTS {TABLE_NAME} (key {key_type} PRIMARY KEY NOT NULL, value {value_type} NOT NULL) WITHOUT ROWID;"));
+                    builder.insert((key_type, value_type), format!("CREATE TABLE IF NOT EXISTS {TABLE_NAME} (key {key_type} PRIMARY KEY NOT NULL, value {value_type} NOT NULL) WITHOUT ROWID;"));
                 }
             }
         }
     }
-    map
+    builder
 });
 
 static SQL_CREATE_NOC: LazyLock<BTreeMap<SqlType, String>> = LazyLock::new(|| {
@@ -799,7 +799,7 @@ where
     ///
     /// The created map is case-sensitive.
     #[inline]
-    pub fn or(&self, other: &Self) -> Result<SQLiteMap<K, V>, Error> {
+    pub fn or(&self, other: &Self) -> Result<Self, Error> {
         if addr_eq(self, other) {
             return Err(Error::SelfReference);
         }
@@ -827,7 +827,7 @@ where
     ///
     /// Only ASCII characters are case folded. SQLite does **not** attempt to do full UTF case folding!
     #[inline]
-    pub fn or_nocase(&self, other: &Self) -> Result<SQLiteMap<K, V>, Error>
+    pub fn or_nocase(&self, other: &Self) -> Result<Self, Error>
     where
         K: CharType,
     {
@@ -955,7 +955,7 @@ where
 
     /// Implementation of the “is equal to” operator for [`SQLiteMap`].
     ///
-    /// Two maps are considered equal if and only if they contain the same keys with the same associated values, i.e., every key in the first set also exists in the second set with the same associated value and vice versa.
+    /// Two maps are considered equal if and only if they contain the same keys with the same associated values, i.e., every key in the first map also exists in the second map with the same associated value and vice versa.
     fn try_eq(&self, other: &Self) -> Result<bool, Error> {
         if !addr_eq(self, other) {
             let (tx_1, tx_2) = self.transaction_readonly().and_then(|tx_1| other.transaction_readonly().map(|tx_2| (tx_1, tx_2)))?;

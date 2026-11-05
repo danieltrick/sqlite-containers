@@ -27,17 +27,17 @@ const TABLE_NAME: &str = "rusqlite_set_v2";
 const SCHEMA_VERSION: i32 = make_version(false, 0x2);
 
 static SQL_CREATE_TBL: LazyLock<BTreeMap<SqlType, String>> = LazyLock::new(|| {
-    let mut map = BTreeMap::<SqlType, String>::new();
+    let mut builder = BTreeMap::<SqlType, String>::new();
     for sql_type in SQL_TYPES {
         cfg_if! {
             if #[cfg(feature = "with_rowid")] {
-                map.insert(sql_type, format!("CREATE TABLE IF NOT EXISTS {TABLE_NAME} (key {sql_type} PRIMARY KEY NOT NULL);"));
+                builder.insert(sql_type, format!("CREATE TABLE IF NOT EXISTS {TABLE_NAME} (key {sql_type} PRIMARY KEY NOT NULL);"));
             } else {
-                map.insert(sql_type, format!("CREATE TABLE IF NOT EXISTS {TABLE_NAME} (key {sql_type} PRIMARY KEY NOT NULL) WITHOUT ROWID;"));
+                builder.insert(sql_type, format!("CREATE TABLE IF NOT EXISTS {TABLE_NAME} (key {sql_type} PRIMARY KEY NOT NULL) WITHOUT ROWID;"));
             }
         }
     }
-    map
+    builder
 });
 
 cfg_if! {
@@ -522,16 +522,16 @@ where
     ///
     /// The created set is case-sensitive.
     #[inline]
-    pub fn and(&self, other: &Self) -> Result<SQLiteSet<T>, Error> {
+    pub fn and(&self, other: &Self) -> Result<Self, Error> {
         if addr_eq(self, other) {
             return Err(Error::SelfReference);
         }
         let tx_1 = other.transaction_readonly()?;
         let mut statement_query = self.connection.prepare_cached(SQL_ENUM_K_UND)?;
         let mut statement_find = tx_1.transaction.prepare_cached(SQL_EXISTS_KEY)?;
-        let mut new_map = SQLiteSet::new()?;
+        let mut new_set = Self::new()?;
         {
-            let tx_2 = new_map.transaction()?;
+            let tx_2 = new_set.transaction()?;
             let mut statement_insert = tx_2.transaction.prepare_cached(SQL_INSERT_IGN)?;
             for key in statement_query.query_map([], |row| row.get::<_, T>(0))? {
                 let key = key?;
@@ -540,7 +540,7 @@ where
                 }
             }
         }
-        Ok(new_map)
+        Ok(new_set)
     }
 
     /// Creates a new set containing all keys that are contained in both, this set *and* the other set.
@@ -549,7 +549,7 @@ where
     ///
     /// Only ASCII characters are case folded. SQLite does **not** attempt to do full UTF case folding!
     #[inline]
-    pub fn and_nocase(&self, other: &Self) -> Result<SQLiteSet<T>, Error>
+    pub fn and_nocase(&self, other: &Self) -> Result<Self, Error>
     where
         T: CharType,
     {
@@ -559,9 +559,9 @@ where
         let tx_1 = other.transaction_readonly()?;
         let mut statement_query = self.connection.prepare_cached(SQL_ENUM_K_UND)?;
         let mut statement_find = tx_1.transaction.prepare_cached(SQL_EXISTS_NOC)?;
-        let mut new_map = SQLiteSet::with_nocase()?;
+        let mut new_set = Self::with_nocase()?;
         {
-            let tx_2 = new_map.transaction()?;
+            let tx_2 = new_set.transaction()?;
             let mut statement_insert = tx_2.transaction.prepare_cached(SQL_INSERT_IGN)?;
             for key in statement_query.query_map([], |row| row.get::<_, T>(0))? {
                 let key = key?;
@@ -570,30 +570,30 @@ where
                 }
             }
         }
-        Ok(new_map)
+        Ok(new_set)
     }
 
     /// Creates a new set containing all keys that are contained in this set *or* in the other set.
     ///
     /// The created set is case-sensitive.
     #[inline]
-    pub fn or(&self, other: &Self) -> Result<SQLiteSet<T>, Error> {
+    pub fn or(&self, other: &Self) -> Result<Self, Error> {
         if addr_eq(self, other) {
             return Err(Error::SelfReference);
         }
         let mut statement_query_1 = self.connection.prepare_cached(SQL_ENUM_K_UND)?;
         let mut statement_query_2 = other.connection.prepare_cached(SQL_ENUM_K_UND)?;
-        let mut new_map = SQLiteSet::new()?;
+        let mut new_set = Self::new()?;
         let iter_1 = statement_query_1.query_map([], |row| row.get::<_, T>(0))?;
         let iter_2 = statement_query_2.query_map([], |row| row.get::<_, T>(0))?;
         {
-            let tx = new_map.transaction()?;
+            let tx = new_set.transaction()?;
             let mut statement_insert = tx.transaction.prepare_cached(SQL_INSERT_IGN)?;
             for key in iter_1.chain(iter_2) {
                 statement_insert.execute([key?])?;
             }
         }
-        Ok(new_map)
+        Ok(new_set)
     }
 
     /// Creates a new set containing all keys that are contained in this set *or* the other set.
@@ -602,7 +602,7 @@ where
     ///
     /// Only ASCII characters are case folded. SQLite does **not** attempt to do full UTF case folding!
     #[inline]
-    pub fn or_nocase(&self, other: &Self) -> Result<SQLiteSet<T>, Error>
+    pub fn or_nocase(&self, other: &Self) -> Result<Self, Error>
     where
         T: CharType,
     {
@@ -611,33 +611,33 @@ where
         }
         let mut statement_query_1 = self.connection.prepare_cached(SQL_ENUM_K_UND)?;
         let mut statement_query_2 = other.connection.prepare_cached(SQL_ENUM_K_UND)?;
-        let mut new_map = SQLiteSet::with_nocase()?;
+        let mut new_set = Self::with_nocase()?;
         let iter_1 = statement_query_1.query_map([], |row| row.get::<_, T>(0))?;
         let iter_2 = statement_query_2.query_map([], |row| row.get::<_, T>(0))?;
         {
-            let tx = new_map.transaction()?;
+            let tx = new_set.transaction()?;
             let mut statement_insert = tx.transaction.prepare_cached(SQL_INSERT_IGN)?;
             for key in iter_1.chain(iter_2) {
                 statement_insert.execute([key?])?;
             }
         }
-        Ok(new_map)
+        Ok(new_set)
     }
 
     /// Creates a new set containing all keys that are contained in this set but **not** in the other set.
     ///
     /// The created set is case-sensitive.
     #[inline]
-    pub fn sub(&self, other: &Self) -> Result<SQLiteSet<T>, Error> {
+    pub fn sub(&self, other: &Self) -> Result<Self, Error> {
         if addr_eq(self, other) {
             return Err(Error::SelfReference);
         }
         let tx_1 = other.transaction_readonly()?;
         let mut statement_query = self.connection.prepare_cached(SQL_ENUM_K_UND)?;
         let mut statement_find = tx_1.transaction.prepare_cached(SQL_EXISTS_KEY)?;
-        let mut new_map = SQLiteSet::new()?;
+        let mut new_set = Self::new()?;
         {
-            let tx_2 = new_map.transaction()?;
+            let tx_2 = new_set.transaction()?;
             let mut statement_insert = tx_2.transaction.prepare_cached(SQL_INSERT_IGN)?;
             for key in statement_query.query_map([], |row| row.get::<_, T>(0))? {
                 let key = key?;
@@ -646,7 +646,7 @@ where
                 }
             }
         }
-        Ok(new_map)
+        Ok(new_set)
     }
 
     /// Creates a new set containing all keys that are contained in this set but **not** in the other set.
@@ -655,7 +655,7 @@ where
     ///
     /// Only ASCII characters are case folded. SQLite does **not** attempt to do full UTF case folding!
     #[inline]
-    pub fn sub_nocase(&self, other: &Self) -> Result<SQLiteSet<T>, Error>
+    pub fn sub_nocase(&self, other: &Self) -> Result<Self, Error>
     where
         T: CharType,
     {
@@ -665,9 +665,9 @@ where
         let tx_1 = other.transaction_readonly()?;
         let mut statement_query = self.connection.prepare_cached(SQL_ENUM_K_UND)?;
         let mut statement_find = tx_1.transaction.prepare_cached(SQL_EXISTS_NOC)?;
-        let mut new_map = SQLiteSet::with_nocase()?;
+        let mut new_set = Self::with_nocase()?;
         {
-            let tx_2 = new_map.transaction()?;
+            let tx_2 = new_set.transaction()?;
             let mut statement_insert = tx_2.transaction.prepare_cached(SQL_INSERT_IGN)?;
             for key in statement_query.query_map([], |row| row.get::<_, T>(0))? {
                 let key = key?;
@@ -676,14 +676,14 @@ where
                 }
             }
         }
-        Ok(new_map)
+        Ok(new_set)
     }
 
     /// Creates a new set containing all keys that are contained in *one* of the sets but **not** in both.
     ///
     /// The created set is case-sensitive.
     #[inline]
-    pub fn xor(&self, other: &Self) -> Result<SQLiteSet<T>, Error> {
+    pub fn xor(&self, other: &Self) -> Result<Self, Error> {
         if addr_eq(self, other) {
             return Err(Error::SelfReference);
         }
@@ -693,9 +693,9 @@ where
         let mut statement_find_1 = tx_1.transaction.prepare_cached(SQL_EXISTS_KEY)?;
         let mut statement_query_2 = tx_2.transaction.prepare_cached(SQL_ENUM_K_UND)?;
         let mut statement_find_2 = tx_2.transaction.prepare_cached(SQL_EXISTS_KEY)?;
-        let mut new_map = SQLiteSet::new()?;
+        let mut new_set = Self::new()?;
         {
-            let tx_3 = new_map.transaction()?;
+            let tx_3 = new_set.transaction()?;
             let mut statement_insert = tx_3.transaction.prepare_cached(SQL_INSERT_IGN)?;
             for key in statement_query_1.query_map([], |row| row.get::<_, T>(0))? {
                 let key = key?;
@@ -710,7 +710,7 @@ where
                 }
             }
         }
-        Ok(new_map)
+        Ok(new_set)
     }
 
     /// Creates a new set containing all keys that are contained in *one* of the sets but **not** in both.
@@ -719,7 +719,7 @@ where
     ///
     /// Only ASCII characters are case folded. SQLite does **not** attempt to do full UTF case folding!
     #[inline]
-    pub fn xor_nocase(&self, other: &Self) -> Result<SQLiteSet<T>, Error>
+    pub fn xor_nocase(&self, other: &Self) -> Result<Self, Error>
     where
         T: CharType,
     {
@@ -732,9 +732,9 @@ where
         let mut statement_find_1 = tx_1.transaction.prepare_cached(SQL_EXISTS_NOC)?;
         let mut statement_query_2 = tx_2.transaction.prepare_cached(SQL_ENUM_K_UND)?;
         let mut statement_find_2 = tx_2.transaction.prepare_cached(SQL_EXISTS_NOC)?;
-        let mut new_map = SQLiteSet::with_nocase()?;
+        let mut new_set = Self::with_nocase()?;
         {
-            let tx_3 = new_map.transaction()?;
+            let tx_3 = new_set.transaction()?;
             let mut statement_insert = tx_3.transaction.prepare_cached(SQL_INSERT_IGN)?;
             for key in statement_query_1.query_map([], |row| row.get::<_, T>(0))? {
                 let key = key?;
@@ -749,7 +749,7 @@ where
                 }
             }
         }
-        Ok(new_map)
+        Ok(new_set)
     }
 
     /// Returns a new [`Vec`] containing all keys that are currently contained in the set.

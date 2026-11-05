@@ -18,8 +18,8 @@ use std::{
     sync::LazyLock,
 };
 
-// Application ID
-const APPLICATION_ID: i32 = 0x79BED2FC;
+/// The "Application ID" set by `PRAGMA application_id`.
+const SQL_APP_ID: i32 = 0x79BED33B;
 
 // ---------------------------------------------------------------------------
 // Flags
@@ -395,7 +395,7 @@ fn initialize_connection(mut connection: Connection, user_version: i32, file_bas
         connection.pragma_update(None, "mmap_size", "268435456")?;
     }
 
-    setup_id(&mut connection, readonly, "application_id", APPLICATION_ID)?;
+    setup_id(&mut connection, readonly, "application_id", SQL_APP_ID)?;
     setup_id(&mut connection, readonly, "user_version", user_version)?;
 
     Ok(connection)
@@ -403,18 +403,15 @@ fn initialize_connection(mut connection: Connection, user_version: i32, file_bas
 
 #[inline(always)]
 fn setup_id(connection: &mut Connection, readonly: bool, name: &str, expected_value: i32) -> Result<(), Error> {
-    let mut value = 0i32;
-
-    for write_flag in [true, false] {
-        value = connection.pragma_query_value(None, name, |row| row.get(0))?;
-        if (value == 0) && write_flag && (!readonly) {
-            connection.pragma_update(None, name, expected_value)?;
-            continue;
-        }
-        break;
+    let value: i32 = connection.pragma_query_value(None, name, |row| row.get(0))?;
+    if value == expected_value {
+        Ok(())
+    } else if (value == 0) && (!readonly) {
+        connection.pragma_update(None, name, expected_value)?;
+        setup_id(connection, true, name, expected_value)
+    } else {
+        Err(Error::InvalidSchema)
     }
-
-    if value == expected_value { Ok(()) } else { Err(Error::InvalidSchema) }
 }
 
 // ---------------------------------------------------------------------------
@@ -700,6 +697,12 @@ mod test {
         assert_eq!(map_check_result(None), Err(Error::IntegrityCheck));
         assert_eq!(map_check_result(Some("xy".into())), Err(Error::IntegrityCheck));
         assert_eq!(map_check_result(Some("ok".into())), Ok(()));
+    }
+
+    #[test]
+    fn test_make_version() {
+        assert_eq!(make_version(false, 42), 0x1000002Ai32);
+        assert_eq!(make_version(true, 131), 0x20000083i32);
     }
 
     #[test]

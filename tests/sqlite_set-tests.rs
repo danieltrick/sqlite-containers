@@ -17,7 +17,7 @@ use rand_xoshiro::{
     rand_core::{Rng, SeedableRng},
 };
 use sqlite_containers::{
-    Blob, EqWrapper, Error, IterationError, Order, SQLiteSet, SizeExt, TryClone, TryEq,
+    Blob, EqWrapper, Error, IterationError, Order, SQLiteMap, SQLiteSet, SizeExt, TryClone, TryEq,
     rusqlite::{
         Error as RusqliteError,
         ffi::{Error as FfiError, ErrorCode as FfiErrorCode},
@@ -26,7 +26,8 @@ use sqlite_containers::{
 use std::{
     array,
     collections::HashSet,
-    fs,
+    fs::{self, File},
+    io::{Read, Seek, SeekFrom},
     sync::{Arc, Barrier, mpsc::sync_channel},
     thread,
 };
@@ -474,6 +475,9 @@ fn test_sqlite_set_i64_and() {
     assert!(set_3.contains(&2305843009213693951i64).unwrap());
     assert!(!set_3.contains(&i64::MIN).unwrap());
     assert!(set_3.contains(&i64::MAX).unwrap());
+
+    assert!(matches!(set_1.and(&set_1), Err(Error::SelfReference)));
+    assert!(matches!(set_2.and(&set_2), Err(Error::SelfReference)));
 }
 
 #[test]
@@ -506,6 +510,9 @@ fn test_sqlite_set_i64_or() {
     assert!(set_3.contains(&2305843009213693951i64).unwrap());
     assert!(set_3.contains(&i64::MIN).unwrap());
     assert!(set_3.contains(&i64::MAX).unwrap());
+
+    assert!(matches!(set_1.or(&set_1), Err(Error::SelfReference)));
+    assert!(matches!(set_2.or(&set_2), Err(Error::SelfReference)));
 }
 
 #[test]
@@ -543,6 +550,9 @@ fn test_sqlite_set_i64_sub() {
     assert!(!set_3.contains(&2305843009213693951i64).unwrap());
     assert!(!set_3.contains(&i64::MIN).unwrap());
     assert!(set_3.contains(&i64::MAX).unwrap());
+
+    assert!(matches!(set_1.sub(&set_1), Err(Error::SelfReference)));
+    assert!(matches!(set_2.sub(&set_2), Err(Error::SelfReference)));
 }
 
 #[test]
@@ -578,6 +588,9 @@ fn test_sqlite_set_i64_xor() {
     assert!(!set_3.contains(&2305843009213693951i64).unwrap());
     assert!(set_3.contains(&i64::MIN).unwrap());
     assert!(set_3.contains(&i64::MAX).unwrap());
+
+    assert!(matches!(set_1.xor(&set_1), Err(Error::SelfReference)));
+    assert!(matches!(set_2.xor(&set_2), Err(Error::SelfReference)));
 }
 
 #[cfg_attr(debug_assertions, ignore)]
@@ -1255,6 +1268,9 @@ fn test_sqlite_set_string_and() {
     assert!(set_3.contains("qux").unwrap());
     assert!(set_3.contains("xyz").unwrap());
     assert!(!set_3.contains("$?!").unwrap());
+
+    assert!(matches!(set_1.and(&set_1), Err(Error::SelfReference)));
+    assert!(matches!(set_2.and(&set_2), Err(Error::SelfReference)));
 }
 
 #[test]
@@ -1292,6 +1308,9 @@ fn test_sqlite_set_string_and_nocase() {
     assert!(set_3.contains("xyz").unwrap());
     assert!(set_3.contains("XYZ").unwrap());
     assert!(!set_3.contains("$?!").unwrap());
+
+    assert!(matches!(set_1.and_nocase(&set_1), Err(Error::SelfReference)));
+    assert!(matches!(set_2.and_nocase(&set_2), Err(Error::SelfReference)));
 }
 
 #[test]
@@ -1326,6 +1345,9 @@ fn test_sqlite_set_string_or() {
     assert!(set_3.contains("xyz").unwrap());
     assert!(set_3.contains("cor").unwrap());
     assert!(!set_3.contains("$?!").unwrap());
+
+    assert!(matches!(set_1.or(&set_1), Err(Error::SelfReference)));
+    assert!(matches!(set_2.or(&set_2), Err(Error::SelfReference)));
 }
 
 #[test]
@@ -1367,6 +1389,9 @@ fn test_sqlite_set_string_or_nocase() {
     assert!(set_3.contains("cor").unwrap());
     assert!(set_3.contains("COR").unwrap());
     assert!(!set_3.contains("$?!").unwrap());
+
+    assert!(matches!(set_1.or_nocase(&set_1), Err(Error::SelfReference)));
+    assert!(matches!(set_2.or_nocase(&set_2), Err(Error::SelfReference)));
 }
 
 #[test]
@@ -1400,6 +1425,9 @@ fn test_sqlite_set_string_sub() {
     assert!(set_3.contains("xyz").unwrap());
     assert!(!set_3.contains("cor").unwrap());
     assert!(!set_3.contains("$?!").unwrap());
+
+    assert!(matches!(set_1.sub(&set_1), Err(Error::SelfReference)));
+    assert!(matches!(set_2.sub(&set_2), Err(Error::SelfReference)));
 }
 
 #[test]
@@ -1443,6 +1471,9 @@ fn test_sqlite_set_string_sub_nocase() {
     assert!(set_3.contains("cor").unwrap());
     assert!(set_3.contains("COR").unwrap());
     assert!(!set_3.contains("$?!").unwrap());
+
+    assert!(matches!(set_1.sub_nocase(&set_1), Err(Error::SelfReference)));
+    assert!(matches!(set_2.sub_nocase(&set_2), Err(Error::SelfReference)));
 }
 
 #[test]
@@ -1476,6 +1507,9 @@ fn test_sqlite_set_string_xor() {
     assert!(!set_3.contains("xyz").unwrap());
     assert!(set_3.contains("cor").unwrap());
     assert!(!set_3.contains("$?!").unwrap());
+
+    assert!(matches!(set_1.xor(&set_1), Err(Error::SelfReference)));
+    assert!(matches!(set_2.xor(&set_2), Err(Error::SelfReference)));
 }
 
 #[test]
@@ -1516,6 +1550,9 @@ fn test_sqlite_set_string_xor_nocase() {
     assert!(set_3.contains("cor").unwrap());
     assert!(set_3.contains("COR").unwrap());
     assert!(!set_3.contains("$?!").unwrap());
+
+    assert!(matches!(set_1.xor_nocase(&set_1), Err(Error::SelfReference)));
+    assert!(matches!(set_2.xor_nocase(&set_2), Err(Error::SelfReference)));
 }
 
 #[test]
@@ -2070,6 +2107,9 @@ fn test_sqlite_set_blob_and() {
     assert!(set_3.contains(&b"qux"[..]).unwrap());
     assert!(set_3.contains(&b"xyz"[..]).unwrap());
     assert!(!set_3.contains(&b"$?!"[..]).unwrap());
+
+    assert!(matches!(set_1.and(&set_1), Err(Error::SelfReference)));
+    assert!(matches!(set_2.and(&set_2), Err(Error::SelfReference)));
 }
 
 #[test]
@@ -2104,6 +2144,9 @@ fn test_sqlite_set_blob_or() {
     assert!(set_3.contains(&b"xyz"[..]).unwrap());
     assert!(set_3.contains(&b"cor"[..]).unwrap());
     assert!(!set_3.contains(&b"$?!"[..]).unwrap());
+
+    assert!(matches!(set_1.or(&set_1), Err(Error::SelfReference)));
+    assert!(matches!(set_2.or(&set_2), Err(Error::SelfReference)));
 }
 
 #[test]
@@ -2137,6 +2180,9 @@ fn test_sqlite_set_blob_sub() {
     assert!(set_3.contains(&b"xyz"[..]).unwrap());
     assert!(!set_3.contains(&b"cor"[..]).unwrap());
     assert!(!set_3.contains(&b"$?!"[..]).unwrap());
+
+    assert!(matches!(set_1.sub(&set_1), Err(Error::SelfReference)));
+    assert!(matches!(set_2.sub(&set_2), Err(Error::SelfReference)));
 }
 
 #[test]
@@ -2170,6 +2216,9 @@ fn test_sqlite_set_blob_xor() {
     assert!(!set_3.contains(&b"xyz"[..]).unwrap());
     assert!(set_3.contains(&b"cor"[..]).unwrap());
     assert!(!set_3.contains(&b"$?!"[..]).unwrap());
+
+    assert!(matches!(set_1.xor(&set_1), Err(Error::SelfReference)));
+    assert!(matches!(set_2.xor(&set_2), Err(Error::SelfReference)));
 }
 
 #[test]
@@ -2372,11 +2421,6 @@ fn test_sqlite_set_filebased() {
 #[cfg(feature = "checked")]
 #[test]
 fn test_sqlite_set_filebased_integrity() {
-    use std::{
-        fs::OpenOptions,
-        io::{Read, Seek, SeekFrom, Write},
-    };
-
     let temp_dir = tempdir_in(env!["CARGO_TARGET_TMPDIR"]).unwrap();
     let file_path = temp_dir.path().join("sqlite_set.db");
 
@@ -2396,6 +2440,7 @@ fn test_sqlite_set_filebased_integrity() {
     }
 
     {
+        use std::{fs::OpenOptions, io::Write};
         const FILE_OFFSET: u64 = 4097u64;
         let mut byte = [0u8; 1usize];
         let mut file = OpenOptions::new().read(true).write(true).open(&file_path).unwrap();
@@ -2445,6 +2490,24 @@ fn test_sqlite_set_filebased_tofile() {
     }
 
     {
+        let mut file = File::open(&file_path_1).unwrap();
+        {
+            let mut buffer = [0xFFu8; 16usize];
+            file.read_exact(&mut buffer).unwrap();
+            assert_eq!(&buffer[..], b"SQLite format 3\x00");
+        }
+        {
+            let mut buffer = [0xFF; 4usize];
+            file.seek(SeekFrom::Start(68u64)).unwrap();
+            file.read_exact(&mut buffer).unwrap();
+            assert_eq!(i32::from_be_bytes(buffer), 0x79BED33B);
+            file.seek(SeekFrom::Start(60u64)).unwrap();
+            file.read_exact(&mut buffer).unwrap();
+            assert_eq!(i32::from_be_bytes(buffer), 0x10000002);
+        }
+    }
+
+    {
         let set = SQLiteSet::<String>::try_from_file(&file_path_1, false, false).unwrap();
         assert!(set.contains("foo").unwrap());
         assert!(set.contains("FOO").unwrap());
@@ -2470,6 +2533,8 @@ fn test_sqlite_set_filebased_tofile() {
         assert!(!set.contains("qux").unwrap());
         assert!(!set.contains("xyz").unwrap());
     }
+
+    assert!(matches!(SQLiteMap::<String, String>::try_from_file(&file_path_2, true, false), Err(Error::InvalidSchema)));
 }
 
 // ---------------------------------------------------------------------------

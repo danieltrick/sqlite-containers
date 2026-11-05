@@ -17,7 +17,7 @@ use rand_xoshiro::{
     rand_core::{Rng, SeedableRng},
 };
 use sqlite_containers::{
-    Action, Blob, EqWrapper, Error, IterationError, Order, SQLiteMap, SizeExt, TryClone, TryEq,
+    Action, Blob, EqWrapper, Error, IterationError, Order, SQLiteMap, SQLiteSet, SizeExt, TryClone, TryEq,
     rusqlite::{
         Error as RusqliteError,
         ffi::{Error as FfiError, ErrorCode as FfiErrorCode},
@@ -26,7 +26,8 @@ use sqlite_containers::{
 use std::{
     array,
     collections::{HashMap, HashSet},
-    fs,
+    fs::{self, File},
+    io::{Read, Seek, SeekFrom},
     sync::{Arc, Barrier, LazyLock, mpsc::sync_channel},
     thread,
 };
@@ -761,16 +762,19 @@ fn test_sqlite_map_i64_string_or() {
         assert!(tx.insert(i64::MAX, "deadbeef".to_owned()).unwrap());
     }
 
-    let set_3 = map_1.or(&map_2).unwrap();
-    assert_eq!(set_3.len().unwrap(), 6);
+    let map_3 = map_1.or(&map_2).unwrap();
+    assert_eq!(map_3.len().unwrap(), 6);
 
-    assert!(set_3.get(&0i64).unwrap().is_some_and(|value| value.eq("12345678")));
-    assert!(set_3.get(&42i64).unwrap().is_some_and(|value| value.eq("87654321")));
-    assert!(set_3.get(&524287).unwrap().is_none());
-    assert!(set_3.get(&2147483647i64).unwrap().is_some_and(|value| value.eq("abcdefgh")));
-    assert!(set_3.get(&2305843009213693951i64).unwrap().is_some_and(|value| value.eq("zyxwvuts")));
-    assert!(set_3.get(&i64::MIN).unwrap().is_some_and(|value| value.eq("hgfedcba")));
-    assert!(set_3.get(&i64::MAX).unwrap().is_some_and(|value| value.eq("deadbeef")));
+    assert!(map_3.get(&0i64).unwrap().is_some_and(|value| value.eq("12345678")));
+    assert!(map_3.get(&42i64).unwrap().is_some_and(|value| value.eq("87654321")));
+    assert!(map_3.get(&524287).unwrap().is_none());
+    assert!(map_3.get(&2147483647i64).unwrap().is_some_and(|value| value.eq("abcdefgh")));
+    assert!(map_3.get(&2305843009213693951i64).unwrap().is_some_and(|value| value.eq("zyxwvuts")));
+    assert!(map_3.get(&i64::MIN).unwrap().is_some_and(|value| value.eq("hgfedcba")));
+    assert!(map_3.get(&i64::MAX).unwrap().is_some_and(|value| value.eq("deadbeef")));
+
+    assert!(matches!(map_1.or(&map_1), Err(Error::SelfReference)));
+    assert!(matches!(map_2.or(&map_2), Err(Error::SelfReference)));
 }
 
 #[cfg_attr(debug_assertions, ignore)]
@@ -1606,6 +1610,9 @@ fn test_sqlite_map_blob_string_or() {
     assert!(map_3.get(&b"xyz"[..]).unwrap().is_some_and(|value| value.eq("hgfedcba")));
     assert!(map_3.get(&b"cor"[..]).unwrap().is_some_and(|value| value.eq("cafebabe")));
     assert!(map_3.get(&b"$?!"[..]).unwrap().is_none());
+
+    assert!(matches!(map_1.or(&map_1), Err(Error::SelfReference)));
+    assert!(matches!(map_2.or(&map_2), Err(Error::SelfReference)));
 }
 
 #[test]
@@ -2587,6 +2594,9 @@ fn test_sqlite_map_string_string_or() {
     assert!(map_3.get("xyz").unwrap().is_some_and(|value| value.eq("hgfedcba")));
     assert!(map_3.get("cor").unwrap().is_some_and(|value| value.eq("cafebabe")));
     assert!(map_3.get("$?!").unwrap().is_none());
+
+    assert!(matches!(map_1.or(&map_1), Err(Error::SelfReference)));
+    assert!(matches!(map_2.or(&map_2), Err(Error::SelfReference)));
 }
 
 #[test]
@@ -2628,6 +2638,9 @@ fn test_sqlite_map_string_string_or_nocase() {
     assert!(map_3.get("cor").unwrap().is_some_and(|value| value.eq("feedface")));
     assert!(map_3.get("COR").unwrap().is_some_and(|value| value.eq("feedface")));
     assert!(map_3.get("$?!").unwrap().is_none());
+
+    assert!(matches!(map_1.or_nocase(&map_1), Err(Error::SelfReference)));
+    assert!(matches!(map_2.or_nocase(&map_2), Err(Error::SelfReference)));
 }
 
 #[test]
@@ -3666,6 +3679,9 @@ fn test_sqlite_map_string_blob_or() {
     assert!(map_3.get("xyz").unwrap().is_some_and(|value| value.eq(b"hgfedcba")));
     assert!(map_3.get("cor").unwrap().is_some_and(|value| value.eq(b"cafebabe")));
     assert!(map_3.get("$?!").unwrap().is_none());
+
+    assert!(matches!(map_1.or(&map_1), Err(Error::SelfReference)));
+    assert!(matches!(map_2.or(&map_2), Err(Error::SelfReference)));
 }
 
 #[test]
@@ -4692,6 +4708,9 @@ fn test_sqlite_map_string_i64_or() {
     assert!(map_3.get("xyz").unwrap().is_some_and(|value| value.eq(&0xFEDCBA09i64)));
     assert!(map_3.get("cor").unwrap().is_some_and(|value| value.eq(&0xCAFEBABEi64)));
     assert!(map_3.get("$?!").unwrap().is_none());
+
+    assert!(matches!(map_1.or(&map_1), Err(Error::SelfReference)));
+    assert!(matches!(map_2.or(&map_2), Err(Error::SelfReference)));
 }
 
 #[test]
@@ -4988,11 +5007,6 @@ fn test_sqlite_map_filebased() {
 #[cfg(feature = "checked")]
 #[test]
 fn test_sqlite_map_filebased_integrity() {
-    use std::{
-        fs::OpenOptions,
-        io::{Read, Seek, SeekFrom, Write},
-    };
-
     let temp_dir = tempdir_in(env!["CARGO_TARGET_TMPDIR"]).unwrap();
     let file_path = temp_dir.path().join("sqlite_map.db");
 
@@ -5012,6 +5026,7 @@ fn test_sqlite_map_filebased_integrity() {
     }
 
     {
+        use std::{fs::OpenOptions, io::Write};
         const FILE_OFFSET: u64 = 4097u64;
         let mut byte = [0u8; 1usize];
         let mut file = OpenOptions::new().read(true).write(true).open(&file_path).unwrap();
@@ -5061,6 +5076,24 @@ fn test_sqlite_map_filebased_tofile() {
     }
 
     {
+        let mut file = File::open(&file_path_1).unwrap();
+        {
+            let mut buffer = [0xFF; 16usize];
+            file.read_exact(&mut buffer).unwrap();
+            assert_eq!(&buffer[..], b"SQLite format 3\x00");
+        }
+        {
+            let mut buffer = [0xFF; 4usize];
+            file.seek(SeekFrom::Start(68u64)).unwrap();
+            file.read_exact(&mut buffer).unwrap();
+            assert_eq!(i32::from_be_bytes(buffer), 0x79BED33B);
+            file.seek(SeekFrom::Start(60u64)).unwrap();
+            file.read_exact(&mut buffer).unwrap();
+            assert_eq!(i32::from_be_bytes(buffer), 0x20000002);
+        }
+    }
+
+    {
         let map = SQLiteMap::<String, String>::try_from_file(&file_path_1, false, false).unwrap();
         assert!(map.get("foo").unwrap().is_some_and(|value| value.eq("12345678")));
         assert!(map.get("FOO").unwrap().is_some_and(|value| value.eq("87654321")));
@@ -5086,6 +5119,8 @@ fn test_sqlite_map_filebased_tofile() {
         assert!(map.get("qux").unwrap().is_none());
         assert!(map.get("xyz").unwrap().is_none());
     }
+
+    assert!(matches!(SQLiteSet::<String>::try_from_file(&file_path_2, true, false), Err(Error::InvalidSchema)));
 }
 
 // ---------------------------------------------------------------------------
