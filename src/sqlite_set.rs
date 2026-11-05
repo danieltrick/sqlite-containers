@@ -4,7 +4,7 @@
 
 use crate::{
     CharType, Error, IterationError, Order, SQLiteMap, Size, SizeExt, TryClone, TryEq, Type,
-    common::{SQL_TYPE_TEXT, SQL_TYPES, SqlType, check_constraint, create_new_connection, increment, lazy_init},
+    common::{SQL_TYPE_TEXT, SQL_TYPES, SqlType, check_constraint, create_new_connection, increment, lazy_init, make_version},
     rusqlite::{CachedStatement, Connection, DropBehavior, ToSql, Transaction},
 };
 use cfg_if::cfg_if;
@@ -24,6 +24,7 @@ use std::{
 // ---------------------------------------------------------------------------
 
 const TABLE_NAME: &str = "rusqlite_set_v2";
+const SCHEMA_VERSION: i32 = make_version(false, 0x2);
 
 static SQL_CREATE_TBL: LazyLock<BTreeMap<SqlType, String>> = LazyLock::new(|| {
     let mut map = BTreeMap::<SqlType, String>::new();
@@ -192,7 +193,7 @@ where
             SQL_CREATE_NOC
         };
 
-        create_new_connection(sql_create_table, SQL_GET_SCHEMA, path_option, readonly, can_create)
+        create_new_connection(SCHEMA_VERSION, sql_create_table, SQL_GET_SCHEMA, path_option, readonly, can_create)
     }
 
     /// Starts a new SQLite transaction for this set.
@@ -521,7 +522,10 @@ where
     ///
     /// The created set is case-sensitive.
     #[inline]
-    pub fn and(&mut self, other: &Self) -> Result<SQLiteSet<T>, Error> {
+    pub fn and(&self, other: &Self) -> Result<SQLiteSet<T>, Error> {
+        if addr_eq(self, other) {
+            return Err(Error::SelfReference);
+        }
         let tx_1 = other.transaction_readonly()?;
         let mut statement_query = self.connection.prepare_cached(SQL_ENUM_K_UND)?;
         let mut statement_find = tx_1.transaction.prepare_cached(SQL_EXISTS_KEY)?;
@@ -545,10 +549,13 @@ where
     ///
     /// Only ASCII characters are case folded. SQLite does **not** attempt to do full UTF case folding!
     #[inline]
-    pub fn and_nocase(&mut self, other: &Self) -> Result<SQLiteSet<T>, Error>
+    pub fn and_nocase(&self, other: &Self) -> Result<SQLiteSet<T>, Error>
     where
         T: CharType,
     {
+        if addr_eq(self, other) {
+            return Err(Error::SelfReference);
+        }
         let tx_1 = other.transaction_readonly()?;
         let mut statement_query = self.connection.prepare_cached(SQL_ENUM_K_UND)?;
         let mut statement_find = tx_1.transaction.prepare_cached(SQL_EXISTS_NOC)?;
@@ -570,7 +577,10 @@ where
     ///
     /// The created set is case-sensitive.
     #[inline]
-    pub fn or(&mut self, other: &Self) -> Result<SQLiteSet<T>, Error> {
+    pub fn or(&self, other: &Self) -> Result<SQLiteSet<T>, Error> {
+        if addr_eq(self, other) {
+            return Err(Error::SelfReference);
+        }
         let mut statement_query_1 = self.connection.prepare_cached(SQL_ENUM_K_UND)?;
         let mut statement_query_2 = other.connection.prepare_cached(SQL_ENUM_K_UND)?;
         let mut new_map = SQLiteSet::new()?;
@@ -592,10 +602,13 @@ where
     ///
     /// Only ASCII characters are case folded. SQLite does **not** attempt to do full UTF case folding!
     #[inline]
-    pub fn or_nocase(&mut self, other: &Self) -> Result<SQLiteSet<T>, Error>
+    pub fn or_nocase(&self, other: &Self) -> Result<SQLiteSet<T>, Error>
     where
         T: CharType,
     {
+        if addr_eq(self, other) {
+            return Err(Error::SelfReference);
+        }
         let mut statement_query_1 = self.connection.prepare_cached(SQL_ENUM_K_UND)?;
         let mut statement_query_2 = other.connection.prepare_cached(SQL_ENUM_K_UND)?;
         let mut new_map = SQLiteSet::with_nocase()?;
@@ -615,7 +628,10 @@ where
     ///
     /// The created set is case-sensitive.
     #[inline]
-    pub fn sub(&mut self, other: &Self) -> Result<SQLiteSet<T>, Error> {
+    pub fn sub(&self, other: &Self) -> Result<SQLiteSet<T>, Error> {
+        if addr_eq(self, other) {
+            return Err(Error::SelfReference);
+        }
         let tx_1 = other.transaction_readonly()?;
         let mut statement_query = self.connection.prepare_cached(SQL_ENUM_K_UND)?;
         let mut statement_find = tx_1.transaction.prepare_cached(SQL_EXISTS_KEY)?;
@@ -639,10 +655,13 @@ where
     ///
     /// Only ASCII characters are case folded. SQLite does **not** attempt to do full UTF case folding!
     #[inline]
-    pub fn sub_nocase(&mut self, other: &Self) -> Result<SQLiteSet<T>, Error>
+    pub fn sub_nocase(&self, other: &Self) -> Result<SQLiteSet<T>, Error>
     where
         T: CharType,
     {
+        if addr_eq(self, other) {
+            return Err(Error::SelfReference);
+        }
         let tx_1 = other.transaction_readonly()?;
         let mut statement_query = self.connection.prepare_cached(SQL_ENUM_K_UND)?;
         let mut statement_find = tx_1.transaction.prepare_cached(SQL_EXISTS_NOC)?;
@@ -664,8 +683,11 @@ where
     ///
     /// The created set is case-sensitive.
     #[inline]
-    pub fn xor(&mut self, other: &Self) -> Result<SQLiteSet<T>, Error> {
-        let tx_1 = self.transaction()?;
+    pub fn xor(&self, other: &Self) -> Result<SQLiteSet<T>, Error> {
+        if addr_eq(self, other) {
+            return Err(Error::SelfReference);
+        }
+        let tx_1 = self.transaction_readonly()?;
         let tx_2 = other.transaction_readonly()?;
         let mut statement_query_1 = tx_1.transaction.prepare_cached(SQL_ENUM_K_UND)?;
         let mut statement_find_1 = tx_1.transaction.prepare_cached(SQL_EXISTS_KEY)?;
@@ -697,11 +719,14 @@ where
     ///
     /// Only ASCII characters are case folded. SQLite does **not** attempt to do full UTF case folding!
     #[inline]
-    pub fn xor_nocase(&mut self, other: &Self) -> Result<SQLiteSet<T>, Error>
+    pub fn xor_nocase(&self, other: &Self) -> Result<SQLiteSet<T>, Error>
     where
         T: CharType,
     {
-        let tx_1 = self.transaction()?;
+        if addr_eq(self, other) {
+            return Err(Error::SelfReference);
+        }
+        let tx_1 = self.transaction_readonly()?;
         let tx_2 = other.transaction_readonly()?;
         let mut statement_query_1 = tx_1.transaction.prepare_cached(SQL_ENUM_K_UND)?;
         let mut statement_find_1 = tx_1.transaction.prepare_cached(SQL_EXISTS_NOC)?;
@@ -856,7 +881,7 @@ where
     fn try_clone(&self) -> Result<Self, Self::Error> {
         cfg_if! {
             if #[cfg(feature = "backup")] {
-                Ok(Self::from_connection(crate::common::duplicate_db(&self.connection)?))
+                Ok(Self::from_connection(crate::common::duplicate_db(&self.connection, SCHEMA_VERSION)?))
             } else {
                 Err(Error::Unsupported)
             }

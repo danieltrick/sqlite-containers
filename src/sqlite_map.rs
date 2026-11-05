@@ -4,7 +4,7 @@
 
 use crate::{
     CharType, Error, IterationError, Order, SQLiteSet, Size, SizeExt, TryClone, TryEq, Type,
-    common::{SQL_TYPE_TEXT, SQL_TYPES, SqlType, check_constraint, create_new_connection, increment, lazy_init},
+    common::{SQL_TYPE_TEXT, SQL_TYPES, SqlType, check_constraint, create_new_connection, increment, lazy_init, make_version},
     rusqlite::{CachedStatement, Connection, DropBehavior, OptionalExtension, ToSql, Transaction, params},
 };
 use cfg_if::cfg_if;
@@ -87,6 +87,7 @@ cfg_if! {
 // ---------------------------------------------------------------------------
 
 const TABLE_NAME: &str = "rusqlite_map_v2";
+const SCHEMA_VERSION: i32 = make_version(true, 0x2);
 
 static SQL_CREATE_TBL: LazyLock<BTreeMap<(SqlType, SqlType), String>> = LazyLock::new(|| {
     let mut map = BTreeMap::<(SqlType, SqlType), String>::new();
@@ -280,7 +281,7 @@ where
             SQL_CREATE_NOC.get(&V::SQL_TYPE).unwrap()
         };
 
-        create_new_connection(sql_create_table, SQL_GET_SCHEMA, path_option, readonly, can_create)
+        create_new_connection(SCHEMA_VERSION, sql_create_table, SQL_GET_SCHEMA, path_option, readonly, can_create)
     }
 
     cfg_if! {
@@ -798,10 +799,13 @@ where
     ///
     /// The created map is case-sensitive.
     #[inline]
-    pub fn or(&mut self, other: &Self) -> Result<SQLiteMap<K, V>, Error> {
+    pub fn or(&self, other: &Self) -> Result<SQLiteMap<K, V>, Error> {
+        if addr_eq(self, other) {
+            return Err(Error::SelfReference);
+        }
         let mut statement_query_1 = self.connection.prepare_cached(SQL_ENUM_P_UND)?;
         let mut statement_query_2 = other.connection.prepare_cached(SQL_ENUM_P_UND)?;
-        let mut new_map = SQLiteMap::new()?;
+        let mut new_map = Self::new()?;
         let iter_1 = statement_query_1.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?;
         let iter_2 = statement_query_2.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?;
         {
@@ -823,13 +827,16 @@ where
     ///
     /// Only ASCII characters are case folded. SQLite does **not** attempt to do full UTF case folding!
     #[inline]
-    pub fn or_nocase(&mut self, other: &Self) -> Result<SQLiteMap<K, V>, Error>
+    pub fn or_nocase(&self, other: &Self) -> Result<SQLiteMap<K, V>, Error>
     where
         K: CharType,
     {
+        if addr_eq(self, other) {
+            return Err(Error::SelfReference);
+        }
         let mut statement_query_1 = self.connection.prepare_cached(SQL_ENUM_P_UND)?;
         let mut statement_query_2 = other.connection.prepare_cached(SQL_ENUM_P_UND)?;
-        let mut new_map = SQLiteMap::with_nocase()?;
+        let mut new_map = Self::with_nocase()?;
         let iter_1 = statement_query_1.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?;
         let iter_2 = statement_query_2.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?;
         {
@@ -981,7 +988,7 @@ where
     fn try_clone(&self) -> Result<Self, Self::Error> {
         cfg_if! {
             if #[cfg(feature = "backup")] {
-                Self::from_connection(crate::common::duplicate_db(&self.connection)?)
+                Self::from_connection(crate::common::duplicate_db(&self.connection, SCHEMA_VERSION)?)
             } else {
                 Err(Error::Unsupported)
             }

@@ -18,6 +18,9 @@ use std::{
     sync::LazyLock,
 };
 
+// Application ID
+const APPLICATION_ID: i32 = 0x79BED2FC;
+
 // ---------------------------------------------------------------------------
 // Flags
 // ---------------------------------------------------------------------------
@@ -113,13 +116,14 @@ pub static SQL_TYPES: [SqlType; 3usize] = [SqlType::new(RusqliteType::Integer), 
 ///
 /// Currently, the following types are supported:
 ///
-/// | Type                              | SQLite storage datatype |
-/// | --------------------------------- | ----------------------- |
-/// | **`i32`**                         | `INTEGER`               |
-/// | **`u32`**                         | `INTEGER`               |
-/// | **`i64`**                         | `INTEGER`               |
-/// | **`Vec<u8>`**, alias **[`Blob`]** | `BLOB`                  |
-/// | **[`String`]**                    | `TEXT`                  |
+/// | Type                              | SQLite storage datatype  |
+/// | --------------------------------- | ------------------------ |
+/// | **`i32`**                         | `INTEGER`                |
+/// | **`u32`**                         | `INTEGER`                |
+/// | **`i64`**                         | `INTEGER`                |
+/// | **`i128`**                        | `BLOB` (16 bytes)        |
+/// | **`Vec<u8>`**, alias **[`Blob`]** | `BLOB` (variable length) |
+/// | **[`String`]**                    | `TEXT`                   |
 ///
 /// &nbsp;
 ///
@@ -243,6 +247,8 @@ pub enum Error {
     IntegrityCheck,
     /// The given path is **not** supported, because it can **not** be converted into a valid UTF encoded string.
     InvalidPath,
+    /// The operation cannot be performed when both operands refer to the same object.
+    SelfReference,
     /// An attempt was made to use a feature that is **not** supported by this build of `sqlite-containers`.
     Unsupported,
 }
@@ -327,6 +333,7 @@ impl From<IterationError<Error>> for Error {
 
 #[inline]
 pub fn create_new_connection<P>(
+    schema_version: i32,
     sql_create_table: &str,
     sql_get_schema: &str,
     path_option: Option<P>,
@@ -342,7 +349,7 @@ where
         Connection::open_in_memory()?
     };
 
-    let connection = initialize_connection(connection, path_option.is_some())?;
+    let connection = initialize_connection(connection, schema_version, path_option.is_some(), readonly)?;
 
     #[cfg(feature = "checked")]
     if path_option.is_some() {
@@ -374,7 +381,7 @@ fn set_pragma_checked(connection: &mut Connection, schema: Option<&str>, name: &
 }
 
 #[inline(always)]
-fn initialize_connection(mut connection: Connection, file_based: bool) -> Result<Connection, Error> {
+fn initialize_connection(mut connection: Connection, user_version: i32, file_based: bool, readonly: bool) -> Result<Connection, Error> {
     connection.set_transaction_behavior(TransactionBehavior::Exclusive);
 
     if !file_based {
@@ -388,7 +395,26 @@ fn initialize_connection(mut connection: Connection, file_based: bool) -> Result
         connection.pragma_update(None, "mmap_size", "268435456")?;
     }
 
+    setup_id(&mut connection, readonly, "application_id", APPLICATION_ID)?;
+    setup_id(&mut connection, readonly, "user_version", user_version)?;
+
     Ok(connection)
+}
+
+#[inline(always)]
+fn setup_id(connection: &mut Connection, readonly: bool, name: &str, expected_value: i32) -> Result<(), Error> {
+    let mut value = 0i32;
+
+    for write_flag in [true, false] {
+        value = connection.pragma_query_value(None, name, |row| row.get(0))?;
+        if (value == 0) && write_flag && (!readonly) {
+            connection.pragma_update(None, name, expected_value)?;
+            continue;
+        }
+        break;
+    }
+
+    if value == expected_value { Ok(()) } else { Err(Error::InvalidSchema) }
 }
 
 // ---------------------------------------------------------------------------
@@ -460,6 +486,12 @@ impl<T> Eq for EqWrapper<T> where T: TryEq {}
 // ---------------------------------------------------------------------------
 
 #[inline(always)]
+pub const fn make_version(tag: bool, version: u16) -> i32 {
+    let version_offset = if tag { 0x20000000i32 } else { 0x10000000i32 };
+    version_offset + (version as i32)
+}
+
+#[inline(always)]
 pub fn check_constraint(result: Result<usize, RusqliteError>) -> Result<bool, RusqliteError> {
     match result {
         Ok(value) => Ok(value != 0),
@@ -508,9 +540,9 @@ pub fn increment(value: &mut Size) {
 
 #[cfg(feature = "backup")]
 #[inline]
-pub fn duplicate_db(source_db: &Connection) -> Result<Connection, Error> {
+pub fn duplicate_db(source_db: &Connection, schema_version: i32) -> Result<Connection, Error> {
     let connection = Connection::open_in_memory()?;
-    let mut connection = initialize_connection(connection, false)?;
+    let mut connection = initialize_connection(connection, schema_version, false, false)?;
 
     {
         let backup = crate::rusqlite::backup::Backup::new(source_db, &mut connection)?;
