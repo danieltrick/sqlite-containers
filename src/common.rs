@@ -4,7 +4,7 @@
 
 use crate::{
     rusqlite::{
-        CachedStatement, Connection, Error as RusqliteError, OpenFlags, TransactionBehavior,
+        CachedStatement, Connection, Error as RusqliteError, OpenFlags, OptionalExtension, TransactionBehavior,
         ffi::{Error as FfiError, ErrorCode as FfiErrorCode},
         types::{FromSql, ToSql, Type as RusqliteType},
         version_number,
@@ -19,7 +19,7 @@ use std::{
 };
 
 /// The "Application ID" set by `PRAGMA application_id`.
-const SQL_APP_ID: i32 = 0x79BED33B;
+const SQLITE_APPID: i32 = 0x79BED33B;
 
 // ---------------------------------------------------------------------------
 // Flags
@@ -369,20 +369,34 @@ where
 }
 
 #[inline(always)]
-fn set_pragma_checked(connection: &mut Connection, schema: Option<&str>, name: &str, value: &str) -> Result<(), Error> {
-    if !match connection.pragma_update_and_check(schema, name, value, |row| row.get::<_, String>(0)) {
-        Ok(updated_value) => updated_value.eq_ignore_ascii_case(value),
-        Err(RusqliteError::SqliteFailure(FfiError { code: FfiErrorCode::ReadOnly, .. }, _)) => true,
-        Err(_) => false,
-    } {
-        return Err(Error::InitDbConnFailed);
+fn init_file_id(connection: &mut Connection, readonly: bool, name: &str, expected_value: i32) -> Result<(), Error> {
+    let value: i32 = connection.pragma_query_value(None, name, |row| row.get(0))?;
+    if value == expected_value {
+        Ok(())
+    } else if (value == 0) && (!readonly) {
+        connection.pragma_update(None, name, expected_value)?;
+        init_file_id(connection, true, name, expected_value)
+    } else {
+        Err(Error::InvalidSchema)
     }
-    Ok(())
 }
 
 #[inline(always)]
-fn initialize_connection(mut connection: Connection, user_version: i32, file_based: bool, readonly: bool) -> Result<Connection, Error> {
+fn set_pragma_checked(connection: &mut Connection, schema: Option<&str>, name: &str, value: &str) -> Result<(), Error> {
+    match connection.pragma_update_and_check(schema, name, value, |row| row.get::<_, String>(0)).optional() {
+        Ok(Some(updated_value)) if updated_value.eq_ignore_ascii_case(value) => Ok(()),
+        Ok(_) => Err(Error::InitDbConnFailed),
+        Err(RusqliteError::SqliteFailure(FfiError { code: FfiErrorCode::ReadOnly, .. }, _)) => Ok(()),
+        Err(error) => Err(error.into()),
+    }
+}
+
+#[inline(always)]
+fn initialize_connection(mut connection: Connection, schema_version: i32, file_based: bool, readonly: bool) -> Result<Connection, Error> {
     connection.set_transaction_behavior(TransactionBehavior::Exclusive);
+
+    init_file_id(&mut connection, readonly, "application_id", SQLITE_APPID)?;
+    init_file_id(&mut connection, readonly, "user_version", schema_version)?;
 
     if !file_based {
         set_pragma_checked(&mut connection, None, "journal_mode", "OFF")?;
@@ -395,23 +409,7 @@ fn initialize_connection(mut connection: Connection, user_version: i32, file_bas
         connection.pragma_update(None, "mmap_size", "268435456")?;
     }
 
-    setup_id(&mut connection, readonly, "application_id", SQL_APP_ID)?;
-    setup_id(&mut connection, readonly, "user_version", user_version)?;
-
     Ok(connection)
-}
-
-#[inline(always)]
-fn setup_id(connection: &mut Connection, readonly: bool, name: &str, expected_value: i32) -> Result<(), Error> {
-    let value: i32 = connection.pragma_query_value(None, name, |row| row.get(0))?;
-    if value == expected_value {
-        Ok(())
-    } else if (value == 0) && (!readonly) {
-        connection.pragma_update(None, name, expected_value)?;
-        setup_id(connection, true, name, expected_value)
-    } else {
-        Err(Error::InvalidSchema)
-    }
 }
 
 // ---------------------------------------------------------------------------
