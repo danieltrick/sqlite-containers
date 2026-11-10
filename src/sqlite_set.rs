@@ -3,8 +3,8 @@
 // SPDX-License-Identifier: Unlicense
 
 use crate::{
-    CharType, Error, IterationError, Order, SQLiteMap, Size, SizeExt, TryClone, TryEq, Type,
-    common::{SQL_TYPE_TEXT, SQL_TYPES, SqlType, check_constraint, create_new_connection, increment, lazy_init, make_version},
+    CharType, Error, IterationError, Null, Order, SQLiteMap, Size, SizeExt, TryClone, TryEq, Type,
+    common::{SQL_TYPE_TEXT, SQL_TYPES, SqlType, check_constraint, create_new_connection, increment, lazy_init, make_ident},
     rusqlite::{CachedStatement, Connection, DropBehavior, ToSql, Transaction},
 };
 use cfg_if::cfg_if;
@@ -24,7 +24,7 @@ use std::{
 // ---------------------------------------------------------------------------
 
 const TABLE_NAME: &str = "rusqlite_set_v2";
-const SCHEMA_VERSION: i32 = make_version(false, 0x2);
+const SCHEMA_VERSION: u16 = 0x2;
 
 static SQL_CREATE_TBL: LazyLock<BTreeMap<SqlType, String>> = LazyLock::new(|| {
     let mut builder = BTreeMap::<SqlType, String>::new();
@@ -48,7 +48,6 @@ cfg_if! {
     }
 }
 
-const SQL_GET_SCHEMA: &str = concatcp!("SELECT sql FROM sqlite_schema WHERE type = 'table' AND name = '", TABLE_NAME, "';");
 const SQL_COUNT_KEYS: &str = concatcp!("SELECT COUNT(*) FROM ", TABLE_NAME, ";");
 const SQL_TEST_EMPTY: &str = concatcp!("SELECT EXISTS (SELECT 1 FROM ", TABLE_NAME, ");");
 const SQL_INSERT_KEY: &str = concatcp!("INSERT INTO ", TABLE_NAME, " (key) VALUES (?1);");
@@ -154,7 +153,7 @@ where
     ///
     /// If `can_create` is `true` (and if `readonly` is `false`), a new empty database file is created, if the file does *not* exist yet.
     ///
-    /// Returns [`Error::InvalidSchema`], if the database file already exists but its schema does **not** match the schema expected by this type of set. This means that you **must** re-open a database file with the *same* type of set that was used to create it.
+    /// Returns [`Error::InvalidFileType`], if the database file already exists but its schema does **not** match the schema expected by this type of set. This means that you **must** re-open a database file with the *same* type of set that was used to create it.
     #[inline]
     pub fn try_from_file<P>(path: P, readonly: bool, can_create: bool) -> Result<Self, Error>
     where
@@ -169,7 +168,7 @@ where
     ///
     /// If `can_create` is `true` (and if `readonly` is `false`), a new empty database file is created, if the file does *not* exist yet.
     ///
-    /// Returns [`Error::InvalidSchema`], if the database file already exists but its schema does **not** match the schema expected by this type of set. This means that you **must** re-open a database file with the *same* type of set that was used to create it.
+    /// Returns [`Error::InvalidFileType`], if the database file already exists but its schema does **not** match the schema expected by this type of set. This means that you **must** re-open a database file with the *same* type of set that was used to create it.
     ///
     /// Only ASCII characters are case folded. SQLite does **not** attempt to do full UTF case folding!
     #[inline]
@@ -193,7 +192,7 @@ where
             SQL_CREATE_NOC
         };
 
-        create_new_connection(SCHEMA_VERSION, sql_create_table, SQL_GET_SCHEMA, path_option, readonly, can_create)
+        create_new_connection(make_ident::<false, NO_CASE, SCHEMA_VERSION, T, Null>(), sql_create_table, path_option, readonly, can_create)
     }
 
     /// Starts a new SQLite transaction for this set.
@@ -881,7 +880,7 @@ where
     fn try_clone(&self) -> Result<Self, Self::Error> {
         cfg_if! {
             if #[cfg(feature = "backup")] {
-                Ok(Self::from_connection(crate::common::duplicate_db(&self.connection, SCHEMA_VERSION)?))
+                Ok(Self::from_connection(crate::common::duplicate_db(&self.connection)?))
             } else {
                 Err(Error::Unsupported)
             }

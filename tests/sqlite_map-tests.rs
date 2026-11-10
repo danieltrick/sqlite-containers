@@ -5000,8 +5000,8 @@ fn test_sqlite_map_filebased() {
         assert!(map.get("xyz").unwrap().is_none());
     }
 
-    assert!(matches!(SQLiteMap::<String, String>::try_from_file_nocase(&file_path_1, false, false), Err(Error::InvalidSchema)));
-    assert!(matches!(SQLiteMap::<String, String>::try_from_file(&file_path_2, false, false), Err(Error::InvalidSchema)));
+    assert!(matches!(SQLiteMap::<String, String>::try_from_file_nocase(&file_path_1, false, false), Err(Error::InvalidFileType)));
+    assert!(matches!(SQLiteMap::<String, String>::try_from_file(&file_path_2, false, false), Err(Error::InvalidFileType)));
 }
 
 #[cfg(feature = "checked")]
@@ -5089,7 +5089,7 @@ fn test_sqlite_map_filebased_tofile() {
             assert_eq!(i32::from_be_bytes(buffer), 0x79BED33B);
             file.seek(SeekFrom::Start(60u64)).unwrap();
             file.read_exact(&mut buffer).unwrap();
-            assert_eq!(i32::from_be_bytes(buffer), 0x20000002);
+            assert_eq!(i32::from_be_bytes(buffer), 0x40020606);
         }
     }
 
@@ -5120,7 +5120,7 @@ fn test_sqlite_map_filebased_tofile() {
         assert!(map.get("xyz").unwrap().is_none());
     }
 
-    assert!(matches!(SQLiteSet::<String>::try_from_file(&file_path_2, true, false), Err(Error::InvalidSchema)));
+    assert!(matches!(SQLiteSet::<String>::try_from_file(&file_path_2, true, false), Err(Error::InvalidFileType)));
 }
 
 // ---------------------------------------------------------------------------
