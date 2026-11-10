@@ -372,8 +372,8 @@ where
 
 #[inline(always)]
 fn init_file_id(connection: &mut Connection, readonly: bool, name: &str, expected_value: i32) -> Result<(), Error> {
-    let value: i32 = match connection.pragma_query_value(None, name, |row| row.get(0)) {
-        Ok(value) => Ok(value),
+    let value: i32 = match connection.pragma_query_value(None, name, |row| row.get(0)).optional() {
+        Ok(value) => Ok(value.unwrap_or_default()),
         Err(RusqliteError::SqliteFailure(FfiError { code: FfiErrorCode::NotADatabase, .. }, _)) => Err(Error::InvalidFileType),
         Err(error) => Err(error.into()),
     }?;
