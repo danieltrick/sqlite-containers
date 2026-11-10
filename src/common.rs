@@ -241,6 +241,8 @@ pub enum Error {
     SqlError(RusqliteError),
     /// The underlying SQLite database connection could **not** be initialized properly.
     InitDbConnFailed,
+    /// An attempt was made to open an existing container (database), but the existing file is **not** a supported database file.
+    InvalidFileType,
     /// An attempt was made to open an existing container (database), but the existing database schema is incompatible.
     InvalidSchema,
     /// The [integrity check](https://www.sqlite.org/pragma.html#pragma_integrity_check) for the *file-based* container (database) file has failed. Take care!
@@ -370,12 +372,19 @@ where
 
 #[inline(always)]
 fn init_file_id(connection: &mut Connection, readonly: bool, name: &str, expected_value: i32) -> Result<(), Error> {
-    let value: i32 = connection.pragma_query_value(None, name, |row| row.get(0))?;
+    let value: i32 = match connection.pragma_query_value(None, name, |row| row.get(0)) {
+        Ok(value) => Ok(value),
+        Err(RusqliteError::SqliteFailure(FfiError { code: FfiErrorCode::NotADatabase, .. }, _)) => Err(Error::InvalidFileType),
+        Err(error) => Err(error.into()),
+    }?;
+
     if value == expected_value {
         Ok(())
     } else if (value == 0) && (!readonly) {
-        connection.pragma_update(None, name, expected_value)?;
-        init_file_id(connection, true, name, expected_value)
+        match connection.pragma_update(None, name, expected_value) {
+            Err(RusqliteError::SqliteFailure(FfiError { code: FfiErrorCode::ReadOnly, .. }, _)) => Err(Error::InvalidSchema),
+            _ => init_file_id(connection, true, name, expected_value),
+        }
     } else {
         Err(Error::InvalidSchema)
     }
@@ -387,6 +396,7 @@ fn set_pragma_checked(connection: &mut Connection, schema: Option<&str>, name: &
         Ok(Some(updated_value)) if updated_value.eq_ignore_ascii_case(value) => Ok(()),
         Ok(_) => Err(Error::InitDbConnFailed),
         Err(RusqliteError::SqliteFailure(FfiError { code: FfiErrorCode::ReadOnly, .. }, _)) => Ok(()),
+        Err(RusqliteError::SqliteFailure(FfiError { code: FfiErrorCode::NotADatabase, .. }, _)) => Err(Error::InvalidFileType),
         Err(error) => Err(error.into()),
     }
 }
@@ -582,7 +592,7 @@ pub fn sqlite_version() -> &'static Version {
 mod test {
     use super::*;
     use crate::rusqlite::ffi::{Error as FfiError, ErrorCode as FfiErrorCode, SQLITE_CONSTRAINT, SQLITE_NOMEM};
-    use std::path::PathBuf;
+    use std::{fs, path::PathBuf};
     use tempfile::NamedTempFile;
 
     #[cfg(target_pointer_width = "64")]
@@ -677,16 +687,45 @@ mod test {
     }
 
     #[test]
+    fn test_init_file_id() {
+        let mut connection_1 = Connection::open_in_memory().unwrap();
+        assert!(init_file_id(&mut connection_1, false, "application_id", SQLITE_APPID).is_ok());
+
+        let temp_file_1 = NamedTempFile::with_suffix(".db").unwrap();
+        fs::write(&temp_file_1, b"thingamajig").unwrap();
+        let mut connection_2 = Connection::open_with_flags(temp_file_1.path(), OpenFlags::SQLITE_OPEN_READ_WRITE).unwrap();
+        assert!(matches!(init_file_id(&mut connection_2, false, "application_id", SQLITE_APPID), Err(Error::InvalidFileType)));
+
+        let temp_file_2 = NamedTempFile::with_suffix(".db").unwrap();
+        Connection::open_with_flags(temp_file_2.path(), OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_CREATE).unwrap();
+        let mut connection_3 = Connection::open_with_flags(temp_file_2.path(), OpenFlags::SQLITE_OPEN_READ_ONLY).unwrap();
+        assert!(matches!(init_file_id(&mut connection_3, false, "application_id", SQLITE_APPID), Err(Error::InvalidSchema)));
+
+        let temp_file_3 = NamedTempFile::with_suffix(".db").unwrap();
+        let mut connection_4 = Connection::open_with_flags(temp_file_3.path(), OpenFlags::SQLITE_OPEN_READ_WRITE).unwrap();
+        assert!(matches!(init_file_id(&mut connection_4, false, "", SQLITE_APPID), Err(Error::SqlError(_))));
+    }
+
+    #[test]
     fn test_set_pragma_checked() {
         let mut connection_1 = Connection::open_in_memory().unwrap();
         assert!(set_pragma_checked(&mut connection_1, None, "journal_mode", "OFF").is_ok());
         assert!(matches!(set_pragma_checked(&mut connection_1, None, "journal_mode", "WAL"), Err(Error::InitDbConnFailed)));
         assert!(matches!(set_pragma_checked(&mut connection_1, None, "unknown_flag", "YES"), Err(Error::InitDbConnFailed)));
 
-        let temp_file = NamedTempFile::with_suffix(".db").unwrap();
-        Connection::open_with_flags(temp_file.path(), OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_CREATE).unwrap();
-        let mut connection_2 = Connection::open_with_flags(temp_file.path(), OpenFlags::SQLITE_OPEN_READ_ONLY).unwrap();
+        let temp_file_1 = NamedTempFile::with_suffix(".db").unwrap();
+        Connection::open_with_flags(temp_file_1.path(), OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_CREATE).unwrap();
+        let mut connection_2 = Connection::open_with_flags(temp_file_1.path(), OpenFlags::SQLITE_OPEN_READ_ONLY).unwrap();
         assert!(set_pragma_checked(&mut connection_2, None, "journal_mode", "WAL").is_ok());
+
+        let temp_file_2 = NamedTempFile::with_suffix(".db").unwrap();
+        fs::write(&temp_file_2, b"thingamajig").unwrap();
+        let mut connection_3 = Connection::open_with_flags(temp_file_2.path(), OpenFlags::SQLITE_OPEN_READ_WRITE).unwrap();
+        assert!(matches!(set_pragma_checked(&mut connection_3, None, "journal_mode", "WAL"), Err(Error::InvalidFileType)));
+
+        let temp_file_3 = NamedTempFile::with_suffix(".db").unwrap();
+        let mut connection_4 = Connection::open_with_flags(temp_file_3.path(), OpenFlags::SQLITE_OPEN_READ_WRITE).unwrap();
+        assert!(matches!(set_pragma_checked(&mut connection_4, None, "", "WAL"), Err(Error::SqlError(_))));
     }
 
     #[cfg(feature = "checked")]
