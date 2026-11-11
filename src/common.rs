@@ -270,7 +270,11 @@ pub enum Error {
     SqlError(RusqliteError),
     /// The underlying SQLite database connection could **not** be initialized properly.
     InitDbConnFailed,
-    /// An attempt was made to open an existing container (database), but the existing file is **not** a supported database file.
+    /// The specified container (database) file could not be opened or created, possibly due to insufficient permissions.
+    FileAccessError,
+    /// An attempt was made to open an existing container (database), but the existing file is **not** a supported format.
+    ///
+    /// Please note that this error may occur if an attempt is made to open an SQLite *set* as an SQLite *map*, or vice versa, or if the specified key type or value type differs from the corresponding type stored in the existing file &ndash; which is **not** eligible!
     InvalidFileType,
     /// The [integrity check](https://www.sqlite.org/pragma.html#pragma_integrity_check) for the *file-based* container (database) file has failed. Take care!
     IntegrityCheck,
@@ -372,10 +376,11 @@ where
     P: AsRef<Path>,
 {
     let connection = if let Some(path) = path_option.as_ref() {
-        Connection::open_with_flags(path, if !readonly { if can_create { *OPEN_FLAGS } else { *OPEN_FLAGS_NOCREATE } } else { *OPEN_FLAGS_RDONLY })?
+        let file_open_flags = if !readonly { if can_create { *OPEN_FLAGS } else { *OPEN_FLAGS_NOCREATE } } else { *OPEN_FLAGS_RDONLY };
+        Connection::open_with_flags(path, file_open_flags).map_err(|_| Error::FileAccessError)
     } else {
-        Connection::open_in_memory()?
-    };
+        Connection::open_in_memory().map_err(|error| error.into())
+    }?;
 
     let connection = initialize_connection(connection, schema_ident, path_option.is_some(), readonly)?;
 

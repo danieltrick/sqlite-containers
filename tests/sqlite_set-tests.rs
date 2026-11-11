@@ -2340,23 +2340,11 @@ fn test_sqlite_set_filebased() {
     assert!(!fs::exists(&file_path_1).unwrap());
     assert!(!fs::exists(&file_path_2).unwrap());
 
-    assert!(matches!(
-        SQLiteSet::<String>::try_from_file(&file_path_1, false, false),
-        Err(Error::SqlError(RusqliteError::SqliteFailure(FfiError { code: FfiErrorCode::CannotOpen, .. }, _)))
-    ));
-    assert!(matches!(
-        SQLiteSet::<String>::try_from_file(&file_path_2, false, false),
-        Err(Error::SqlError(RusqliteError::SqliteFailure(FfiError { code: FfiErrorCode::CannotOpen, .. }, _)))
-    ));
+    assert!(matches!(SQLiteSet::<String>::try_from_file(&file_path_1, false, false), Err(Error::FileAccessError)));
+    assert!(matches!(SQLiteSet::<String>::try_from_file(&file_path_2, false, false), Err(Error::FileAccessError)));
 
-    assert!(matches!(
-        SQLiteSet::<String>::try_from_file(&file_path_1, true, true),
-        Err(Error::SqlError(RusqliteError::SqliteFailure(FfiError { code: FfiErrorCode::CannotOpen, .. }, _)))
-    ));
-    assert!(matches!(
-        SQLiteSet::<String>::try_from_file(&file_path_2, true, true),
-        Err(Error::SqlError(RusqliteError::SqliteFailure(FfiError { code: FfiErrorCode::CannotOpen, .. }, _)))
-    ));
+    assert!(matches!(SQLiteSet::<String>::try_from_file(&file_path_1, true, true), Err(Error::FileAccessError)));
+    assert!(matches!(SQLiteSet::<String>::try_from_file(&file_path_2, true, true), Err(Error::FileAccessError)));
 
     {
         let mut set = SQLiteSet::<String>::try_from_file(&file_path_1, false, true).unwrap();
@@ -2535,6 +2523,25 @@ fn test_sqlite_set_filebased_tofile() {
     }
 
     assert!(matches!(SQLiteMap::<String, String>::try_from_file(&file_path_2, true, false), Err(Error::InvalidFileType)));
+}
+
+#[test]
+fn test_sqlite_set_filebased_access_error() {
+    {
+        let temp_dir = tempdir_in(env!["CARGO_TARGET_TMPDIR"]).unwrap();
+        let file_path = temp_dir.path().join("non-existing.db");
+        assert!(matches!(SQLiteSet::<String>::try_from_file(file_path, false, false), Err(Error::FileAccessError)));
+        assert!(matches!(SQLiteSet::<String>::try_from_file("/", false, true), Err(Error::FileAccessError)));
+    }
+
+    #[cfg(unix)]
+    {
+        use std::{fs::Permissions, os::unix::fs::PermissionsExt};
+        let temp_dir = tempdir_in(env!["CARGO_TARGET_TMPDIR"]).unwrap();
+        fs::set_permissions(temp_dir.path(), Permissions::from_mode(0o0)).unwrap();
+        let file_path = temp_dir.path().join("access-denied.db");
+        assert!(matches!(SQLiteSet::<String>::try_from_file(file_path, false, true), Err(Error::FileAccessError)));
+    }
 }
 
 // ---------------------------------------------------------------------------
