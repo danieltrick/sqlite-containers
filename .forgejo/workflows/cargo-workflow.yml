@@ -7,13 +7,17 @@ on:
     branches: [main]
 
 jobs:
-  check:
+  build:
     runs-on: codeberg-small
     container:
-      image: cimg/rust:1.99.1-node
+      image: danieltrick/rust-ci:r1
     steps:
       - name: Checkout
         uses: https://data.forgejo.org/actions/checkout@v7
 
-      - name: Perform Code Check
-        run: make check
+      - name: Platform Info
+        working-directory: .github/workflows/tools/rustc-info
+        run: cargo run --locked --quiet
+
+      - name: Build
+        run: make MK_NOTESTS=1

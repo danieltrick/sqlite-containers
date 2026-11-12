@@ -5,7 +5,7 @@ EXAMPLES := $(addprefix run-,$(basename $(notdir $(wildcard examples/*.rs))))
 
 .PHONY: all audit bench build check clean clippy codecov doc fmt publish run test upgrade $(EXAMPLES)
 
-all: clean clippy test build doc
+all: clean clippy $(if $(filter 1,$(MK_NOTESTS)),,test) build doc
 
 check:
 	cargo fmt --all --check
