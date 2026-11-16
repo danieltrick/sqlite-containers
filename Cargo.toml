@@ -21,7 +21,7 @@ with_rowid = []
 [dependencies]
 cfg-if = "1.0.5"
 const_format = "0.2.37"
-rusqlite = { version = "0.41.1", features = ["i128_blob"] }
+rusqlite = { version = "0.43.0", features = ["i128_blob"] }
 semver = "1.0.28"
 
 [dev-dependencies]
@@ -31,7 +31,7 @@ primal = "0.3.3"
 rand_xoshiro = "0.8.1"
 random_word = { version = "1.0.0", features = ["de","en"] }
 tempfile = "3.27.0"
-xxhash-rust = { version = "0.8.19", features = ["xxh64"] }
+xxhash-rust = { version = "0.8.21", features = ["xxh64"] }
 
 [[bench]]
 name = "sqlite_containers-bench"
