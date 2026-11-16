@@ -5781,6 +5781,7 @@ fn test_sqlite_map_reader_writer() {
                     assert!(writer.insert_ref(key, value).unwrap());
                 }
             }
+            writer.close();
         }
 
         {
@@ -5805,6 +5806,7 @@ fn test_sqlite_map_reader_writer() {
                     }
                 }
             }
+            writer.close();
         }
 
         assert!(!map.is_empty().unwrap());
@@ -5817,6 +5819,7 @@ fn test_sqlite_map_reader_writer() {
                 assert!(reader.contains_key(key).unwrap());
                 assert!(reader.get(key).unwrap().is_some_and(|value| value.eq_ignore_ascii_case(expected)));
             }
+            reader.close();
         }
 
         {
@@ -5827,6 +5830,7 @@ fn test_sqlite_map_reader_writer() {
                 assert!(reader.contains_key(key).unwrap());
                 assert!(reader.get(key).unwrap().is_some_and(|value| value.eq_ignore_ascii_case(expected)));
             }
+            reader.close();
         }
     }
 }

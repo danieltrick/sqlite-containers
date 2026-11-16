@@ -2970,6 +2970,7 @@ fn test_sqlite_set_reader_writer() {
                     assert!(writer.insert_ref(hex.encode_raw(mix64(i))).unwrap());
                 }
             }
+            writer.close();
         }
 
         assert!(!set.is_empty().unwrap());
@@ -2980,6 +2981,7 @@ fn test_sqlite_set_reader_writer() {
             for i in 0u64..MAX_ITEMS {
                 assert!(reader.contains(hex.encode_raw(mix64(i))).unwrap());
             }
+            reader.close();
         }
 
         {

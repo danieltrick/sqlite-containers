@@ -1566,6 +1566,12 @@ where
         let statement = lazy_init(self.connection, &mut self.statement_get_nocase, SQL_LOOKUP_NOC)?;
         Ok(statement.query_one([key], |row| row.get(0)).optional()?)
     }
+
+    /// Disposes the active reader instance.
+    ///
+    /// Calling this function is optional; the reader is automatically closed when the `SQLiteMapReader` is dropped.
+    #[inline]
+    pub fn close(self) {}
 }
 
 // ---------------------------------------------------------------------------
@@ -1638,6 +1644,12 @@ where
         statement.execute(params![key, value])?;
         Ok(Action::from(self.last_action))
     }
+
+    /// Disposes the active writer instance.
+    ///
+    /// Calling this function is optional; the writer is automatically closed when the `SQLiteMapWriter` is dropped.
+    #[inline]
+    pub fn close(self) {}
 }
 
 // ---------------------------------------------------------------------------

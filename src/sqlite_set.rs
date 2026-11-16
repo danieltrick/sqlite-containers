@@ -1291,6 +1291,12 @@ where
         let statement = lazy_init(self.connection, &mut self.statement_nocase, SQL_EXISTS_NOC)?;
         Ok(statement.exists([key])?)
     }
+
+    /// Disposes the active reader instance.
+    ///
+    /// Calling this function is optional; the reader is automatically closed when the `SQLiteSetReader` is dropped.
+    #[inline]
+    pub fn close(self) {}
 }
 
 // ---------------------------------------------------------------------------
@@ -1332,4 +1338,10 @@ where
     {
         Ok(check_constraint(self.statement.execute([key]))?)
     }
+
+    /// Disposes the active writer instance.
+    ///
+    /// Calling this function is optional; the writer is automatically closed when the `SQLiteSetWriter` is dropped.
+    #[inline]
+    pub fn close(self) {}
 }
