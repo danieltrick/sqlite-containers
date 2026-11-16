@@ -457,8 +457,8 @@ where
     ///
     /// If [`hooks`](crate#optional-features) is **not** enabled and if `update` is `true`, the function *always* returns `None`, though &#128517;
     #[inline]
-    pub fn extend_map(&mut self, other: &Self, update: bool) -> Result<Option<(Size, Size)>, Error> {
-        self.transaction()?.extend_map(other, update)
+    pub fn extend_from_map(&mut self, other: &Self, update: bool) -> Result<Option<(Size, Size)>, Error> {
+        self.transaction()?.extend_from_map(other, update)
     }
 
     /// Checks whether the map contains the specified key.
@@ -907,7 +907,7 @@ where
     #[inline]
     pub fn to_set(&self) -> Result<SQLiteSet<K>, Error> {
         let mut key_set = SQLiteSet::<K>::new()?;
-        key_set.transaction()?.extend_map(self)?;
+        key_set.transaction()?.extend_from_map(self)?;
         Ok(key_set)
     }
 
@@ -922,7 +922,7 @@ where
         K: CharType,
     {
         let mut key_set = SQLiteSet::<K>::with_nocase()?;
-        key_set.transaction()?.extend_map(self)?;
+        key_set.transaction()?.extend_from_map(self)?;
         Ok(key_set)
     }
 
@@ -1177,9 +1177,9 @@ where
         }
     }
 
-    /// This function is equivalent to [`SQLiteMap::extend_map()`].
+    /// This function is equivalent to [`SQLiteMap::extend_from_map()`].
     #[inline]
-    pub fn extend_map(&mut self, other: &SQLiteMap<K, V>, update: bool) -> Result<Option<(Size, Size)>, Error> {
+    pub fn extend_from_map(&mut self, other: &SQLiteMap<K, V>, update: bool) -> Result<Option<(Size, Size)>, Error> {
         let mut statement_insert = self.transaction.prepare_cached(if update { SQL_UPSERT_KEY } else { SQL_INSERT_KEY })?;
         let mut statement_reader = other.connection.prepare_cached(SQL_ENUM_P_UND)?;
         let mut counter = (Size::default(), Size::default());
@@ -1206,7 +1206,7 @@ where
 
     /// Inserts all keys from the given [`SQLiteSet`] into this map.
     #[inline]
-    pub(crate) fn extend_set<F>(&mut self, set: &mut SQLiteSet<K>, mapping: F) -> Result<(), Error>
+    pub(crate) fn extend_from_set<F>(&mut self, set: &mut SQLiteSet<K>, mapping: F) -> Result<(), Error>
     where
         F: Fn(&K) -> Option<V>,
     {

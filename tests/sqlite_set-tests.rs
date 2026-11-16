@@ -393,7 +393,7 @@ fn test_sqlite_set_i64_extend() {
     assert!(!set_1.contains(&i64::MIN).unwrap());
     assert!(!set_1.contains(&i64::MAX).unwrap());
 
-    assert_eq!(set_1.extend_set(&set_2).unwrap(), 3);
+    assert_eq!(set_1.extend_from_set(&set_2).unwrap(), 3);
 
     assert!(set_1.contains(&0i64).unwrap());
     assert!(set_1.contains(&42i64).unwrap());
@@ -1175,7 +1175,7 @@ fn test_sqlite_set_string_extend() {
     assert!(!set_1.contains("$?!").unwrap());
     assert!(!set_1.contains("cor").unwrap());
 
-    assert_eq!(set_1.extend_set(&set_2).unwrap(), 3);
+    assert_eq!(set_1.extend_from_set(&set_2).unwrap(), 3);
 
     assert!(set_1.contains("foo").unwrap());
     assert!(set_1.contains("bar").unwrap());
@@ -2027,7 +2027,7 @@ fn test_sqlite_set_blob_extend() {
     assert!(!set_1.contains(&b"$?!"[..]).unwrap());
     assert!(!set_1.contains(&b"cor"[..]).unwrap());
 
-    assert_eq!(set_1.extend_set(&set_2).unwrap(), 3);
+    assert_eq!(set_1.extend_from_set(&set_2).unwrap(), 3);
 
     assert!(set_1.contains(&b"foo"[..]).unwrap());
     assert!(set_1.contains(&b"bar"[..]).unwrap());

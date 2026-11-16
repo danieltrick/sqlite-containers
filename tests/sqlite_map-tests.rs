@@ -666,7 +666,7 @@ fn test_sqlite_map_i64_string_extend_map() {
     assert!(map_1.get(&i64::MIN).unwrap().is_none());
     assert!(map_1.get(&i64::MAX).unwrap().is_none());
 
-    assert_eq!(map_1.extend_map(&map_3, false).unwrap(), Some((3, 0)));
+    assert_eq!(map_1.extend_from_map(&map_3, false).unwrap(), Some((3, 0)));
 
     assert!(map_1.get(&0i64).unwrap().is_some_and(|value| value.eq("12345678")));
     assert!(map_1.get(&42i64).unwrap().is_some_and(|value| value.eq("87654321")));
@@ -686,9 +686,9 @@ fn test_sqlite_map_i64_string_extend_map() {
 
     cfg_if! {
         if #[cfg(feature = "hooks")] {
-            assert_eq!(map_2.extend_map(&map_3, true).unwrap(), Some((3, 1)));
+            assert_eq!(map_2.extend_from_map(&map_3, true).unwrap(), Some((3, 1)));
         } else {
-            assert_eq!(map_2.extend_map(&map_3, true).unwrap(), None);
+            assert_eq!(map_2.extend_from_map(&map_3, true).unwrap(), None);
         }
     }
 
@@ -1500,7 +1500,7 @@ fn test_sqlite_map_blob_string_extend_map() {
     assert!(map_1.get(&b"xyz"[..]).unwrap().is_none());
     assert!(map_1.get(&b"cor"[..]).unwrap().is_none());
 
-    assert_eq!(map_1.extend_map(&map_3, false).unwrap(), Some((3, 0)));
+    assert_eq!(map_1.extend_from_map(&map_3, false).unwrap(), Some((3, 0)));
 
     assert!(map_1.get(&b"foo"[..]).unwrap().is_some_and(|value| value.eq("12345678")));
     assert!(map_1.get(&b"bar"[..]).unwrap().is_some_and(|value| value.eq("87654321")));
@@ -1520,9 +1520,9 @@ fn test_sqlite_map_blob_string_extend_map() {
 
     cfg_if! {
         if #[cfg(feature = "hooks")] {
-            assert_eq!(map_2.extend_map(&map_3, true).unwrap(), Some((3, 1)));
+            assert_eq!(map_2.extend_from_map(&map_3, true).unwrap(), Some((3, 1)));
         } else {
-            assert_eq!(map_2.extend_map(&map_3, true).unwrap(), None);
+            assert_eq!(map_2.extend_from_map(&map_3, true).unwrap(), None);
         }
     }
 
@@ -2484,7 +2484,7 @@ fn test_sqlite_map_string_string_extend_map() {
     assert!(map_1.get("xyz").unwrap().is_none());
     assert!(map_1.get("cor").unwrap().is_none());
 
-    assert_eq!(map_1.extend_map(&map_3, false).unwrap(), Some((3, 0)));
+    assert_eq!(map_1.extend_from_map(&map_3, false).unwrap(), Some((3, 0)));
 
     assert!(map_1.get("foo").unwrap().is_some_and(|value| value.eq("12345678")));
     assert!(map_1.get("bar").unwrap().is_some_and(|value| value.eq("87654321")));
@@ -2504,9 +2504,9 @@ fn test_sqlite_map_string_string_extend_map() {
 
     cfg_if! {
         if #[cfg(feature = "hooks")] {
-            assert_eq!(map_2.extend_map(&map_3, true).unwrap(), Some((3, 1)));
+            assert_eq!(map_2.extend_from_map(&map_3, true).unwrap(), Some((3, 1)));
         } else {
-            assert_eq!(map_2.extend_map(&map_3, true).unwrap(), None);
+            assert_eq!(map_2.extend_from_map(&map_3, true).unwrap(), None);
         }
     }
 
@@ -3569,7 +3569,7 @@ fn test_sqlite_map_string_blob_extend_map() {
     assert!(map_1.get("xyz").unwrap().is_none());
     assert!(map_1.get("cor").unwrap().is_none());
 
-    assert_eq!(map_1.extend_map(&map_3, false).unwrap(), Some((3, 0)));
+    assert_eq!(map_1.extend_from_map(&map_3, false).unwrap(), Some((3, 0)));
 
     assert!(map_1.get("foo").unwrap().is_some_and(|value| value.eq(b"12345678")));
     assert!(map_1.get("bar").unwrap().is_some_and(|value| value.eq(b"87654321")));
@@ -3589,9 +3589,9 @@ fn test_sqlite_map_string_blob_extend_map() {
 
     cfg_if! {
         if #[cfg(feature = "hooks")] {
-            assert_eq!(map_2.extend_map(&map_3, true).unwrap(), Some((3, 1)));
+            assert_eq!(map_2.extend_from_map(&map_3, true).unwrap(), Some((3, 1)));
         } else {
-            assert_eq!(map_2.extend_map(&map_3, true).unwrap(), None);
+            assert_eq!(map_2.extend_from_map(&map_3, true).unwrap(), None);
         }
     }
 
@@ -4600,7 +4600,7 @@ fn test_sqlite_map_string_i64_extend_map() {
     assert!(map_1.get("xyz").unwrap().is_none());
     assert!(map_1.get("cor").unwrap().is_none());
 
-    assert_eq!(map_1.extend_map(&map_3, false).unwrap(), Some((3, 0)));
+    assert_eq!(map_1.extend_from_map(&map_3, false).unwrap(), Some((3, 0)));
 
     assert!(map_1.get("foo").unwrap().is_some_and(|value| value.eq(&0x12345678i64)));
     assert!(map_1.get("bar").unwrap().is_some_and(|value| value.eq(&0x87654321i64)));
@@ -4620,9 +4620,9 @@ fn test_sqlite_map_string_i64_extend_map() {
 
     cfg_if! {
         if #[cfg(feature = "hooks")] {
-            assert_eq!(map_2.extend_map(&map_3, true).unwrap(), Some((3, 1)));
+            assert_eq!(map_2.extend_from_map(&map_3, true).unwrap(), Some((3, 1)));
         } else {
-            assert_eq!(map_2.extend_map(&map_3, true).unwrap(), None);
+            assert_eq!(map_2.extend_from_map(&map_3, true).unwrap(), None);
         }
     }
 

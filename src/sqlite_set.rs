@@ -268,8 +268,8 @@ where
     ///
     /// Returns the number of new keys that have been inserted.
     #[inline]
-    pub fn extend_set(&mut self, other: &Self) -> Result<Size, Error> {
-        self.transaction()?.extend_set(other)
+    pub fn extend_from_set(&mut self, other: &Self) -> Result<Size, Error> {
+        self.transaction()?.extend_from_set(other)
     }
 
     /// Checks whether the set contains the specified key.
@@ -798,7 +798,7 @@ where
         V: Type,
     {
         let mut map = SQLiteMap::<T, V>::new()?;
-        map.transaction()?.extend_set(self, mapping)?;
+        map.transaction()?.extend_from_set(self, mapping)?;
         Ok(map)
     }
 
@@ -817,7 +817,7 @@ where
         T: CharType,
     {
         let mut map = SQLiteMap::<T, V>::with_nocase()?;
-        map.transaction()?.extend_set(self, mapping)?;
+        map.transaction()?.extend_from_set(self, mapping)?;
         Ok(map)
     }
 
@@ -991,9 +991,9 @@ where
         Ok(counter)
     }
 
-    /// This function is equivalent to [`SQLiteSet::extend_set()`].
+    /// This function is equivalent to [`SQLiteSet::extend_from_set()`].
     #[inline]
-    pub fn extend_set(&mut self, other: &SQLiteSet<T>) -> Result<Size, Error> {
+    pub fn extend_from_set(&mut self, other: &SQLiteSet<T>) -> Result<Size, Error> {
         let mut statement_insert = self.transaction.prepare_cached(SQL_INSERT_KEY)?;
         let mut statement_reader = other.connection.prepare_cached(SQL_ENUM_K_UND)?;
         let mut counter = Size::default();
@@ -1007,7 +1007,7 @@ where
 
     /// Inserts all keys from the given [`SQLiteMap`] into this set.
     #[inline]
-    pub(crate) fn extend_map<V>(&mut self, map: &SQLiteMap<T, V>) -> Result<(), Error>
+    pub(crate) fn extend_from_map<V>(&mut self, map: &SQLiteMap<T, V>) -> Result<(), Error>
     where
         V: Type,
     {

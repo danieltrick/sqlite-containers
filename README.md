@@ -1,10 +1,10 @@
 [![Crates.io](https://img.shields.io/crates/v/sqlite-containers.svg)](https://crates.io/crates/sqlite-containers)
-[![MSRV](https://img.shields.io/badge/MSRV-1.89.0-orange.svg)](https://www.rust-lang.org/)
 [![Docs.rs](https://img.shields.io/docsrs/sqlite-containers.svg)](https://docs.rs/sqlite-containers/latest/)
+[![MSRV](https://img.shields.io/badge/MSRV-1.89.0-orange.svg)](https://www.rust-lang.org/)
 [![License: Unlicense](https://img.shields.io/badge/license-Unlicense-blue.svg)](https://unlicense.org/)
 [![CI Workflow](https://github.com/danieltrick/sqlite-containers/actions/workflows/cargo-workflow.yaml/badge.svg)](https://github.com/danieltrick/sqlite-containers/actions/workflows/cargo-workflow.yaml)
 [![codecov](https://codecov.io/gh/danieltrick/sqlite-containers/graph/badge.svg?token=xrHYAQWW0J)](https://codecov.io/gh/danieltrick/sqlite-containers)
-[![Downloads](https://img.shields.io/crates/d/sqlite-containers.svg)](https://crates.io/crates/sqlite-containers)
+[![CodeFactor](https://www.codefactor.io/repository/github/danieltrick/sqlite-containers/badge)](https://www.codefactor.io/repository/github/danieltrick/sqlite-containers)
 
 
 SQLite-based containers for Rust
