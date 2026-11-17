@@ -541,7 +541,7 @@ impl<T> Eq for EqWrapper<T> where T: TryEq {}
 // ---------------------------------------------------------------------------
 
 /// The schema identifier is a 32-bit word (signed) defined as followed:
-/// ```
+/// ```text
 /// 0|vv|w|xxxxxxxxxxxx|yyyyyyyy|zzzzzzzz
 ///   │  │      │          │        │
 ///   │  │      │          │        └──── Type Tag [Key]

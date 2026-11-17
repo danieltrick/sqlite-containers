@@ -129,7 +129,7 @@ static SQL_CREATE_NOC: LazyLock<BTreeMap<SqlType, String>> = LazyLock::new(|| {
         } else {
             cfg_if! {
                 if #[cfg(feature = "with_rowid")] {
-                    map.insert(value_type, format!("CREATE TABLE IF NOT EXISTS {TABLE_NAME} (key TEXT PRIMARY KEY NOT NULL COLLATE NOCASE, value {value_type};"));
+                    map.insert(value_type, format!("CREATE TABLE IF NOT EXISTS {TABLE_NAME} (key TEXT PRIMARY KEY NOT NULL COLLATE NOCASE, value {value_type});"));
                 } else {
                     map.insert(value_type, format!("CREATE TABLE IF NOT EXISTS {TABLE_NAME} (key TEXT PRIMARY KEY NOT NULL COLLATE NOCASE, value {value_type}) WITHOUT ROWID;"));
                 }

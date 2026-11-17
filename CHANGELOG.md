@@ -4,6 +4,36 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/).
 
+## [2.6.0] - 2026-11-17
+
+### Added
+
+- Added support for the `Null` data type, which represents the SQLite `NULL` value.
+- Added new trait `KeyType`, which is implemented by all types that can be used as a key.
+- Added new functions `SQLiteSetReader::close()` and `SQLiteSetWriter::close()`.
+- Added new functions `SQLiteMapReader::close()` and `SQLiteMapWriter::close()`.
+- Added new error variants `Error::FileAccessError`and `Error::InvalidFileType`.
+- Added new constant `SQL_TYPE_NULL`.
+- Added the `TYPE_TAG` constant to the `Type` trait.
+- The `SqlType`, `Null` and `KeyType` types are now re-exported at the crate root.
+- Added some additional integration tests to improve test coverage.
+
+### Changed
+
+- Function `SQLiteSet::extend_set()` was renamed to `SQLiteSet::extend_from_set()`.
+- Function `SQLiteMap::extend_map()` was renamed to `SQLiteMap::extend_from_map()`.
+- Function `SQLiteMap::to_set_nocase()` now take `&self` instead of `&mut self`.
+- Function `SQLiteSet::to_map()` now take `&self` instead of `&mut self`.
+- Function `SQLiteSet::to_map_nocase()` now take `&self` instead of `&mut self`.
+- Various improvements to the schema validation code.
+- Improved the handling of file access errors.
+- Improved the `init_file_id()` function.
+- Updated the `rusqlite` dependency to version 0.43.0.
+
+### Removed
+
+- Removed the `Error::InvalidSchema` error variant, which was replaced by `Error::InvalidFileType`.
+
 ## [2.5.0] - 2026-11-05
 
 ### Added
