@@ -17,7 +17,7 @@ use rand_xoshiro::{
     rand_core::{Rng, SeedableRng},
 };
 use sqlite_containers::{
-    Action, Blob, EqWrapper, Error, IterationError, Order, SQLiteMap, SQLiteSet, SizeExt, TryClone, TryEq,
+    Action, Blob, EqWrapper, Error, IterationError, Null, Order, SQLiteMap, SQLiteSet, SizeExt, TryClone, TryEq,
     rusqlite::{
         Error as RusqliteError,
         ffi::{Error as FfiError, ErrorCode as FfiErrorCode},
@@ -5958,6 +5958,23 @@ fn test_sqlite_map_type_i128() {
         m = m.checked_add(1usize).unwrap();
     })
     .unwrap();
+}
+
+// ---------------------------------------------------------------------------
+// SQLiteMap NULL test
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_sqlite_map_type_null() {
+    let mut map = SQLiteMap::<String, Null>::new().unwrap();
+    assert!(!map.contains_key("foo").unwrap());
+    assert!(!map.contains_key("bar").unwrap());
+    assert!(map.insert("foo".to_owned(), Null).unwrap());
+    assert!(!map.insert("foo".to_owned(), Null).unwrap());
+    assert!(map.contains_key("foo").unwrap());
+    assert!(!map.contains_key("bar").unwrap());
+    assert!(map.get("foo").unwrap().is_some_and(|value| value == Null));
+    assert!(map.get("bar").unwrap().is_none());
 }
 
 // ---------------------------------------------------------------------------

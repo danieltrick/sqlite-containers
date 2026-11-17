@@ -43,7 +43,7 @@ static OPEN_FLAGS_NOCREATE: LazyLock<OpenFlags> = LazyLock::new(|| {
     flags
 });
 
-/// Flags to be used for [`Connection::open_with_flags()`](rusqlite::Connection::open_with_flags) *without* `SQLITE_OPEN_CREATE`.
+/// Flags to be used for [`Connection::open_with_flags()`](rusqlite::Connection::open_with_flags) *without* `SQLITE_OPEN_CREATE` and `SQLITE_OPEN_READ_WRITE`.
 static OPEN_FLAGS_RDONLY: LazyLock<OpenFlags> = LazyLock::new(|| {
     let mut flags = OpenFlags::default();
     flags.remove(OpenFlags::SQLITE_OPEN_URI);
@@ -103,6 +103,7 @@ impl_sealed!(Null, i32, u32, i64, i128, String, Blob);
 pub struct SqlType(pub RusqliteType);
 
 impl SqlType {
+    /// Returns the corresponding [`rusqlite::types::Type`] data type for this [`SqlType`].
     #[inline(always)]
     pub const fn new(value: RusqliteType) -> Self {
         Self(value)
@@ -131,7 +132,10 @@ impl Display for SqlType {
 }
 
 pub const SQL_TYPE_TEXT: SqlType = SqlType::new(RusqliteType::Text);
-pub static SQL_TYPES: [SqlType; 3usize] = [SqlType::new(RusqliteType::Integer), SqlType::new(RusqliteType::Text), SqlType::new(RusqliteType::Blob)];
+pub const SQL_TYPE_NULL: SqlType = SqlType::new(RusqliteType::Null);
+
+pub static SQL_TYPES: [SqlType; 4usize] =
+    [SqlType::new(RusqliteType::Null), SqlType::new(RusqliteType::Integer), SqlType::new(RusqliteType::Text), SqlType::new(RusqliteType::Blob)];
 
 // ---------------------------------------------------------------------------
 // Key or Value Type
@@ -141,14 +145,15 @@ pub static SQL_TYPES: [SqlType; 3usize] = [SqlType::new(RusqliteType::Integer), 
 ///
 /// Currently, the following types are supported:
 ///
-/// | Type                              | SQLite storage datatype  |
-/// | --------------------------------- | ------------------------ |
-/// | **`i32`**                         | `INTEGER`                |
-/// | **`u32`**                         | `INTEGER`                |
-/// | **`i64`**                         | `INTEGER`                |
-/// | **`i128`**                        | `BLOB` (16 bytes)        |
-/// | **`Vec<u8>`**, alias **[`Blob`]** | `BLOB` (variable length) |
-/// | **[`String`]**                    | `TEXT`                   |
+/// | Type                              | SQLite storage datatype  | Can be used as key? |
+/// | --------------------------------- | ------------------------ | ------------------- |
+/// | **[`Null`]**                      | `NULL`                   | &#x274C;            |
+/// | **`i32`**                         | `INTEGER`                | &#x2705;            |
+/// | **`u32`**                         | `INTEGER`                | &#x2705;            |
+/// | **`i64`**                         | `INTEGER`                | &#x2705;            |
+/// | **`i128`**                        | `BLOB`                   | &#x2705;            |
+/// | **`Vec<u8>`**, alias **[`Blob`]** | `BLOB`                   | &#x2705;            |
+/// | **[`String`]**                    | `TEXT`                   | &#x2705;            |
 ///
 /// &nbsp;
 ///
@@ -181,6 +186,28 @@ impl_type!(0x3, i64, Integer);
 impl_type!(0x4, i128, Blob);
 impl_type!(0x5, Blob, Blob);
 impl_type!(0x6, String, Text);
+
+// ---------------------------------------------------------------------------
+// Key Types
+// ---------------------------------------------------------------------------
+
+/// A marker trait for types that can be used as a key.
+pub trait KeyType {}
+
+macro_rules! impl_keytype {
+    ($($t:ty),*) => {
+        $(
+            impl KeyType for $t {}
+        )*
+    };
+}
+
+impl_keytype!(i32);
+impl_keytype!(u32);
+impl_keytype!(i64);
+impl_keytype!(i128);
+impl_keytype!(Blob);
+impl_keytype!(String);
 
 // ---------------------------------------------------------------------------
 // Character-based Types
@@ -524,9 +551,9 @@ impl<T> Eq for EqWrapper<T> where T: TryEq {}
 ///   └────────────────────────────────── Container Type
 /// ```
 #[inline(always)]
-pub const fn make_ident<const TAG: bool, const NO_CASE: bool, const VERSION: u16, K: Type, V: Type>() -> i32 {
-    let (tag_value, is_nocase) = (if TAG { 0x2u32 } else { 0x1u32 }, if NO_CASE { 1u32 } else { 0u32 });
-    ((tag_value << 29) | (is_nocase << 28) | (((VERSION as u32) & 0xFFF) << 16) | ((V::TYPE_TAG as u32) << 8) | (K::TYPE_TAG as u32)) as i32
+pub const fn make_ident<const CNTR_TYPE: bool, const NO_CASE: bool, const VERSION: u16, K: Type, V: Type>() -> i32 {
+    let (cntr_type, no_case) = (if CNTR_TYPE { 0x2u32 } else { 0x1u32 }, if NO_CASE { 1u32 } else { 0u32 });
+    ((cntr_type << 29) | (no_case << 28) | (((VERSION as u32) & 0xFFF) << 16) | ((V::TYPE_TAG as u32) << 8) | (K::TYPE_TAG as u32)) as i32
 }
 
 #[inline(always)]
@@ -652,7 +679,7 @@ mod test {
 
     #[test]
     fn test_sql_type() {
-        const ALL_TYPES: [RusqliteType; 3usize] = [RusqliteType::Integer, RusqliteType::Blob, RusqliteType::Text];
+        const ALL_TYPES: [RusqliteType; 4usize] = [RusqliteType::Null, RusqliteType::Integer, RusqliteType::Blob, RusqliteType::Text];
         for native_type in ALL_TYPES {
             let sql_type = SqlType::new(native_type);
             assert_eq!(sql_type.0, native_type);

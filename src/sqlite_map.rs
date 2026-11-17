@@ -3,8 +3,8 @@
 // SPDX-License-Identifier: Unlicense
 
 use crate::{
-    CharType, Error, IterationError, Order, SQLiteSet, Size, SizeExt, TryClone, TryEq, Type,
-    common::{SQL_TYPE_TEXT, SQL_TYPES, SqlType, check_constraint, create_new_connection, increment, lazy_init, make_ident},
+    CharType, Error, IterationError, KeyType, Order, SQLiteSet, Size, SizeExt, TryClone, TryEq, Type,
+    common::{SQL_TYPE_NULL, SQL_TYPE_TEXT, SQL_TYPES, SqlType, check_constraint, create_new_connection, increment, lazy_init, make_ident},
     rusqlite::{CachedStatement, Connection, DropBehavior, OptionalExtension, ToSql, Transaction, params},
 };
 use cfg_if::cfg_if;
@@ -93,11 +93,21 @@ static SQL_CREATE_TBL: LazyLock<BTreeMap<(SqlType, SqlType), String>> = LazyLock
     let mut builder = BTreeMap::<(SqlType, SqlType), String>::new();
     for key_type in SQL_TYPES {
         for value_type in SQL_TYPES {
-            cfg_if! {
-                if #[cfg(feature = "with_rowid")] {
-                    builder.insert((key_type, value_type), format!("CREATE TABLE IF NOT EXISTS {TABLE_NAME} (key {key_type} PRIMARY KEY NOT NULL, value {value_type} NOT NULL);"));
-                } else {
-                    builder.insert((key_type, value_type), format!("CREATE TABLE IF NOT EXISTS {TABLE_NAME} (key {key_type} PRIMARY KEY NOT NULL, value {value_type} NOT NULL) WITHOUT ROWID;"));
+            if value_type != SQL_TYPE_NULL {
+                cfg_if! {
+                    if #[cfg(feature = "with_rowid")] {
+                        builder.insert((key_type, value_type), format!("CREATE TABLE IF NOT EXISTS {TABLE_NAME} (key {key_type} PRIMARY KEY NOT NULL, value {value_type} NOT NULL);"));
+                    } else {
+                        builder.insert((key_type, value_type), format!("CREATE TABLE IF NOT EXISTS {TABLE_NAME} (key {key_type} PRIMARY KEY NOT NULL, value {value_type} NOT NULL) WITHOUT ROWID;"));
+                    }
+                }
+            } else {
+                cfg_if! {
+                    if #[cfg(feature = "with_rowid")] {
+                        builder.insert((key_type, value_type), format!("CREATE TABLE IF NOT EXISTS {TABLE_NAME} (key {key_type} PRIMARY KEY NOT NULL, value {value_type});"));
+                    } else {
+                        builder.insert((key_type, value_type), format!("CREATE TABLE IF NOT EXISTS {TABLE_NAME} (key {key_type} PRIMARY KEY NOT NULL, value {value_type}) WITHOUT ROWID;"));
+                    }
                 }
             }
         }
@@ -108,11 +118,21 @@ static SQL_CREATE_TBL: LazyLock<BTreeMap<(SqlType, SqlType), String>> = LazyLock
 static SQL_CREATE_NOC: LazyLock<BTreeMap<SqlType, String>> = LazyLock::new(|| {
     let mut map = BTreeMap::<SqlType, String>::new();
     for value_type in SQL_TYPES {
-        cfg_if! {
-            if #[cfg(feature = "with_rowid")] {
-                map.insert(value_type, format!("CREATE TABLE IF NOT EXISTS {TABLE_NAME} (key TEXT PRIMARY KEY NOT NULL COLLATE NOCASE, value {value_type} NOT NULL);"));
-            } else {
-                map.insert(value_type, format!("CREATE TABLE IF NOT EXISTS {TABLE_NAME} (key TEXT PRIMARY KEY NOT NULL COLLATE NOCASE, value {value_type} NOT NULL) WITHOUT ROWID;"));
+        if value_type != SQL_TYPE_NULL {
+            cfg_if! {
+                if #[cfg(feature = "with_rowid")] {
+                    map.insert(value_type, format!("CREATE TABLE IF NOT EXISTS {TABLE_NAME} (key TEXT PRIMARY KEY NOT NULL COLLATE NOCASE, value {value_type} NOT NULL);"));
+                } else {
+                    map.insert(value_type, format!("CREATE TABLE IF NOT EXISTS {TABLE_NAME} (key TEXT PRIMARY KEY NOT NULL COLLATE NOCASE, value {value_type} NOT NULL) WITHOUT ROWID;"));
+                }
+            }
+        } else {
+            cfg_if! {
+                if #[cfg(feature = "with_rowid")] {
+                    map.insert(value_type, format!("CREATE TABLE IF NOT EXISTS {TABLE_NAME} (key TEXT PRIMARY KEY NOT NULL COLLATE NOCASE, value {value_type};"));
+                } else {
+                    map.insert(value_type, format!("CREATE TABLE IF NOT EXISTS {TABLE_NAME} (key TEXT PRIMARY KEY NOT NULL COLLATE NOCASE, value {value_type}) WITHOUT ROWID;"));
+                }
             }
         }
     }
@@ -124,10 +144,10 @@ const SQL_TEST_EMPTY: &str = concatcp!("SELECT EXISTS (SELECT 1 FROM ", TABLE_NA
 const SQL_INSERT_KEY: &str = concatcp!("INSERT INTO ", TABLE_NAME, " (key, value) VALUES (?1, ?2);");
 const SQL_INSERT_IGN: &str = concatcp!("INSERT INTO ", TABLE_NAME, " (key, value) VALUES (?1, ?2) ON CONFLICT(key) DO NOTHING;");
 const SQL_UPSERT_KEY: &str = concatcp!("INSERT INTO ", TABLE_NAME, " (key, value) VALUES (?1, ?2) ON CONFLICT(key) DO UPDATE SET value = excluded.value;");
-const SQL_EXISTS_KEY: &str = concatcp!("SELECT 1 FROM ", TABLE_NAME, " WHERE key = ? LIMIT 1;");
-const SQL_EXISTS_NOC: &str = concatcp!("SELECT 1 FROM ", TABLE_NAME, " WHERE key COLLATE NOCASE = ? LIMIT 1;");
-const SQL_LOOKUP_KEY: &str = concatcp!("SELECT value FROM ", TABLE_NAME, " WHERE key = ? LIMIT 1;");
-const SQL_LOOKUP_NOC: &str = concatcp!("SELECT value FROM ", TABLE_NAME, " WHERE key COLLATE NOCASE = ? LIMIT 1;");
+const SQL_EXISTS_KEY: &str = concatcp!("SELECT 1 FROM ", TABLE_NAME, " WHERE key = ?1 LIMIT 1;");
+const SQL_EXISTS_NOC: &str = concatcp!("SELECT 1 FROM ", TABLE_NAME, " WHERE key COLLATE NOCASE = ?1 LIMIT 1;");
+const SQL_LOOKUP_KEY: &str = concatcp!("SELECT value FROM ", TABLE_NAME, " WHERE key = ?1 LIMIT 1;");
+const SQL_LOOKUP_NOC: &str = concatcp!("SELECT value FROM ", TABLE_NAME, " WHERE key COLLATE NOCASE = ?1 LIMIT 1;");
 const SQL_ENUM_K_UND: &str = concatcp!("SELECT key FROM ", TABLE_NAME, ";");
 const SQL_ENUM_K_ASC: &str = concatcp!("SELECT key FROM ", TABLE_NAME, " ORDER BY key ASC;");
 const SQL_ENUM_K_DSC: &str = concatcp!("SELECT key FROM ", TABLE_NAME, " ORDER BY key DESC;");
@@ -138,8 +158,8 @@ const SQL_GLOBA_KEYS: &str = concatcp!("SELECT key FROM ", TABLE_NAME, " WHERE k
 const SQL_GLOBN_KEYS: &str = concatcp!("SELECT key FROM ", TABLE_NAME, " WHERE key NOT GLOB ?1;");
 const SQL_GLOBA_PAIR: &str = concatcp!("SELECT key, value FROM ", TABLE_NAME, " WHERE key GLOB ?1;");
 const SQL_GLOBN_PAIR: &str = concatcp!("SELECT key, value FROM ", TABLE_NAME, " WHERE key NOT GLOB ?1;");
-const SQL_DELETE_KEY: &str = concatcp!("DELETE FROM ", TABLE_NAME, " WHERE key = ?;");
-const SQL_DELETE_NOC: &str = concatcp!("DELETE FROM ", TABLE_NAME, " WHERE key COLLATE NOCASE = ?;");
+const SQL_DELETE_KEY: &str = concatcp!("DELETE FROM ", TABLE_NAME, " WHERE key = ?1;");
+const SQL_DELETE_NOC: &str = concatcp!("DELETE FROM ", TABLE_NAME, " WHERE key COLLATE NOCASE = ?1;");
 const SQL_DELETE_ALL: &str = concatcp!("DELETE FROM ", TABLE_NAME, ";");
 const SQL_RETURN_KEY: &str = concatcp!("DELETE FROM ", TABLE_NAME, " WHERE key = ?1 RETURNING value;");
 const SQL_RETURN_NOC: &str = concatcp!("DELETE FROM ", TABLE_NAME, " WHERE key COLLATE NOCASE = ?1 RETURNING value;");
@@ -167,7 +187,7 @@ const SQL_STORE_INTO: &str = concatcp!("VACUUM INTO ?1;");
 /// </div>
 pub struct SQLiteMap<K, V>
 where
-    K: Type,
+    K: Type + KeyType,
     V: Type,
 {
     _types: (PhantomData<K>, PhantomData<V>),
@@ -177,7 +197,7 @@ where
 
 impl<K, V> SQLiteMap<K, V>
 where
-    K: Type,
+    K: Type + KeyType,
     V: Type,
 {
     /// Creates a new, empty hash map with case-sensitive keys, backed by an *in-memory* SQLite database.
@@ -917,7 +937,7 @@ where
     ///
     /// Only ASCII characters are case folded. SQLite does **not** attempt to do full UTF case folding!
     #[inline]
-    pub fn to_set_nocase(&mut self) -> Result<SQLiteSet<K>, Error>
+    pub fn to_set_nocase(&self) -> Result<SQLiteSet<K>, Error>
     where
         K: CharType,
     {
@@ -947,7 +967,7 @@ where
 
 impl<K, V> TryEq for SQLiteMap<K, V>
 where
-    K: Type,
+    K: Type + KeyType,
     V: Type + PartialEq,
 {
     type Error = Error;
@@ -975,7 +995,7 @@ where
 
 impl<K, V> TryClone for SQLiteMap<K, V>
 where
-    K: Type,
+    K: Type + KeyType,
     V: Type,
 {
     type Error = Error;
@@ -1006,7 +1026,7 @@ where
 /// The transaction is committed when the `SQLiteMapTransaction` is dropped.
 pub struct SQLiteMapTransaction<'a, K, V>
 where
-    K: Type,
+    K: Type + KeyType,
     V: Type,
 {
     _types: (PhantomData<K>, PhantomData<V>),
@@ -1016,7 +1036,7 @@ where
 
 impl<'a, K, V> SQLiteMapTransaction<'a, K, V>
 where
-    K: Type,
+    K: Type + KeyType,
     V: Type,
 {
     #[inline]
@@ -1206,12 +1226,12 @@ where
 
     /// Inserts all keys from the given [`SQLiteSet`] into this map.
     #[inline]
-    pub(crate) fn extend_from_set<F>(&mut self, set: &mut SQLiteSet<K>, mapping: F) -> Result<(), Error>
+    pub(crate) fn extend_from_set<F>(&mut self, set: &SQLiteSet<K>, mapping: F) -> Result<(), Error>
     where
         F: Fn(&K) -> Option<V>,
     {
         let mut statement = self.transaction.prepare_cached(SQL_INSERT_KEY)?;
-        let trx = set.transaction()?;
+        let trx = set.transaction_readonly()?;
         trx.try_for_each(Order::UND, |key| match mapping(&key) {
             Some(value) => {
                 check_constraint(statement.execute(params![key, value]))?;

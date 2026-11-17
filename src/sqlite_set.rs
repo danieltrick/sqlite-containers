@@ -4,7 +4,7 @@
 
 use crate::{
     CharType, Error, IterationError, Null, Order, SQLiteMap, Size, SizeExt, TryClone, TryEq, Type,
-    common::{SQL_TYPE_TEXT, SQL_TYPES, SqlType, check_constraint, create_new_connection, increment, lazy_init, make_ident},
+    common::{KeyType, SQL_TYPE_TEXT, SQL_TYPES, SqlType, check_constraint, create_new_connection, increment, lazy_init, make_ident},
     rusqlite::{CachedStatement, Connection, DropBehavior, ToSql, Transaction},
 };
 use cfg_if::cfg_if;
@@ -53,7 +53,7 @@ const SQL_TEST_EMPTY: &str = concatcp!("SELECT EXISTS (SELECT 1 FROM ", TABLE_NA
 const SQL_INSERT_KEY: &str = concatcp!("INSERT INTO ", TABLE_NAME, " (key) VALUES (?1);");
 const SQL_INSERT_IGN: &str = concatcp!("INSERT INTO ", TABLE_NAME, " (key) VALUES (?1) ON CONFLICT(key) DO NOTHING;");
 const SQL_EXISTS_KEY: &str = concatcp!("SELECT 1 FROM ", TABLE_NAME, " WHERE key = ?1 LIMIT 1;");
-const SQL_EXISTS_NOC: &str = concatcp!("SELECT 1 FROM ", TABLE_NAME, " WHERE key COLLATE NOCASE = ? LIMIT 1;");
+const SQL_EXISTS_NOC: &str = concatcp!("SELECT 1 FROM ", TABLE_NAME, " WHERE key COLLATE NOCASE = ?1 LIMIT 1;");
 const SQL_ENUM_K_UND: &str = concatcp!("SELECT key FROM ", TABLE_NAME, ";");
 const SQL_ENUM_K_ASC: &str = concatcp!("SELECT key FROM ", TABLE_NAME, " ORDER BY key ASC;");
 const SQL_ENUM_K_DSC: &str = concatcp!("SELECT key FROM ", TABLE_NAME, " ORDER BY key DESC;");
@@ -94,7 +94,7 @@ where
 
 impl<T> SQLiteSet<T>
 where
-    T: Type,
+    T: Type + KeyType,
 {
     /// Creates a new, empty hash set with case-sensitive keys, backed by an *in-memory* SQLite database.
     #[inline]
@@ -792,7 +792,7 @@ where
     ///
     /// The created map is case-sensitive.
     #[inline]
-    pub fn to_map<F, V>(&mut self, mapping: F) -> Result<SQLiteMap<T, V>, Error>
+    pub fn to_map<F, V>(&self, mapping: F) -> Result<SQLiteMap<T, V>, Error>
     where
         F: Fn(&T) -> Option<V>,
         V: Type,
@@ -810,7 +810,7 @@ where
     ///
     /// Only ASCII characters are case folded. SQLite does **not** attempt to do full UTF case folding!
     #[inline]
-    pub fn to_map_nocase<F, V>(&mut self, mapping: F) -> Result<SQLiteMap<T, V>, Error>
+    pub fn to_map_nocase<F, V>(&self, mapping: F) -> Result<SQLiteMap<T, V>, Error>
     where
         F: Fn(&T) -> Option<V>,
         V: Type,
@@ -842,7 +842,7 @@ where
 
 impl<T> TryEq for SQLiteSet<T>
 where
-    T: Type,
+    T: Type + KeyType,
 {
     type Error = Error;
 
@@ -869,7 +869,7 @@ where
 
 impl<T> TryClone for SQLiteSet<T>
 where
-    T: Type,
+    T: Type + KeyType,
 {
     type Error = Error;
 
@@ -899,7 +899,7 @@ where
 /// The transaction is committed when the `SQLiteSetTransaction` is dropped.
 pub struct SQLiteSetTransaction<'a, T>
 where
-    T: Type,
+    T: Type + KeyType,
 {
     _type: PhantomData<T>,
     transaction: Transaction<'a>,
@@ -907,7 +907,7 @@ where
 
 impl<'a, T> SQLiteSetTransaction<'a, T>
 where
-    T: Type,
+    T: Type + KeyType,
 {
     #[inline]
     fn from(connection: &'a mut Connection) -> Result<Self, Error> {
